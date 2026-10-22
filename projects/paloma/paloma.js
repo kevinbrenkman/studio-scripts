@@ -8,11 +8,11 @@
  *    thumbnail inside the spinning 3D emblem (Quy). WebGL: a grayscale matte video (white = emblem)
  *    is the alpha for the thumbnail. One H.264 file for every browser, because Safari drops the
  *    alpha of HEVC video when it is drawn to a canvas.
- *  - Jobs 1.0.0: Careers page (CMS > Jobs). Type field "Contract, Freelance" becomes glass tags,
+ *  - Jobs 1.1.0: Careers page (CMS > Jobs). Tags load from the Jobs template page (CMS > Job Types), like CaseTags;
  *    rows with a Description open and close, empty Apply link falls back to hello@wearepaloma.be.
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
- *  - SliderFX 1.0.0: Case Slider cards fade up in a stagger when the slider comes into view, and get a
- *    vertical parallax while the slider moves (speed based). Hooks into CaseSlider's slider:ready event.
+ *  - SliderFX 1.1.0: Case Slider cards fade up in a stagger once, when the slider first comes into view.
+ *    Perspective: cards sink towards the screen edges (arc), plus extra vertical parallax from the slider speed. Hooks into CaseSlider's slider:ready event.
  *  - CardPress 1.0.1: project cards (grid and slider) zoom out a little while pressed and spring back on release.
  */
 (() => {
@@ -194,18 +194,36 @@
       '.jobs_item.is-open .jobs_plus{transform:rotate(45deg)}' +
       '.jobs_item.is-static .jobs_row{cursor:default}.jobs_item.is-static .jobs_plus{visibility:hidden}' +
       '.jobs_row:focus-visible{outline:1px solid currentColor;outline-offset:4px}' +
-      '.jobs_tags .nav_button{pointer-events:none}' +
       '.footer_count{font-size:.6em;margin-left:.15em;line-height:0}.footer_count:empty{display:none}';
     document.head.appendChild(st);
   }
 
-  const tag = (t) => {
-    const d = document.createElement('div');
-    d.className = 'nav_button';
-    d.innerHTML = '<div class="nav_button-glow"></div><div class="nav_button-stroke"><div class="nav_button-stroke-gradient is-one"></div>' +
-      '<div class="nav_button-stroke-gradient is-two"></div></div><div class="nav_button-text"><p class="nav_button-label"></p></div>';
-    d.querySelector('p').textContent = t;
-    return d;
+  // Tags come from the Jobs template page (/job-data/{slug}, [data-case-tags] [data-tag]), same markup as CaseTags
+  const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const tagHtml = (t) => '<div class="nav_button" data-glow-button><div class="nav_button-glow" data-glow-layer="1"></div><div class="nav_button-stroke">' +
+    '<div class="nav_button-stroke-gradient is-one" data-rim="0"></div><div class="nav_button-stroke-gradient is-two" data-rim="180"></div></div>' +
+    '<div class="nav_button-text"><div class="nav_button-label">' + esc(t) + '</div></div></div>';
+  const docs = new Map();
+  const jobDoc = (slug) => {
+    if (!docs.has(slug)) docs.set(slug, fetch('/job-data/' + encodeURIComponent(slug)).then((r) => (r.ok ? r.text() : ''))
+      .then((h) => new DOMParser().parseFromString(h, 'text/html')).catch(() => null));
+    return docs.get(slug);
+  };
+  const slugify = (t) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const loadTags = (item, el) => {
+    if (el._tags) return; el._tags = true;
+    // Slug from the data-job-tags attribute (bound to the CMS Slug), else from the title
+    const title = (item.querySelector('.jobs_title') || {}).textContent || '';
+    const slug = (el.getAttribute('data-job-tags') || '').trim() || slugify(title);
+    if (!slug) return;
+    jobDoc(slug).then((d) => {
+      if (!d || !el.isConnected) return;
+      const list = [...d.querySelectorAll('[data-case-tags] [data-tag]')].map((t) => t.textContent.trim()).filter(Boolean);
+      if (!list.length) return;
+      el.innerHTML = '<div class="case-header_tag-list">' + list.map(tagHtml).join('') + '</div>';
+      App.inits.forEach((fn) => { if (fn !== init) try { fn(el); } catch (_) {} }); // glass button script picks the tags up
+      if (window.gsap) gsap.from(el.querySelectorAll('[data-glow-button]'), { opacity: 0, y: 6, duration: 0.5, stagger: 0.05, ease: 'power2.out' });
+    });
   };
 
   const live = new Set();
@@ -213,18 +231,14 @@
 
   const setup = (item) => {
     if (item._job) return;
-    // Tags from the comma separated Type field
-    const tags = item.querySelector('[data-job-types]');
-    if (tags && !tags._done) {
-      const list = tags.textContent.split(',').map((x) => x.trim()).filter(Boolean);
-      tags.textContent = ''; list.forEach((t) => tags.appendChild(tag(t))); tags._done = true;
-    }
+    const tags = item.querySelector('[data-job-tags], .jobs_tags-wrap, .jobs_tags');
+    if (tags) loadTags(item, tags);
     // Apply link: empty or # means mail Paloma, with the job in the subject
     const apply = item.querySelector('[data-job-apply]');
     const title = (item.querySelector('.jobs_title') || {}).textContent || '';
     if (apply) {
       const h = (apply.getAttribute('href') || '').trim();
-      if (!h || h === '#') apply.setAttribute('href', 'mailto:' + MAIL + '?subject=' + encodeURIComponent('Application: ' + title.trim()));
+      if (!h || h === '#') apply.setAttribute('href', 'mailto:' + MAIL);
       if (/^https?:/.test(apply.getAttribute('href')) && apply.host !== location.host) { apply.target = '_blank'; apply.rel = 'noopener'; }
     }
     const row = item.querySelector('[data-job-toggle]');
@@ -264,14 +278,14 @@
   };
   const fill = (n) => document.querySelectorAll('[data-jobs-count]').forEach((el) => { el.textContent = n > 0 ? String(n) : ''; });
 
-  const init = (scope = document) => {
+  function init(scope = document) {
     scope = scope || document;
     scope.querySelectorAll('[data-jobs] [data-job]').forEach(setup);
     const run = () => count(scope).then(fill);
     // Other pages: wait until the page is idle so the fetch never competes with the page itself
     if (scope.querySelector('[data-jobs]')) run();
     else (window.requestIdleCallback ? requestIdleCallback(run, { timeout: 3000 }) : setTimeout(run, 800));
-  };
+  }
 
   App.inits.push(init);
   App.destroys.push(() => { live.forEach((i) => i._job && i._job()); live.clear(); });
@@ -286,8 +300,9 @@
     rise: 60,       // px the cards travel up in the reveal
     stagger: 0.08,  // s between cards
     duration: 1,    // s per card
-    para: 0.035,    // parallax strength: px of vertical offset per px/s of slider speed, at the edges
-    max: 36,        // px, parallax clamp
+    para: 0.035,    // speed parallax: px of vertical offset per px/s of slider speed, at the edges
+    max: 36,        // px, speed parallax clamp
+    arc: 48,        // px, perspective: cards sink this much at the screen edges, centre stays up. Always on, also at slow speed
   };
 
   // Hide the cards before Splide mounts, so the reveal never flashes. Only while this script runs.
@@ -343,13 +358,14 @@
         const speed = (d / dt) * 1000; // px/s, negative = moving left
         v += (speed - v) * Math.min(1, dt / 120);
         cur += (v - cur) * Math.min(1, dt / 200);
-        if (Math.abs(cur) < 0.5 && Math.abs(v) < 0.5) { if (cur !== 0) { cur = 0; cards().forEach((c) => setY(c)(0)); } return; }
         const w = innerWidth;
         cards().forEach((c) => {
           const r = c.getBoundingClientRect();
           if (r.right < -w * 0.2 || r.left > w * 1.2) return;
           const p = ((r.left + r.width / 2) / w) * 2 - 1; // -1 left edge, 0 centre, 1 right edge
-          setY(c)(Math.max(-FX.max, Math.min(FX.max, cur * FX.para * p)));
+          const speedY = Math.max(-FX.max, Math.min(FX.max, cur * FX.para * p));
+          const arcY = FX.arc * Math.min(1, p * p); // curved surface, like the row bends away from you
+          setY(c)(arcY + speedY);
         });
       };
       g.ticker.add(tick);
