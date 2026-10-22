@@ -8,6 +8,9 @@
  *    thumbnail inside the spinning 3D emblem (Quy). WebGL: a grayscale matte video (white = emblem)
  *    is the alpha for the thumbnail. One H.264 file for every browser, because Safari drops the
  *    alpha of HEVC video when it is drawn to a canvas.
+ *  - Jobs 1.0.0: Careers page (CMS > Jobs). Type field "Contract, Freelance" becomes glass tags,
+ *    rows with a Description open and close, empty Apply link falls back to hello@wearepaloma.be.
+ *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
  */
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
@@ -172,4 +175,102 @@
   App.destroys.push(() => { live.forEach((c) => c._emblem && c._emblem()); live.clear(); });
   // If this file arrives after the shell's first run (async load), init the first page ourselves. setup() is idempotent.
   if (document.readyState !== 'loading') initEmblem(document);
+})();
+
+/* ---------- Jobs ---------- */
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const MAIL = 'hello@wearepaloma.be';
+  const PATH = '/careers';
+
+  // Styles that only make sense with this script (open state, tags, footer counter)
+  if (!document.getElementById('paloma-jobs-css')) {
+    const st = document.createElement('style');
+    st.id = 'paloma-jobs-css';
+    st.textContent =
+      '.jobs_item.is-open .jobs_plus{transform:rotate(45deg)}' +
+      '.jobs_item.is-static .jobs_row{cursor:default}.jobs_item.is-static .jobs_plus{visibility:hidden}' +
+      '.jobs_row:focus-visible{outline:1px solid currentColor;outline-offset:4px}' +
+      '.jobs_tags .nav_button{pointer-events:none}' +
+      '.footer_count{font-size:.6em;margin-left:.15em;line-height:0}.footer_count:empty{display:none}';
+    document.head.appendChild(st);
+  }
+
+  const tag = (t) => {
+    const d = document.createElement('div');
+    d.className = 'nav_button';
+    d.innerHTML = '<div class="nav_button-glow"></div><div class="nav_button-stroke"><div class="nav_button-stroke-gradient is-one"></div>' +
+      '<div class="nav_button-stroke-gradient is-two"></div></div><div class="nav_button-text"><p class="nav_button-label"></p></div>';
+    d.querySelector('p').textContent = t;
+    return d;
+  };
+
+  const live = new Set();
+  const resize = () => { if (window.lenis) window.lenis.resize(); if (window.ScrollTrigger) window.ScrollTrigger.refresh(); };
+
+  const setup = (item) => {
+    if (item._job) return;
+    // Tags from the comma separated Type field
+    const tags = item.querySelector('[data-job-types]');
+    if (tags && !tags._done) {
+      const list = tags.textContent.split(',').map((x) => x.trim()).filter(Boolean);
+      tags.textContent = ''; list.forEach((t) => tags.appendChild(tag(t))); tags._done = true;
+    }
+    // Apply link: empty or # means mail Paloma, with the job in the subject
+    const apply = item.querySelector('[data-job-apply]');
+    const title = (item.querySelector('.jobs_title') || {}).textContent || '';
+    if (apply) {
+      const h = (apply.getAttribute('href') || '').trim();
+      if (!h || h === '#') apply.setAttribute('href', 'mailto:' + MAIL + '?subject=' + encodeURIComponent('Application: ' + title.trim()));
+      if (/^https?:/.test(apply.getAttribute('href')) && apply.host !== location.host) { apply.target = '_blank'; apply.rel = 'noopener'; }
+    }
+    const row = item.querySelector('[data-job-toggle]');
+    const detail = item.querySelector('[data-job-detail]');
+    const body = item.querySelector('.w-richtext, .rich-text');
+    const hasBody = body && body.textContent.trim().length > 0 && !body.classList.contains('w-dyn-bind-empty');
+    if (body && !hasBody) body.style.display = 'none';
+    if (!row || !detail) return;
+    if (!hasBody && !apply) { item.classList.add('is-static'); return; }
+
+    row.setAttribute('role', 'button'); row.tabIndex = 0; row.setAttribute('aria-expanded', 'false');
+    let open = false;
+    const set = (v) => {
+      open = v; item.classList.toggle('is-open', v); row.setAttribute('aria-expanded', String(v));
+      const g = window.gsap;
+      if (g) {
+        g.killTweensOf(detail);
+        if (v) g.fromTo(detail, { height: detail.offsetHeight }, { height: 'auto', duration: 0.6, ease: 'power3.inOut', onComplete: resize });
+        else g.to(detail, { height: 0, duration: 0.5, ease: 'power3.inOut', onComplete: resize });
+      } else { detail.style.height = v ? 'auto' : '0px'; resize(); }
+    };
+    const click = (e) => { if (e.target.closest('a')) return; set(!open); };
+    const key = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set(!open); } };
+    row.addEventListener('click', click); row.addEventListener('keydown', key);
+    item._job = () => { row.removeEventListener('click', click); row.removeEventListener('keydown', key); delete item._job; };
+    live.add(item);
+  };
+
+  // Footer counter: count on /careers itself, otherwise fetch /careers once per visit
+  let countP = null;
+  const count = (scope) => {
+    const here = scope.querySelectorAll('[data-jobs] [data-job]');
+    if (here.length || location.pathname.replace(/\/$/, '') === PATH) return Promise.resolve(here.length);
+    if (!countP) countP = fetch(PATH).then((r) => (r.ok ? r.text() : '')).then((h) =>
+      new DOMParser().parseFromString(h, 'text/html').querySelectorAll('[data-jobs] [data-job]').length).catch(() => 0);
+    return countP;
+  };
+  const fill = (n) => document.querySelectorAll('[data-jobs-count]').forEach((el) => { el.textContent = n > 0 ? String(n) : ''; });
+
+  const init = (scope = document) => {
+    scope = scope || document;
+    scope.querySelectorAll('[data-jobs] [data-job]').forEach(setup);
+    const run = () => count(scope).then(fill);
+    // Other pages: wait until the page is idle so the fetch never competes with the page itself
+    if (scope.querySelector('[data-jobs]')) run();
+    else (window.requestIdleCallback ? requestIdleCallback(run, { timeout: 3000 }) : setTimeout(run, 800));
+  };
+
+  App.inits.push(init);
+  App.destroys.push(() => { live.forEach((i) => i._job && i._job()); live.clear(); });
+  if (document.readyState !== 'loading') init(document);
 })();
