@@ -11,6 +11,9 @@
  *  - Jobs 1.0.0: Careers page (CMS > Jobs). Type field "Contract, Freelance" becomes glass tags,
  *    rows with a Description open and close, empty Apply link falls back to hello@wearepaloma.be.
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
+ *  - SliderFX 1.0.0: Case Slider cards fade up in a stagger when the slider comes into view, and get a
+ *    vertical parallax while the slider moves (speed based). Hooks into CaseSlider's slider:ready event.
+ *  - CardPress 1.0.0: project cards zoom out a little while pressed and spring back on release.
  */
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
@@ -273,4 +276,123 @@
   App.inits.push(init);
   App.destroys.push(() => { live.forEach((i) => i._job && i._job()); live.clear(); });
   if (document.readyState !== 'loading') init(document);
+})();
+
+/* ---------- SliderFX ---------- */
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const FX = {
+    rise: 60,       // px the cards travel up in the reveal
+    stagger: 0.08,  // s between cards
+    duration: 1,    // s per card
+    para: 0.035,    // parallax strength: px of vertical offset per px/s of slider speed, at the edges
+    max: 36,        // px, parallax clamp
+  };
+
+  // Hide the cards before Splide mounts, so the reveal never flashes. Only while this script runs.
+  if (!RM && !document.getElementById('paloma-sliderfx-css')) {
+    const st = document.createElement('style');
+    st.id = 'paloma-sliderfx-css';
+    st.textContent = '[data-case-slider]:not(.fx-ready) .case-slider_slide{opacity:0}';
+    document.head.appendChild(st);
+  }
+
+  const live = new Set();
+
+  document.addEventListener('slider:ready', (ev) => {
+    const root = ev.target, sp = root._sp, g = window.gsap;
+    if (!sp || !g || root._fx) { root.classList.add('fx-ready'); return; }
+    const track = root.querySelector('.splide__track');
+    const slides = () => [...root.querySelectorAll('.splide__slide')];
+    const cards = () => slides().map((s) => s.querySelector('.project-card') || s.firstElementChild).filter(Boolean);
+
+    /* Reveal: cards in view stagger up from the left, the rest are simply placed */
+    let io = null;
+    if (RM) root.classList.add('fx-ready');
+    else {
+      g.set(slides(), { autoAlpha: 0, y: FX.rise });
+      root.classList.add('fx-ready');
+      const reveal = () => {
+        const w = innerWidth;
+        const all = slides();
+        const vis = all.filter((s) => { const r = s.getBoundingClientRect(); return r.right > 0 && r.left < w; })
+          .sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+        g.set(all.filter((s) => !vis.includes(s)), { autoAlpha: 1, y: 0 });
+        g.to(vis, { autoAlpha: 1, y: 0, duration: FX.duration, ease: 'power3.out', stagger: FX.stagger, clearProps: 'transform' });
+      };
+      io = new IntersectionObserver((e) => { if (e[0].isIntersecting) { io.disconnect(); io = null; reveal(); } }, { threshold: 0.2 });
+      io.observe(track || root);
+    }
+
+    /* Parallax: speed of the list drives a vertical offset, edges move most, centre stays put */
+    let tick = null;
+    if (!RM) {
+      const Move = sp.Components.Move;
+      let last = Move.getPosition(), v = 0, cur = 0;
+      const setters = new Map();
+      const setY = (el) => { if (!setters.has(el)) setters.set(el, g.quickSetter(el, 'y', 'px')); return setters.get(el); };
+      let inView = true;
+      const vio = new IntersectionObserver((e) => { inView = e[0].isIntersecting; });
+      vio.observe(root);
+      tick = (t, dt) => {
+        if (!inView || !dt) return;
+        const pos = Move.getPosition();
+        let d = pos - last; last = pos;
+        if (Math.abs(d) > innerWidth) d = 0; // loop jump, not real movement
+        const speed = (d / dt) * 1000; // px/s, negative = moving left
+        v += (speed - v) * Math.min(1, dt / 120);
+        cur += (v - cur) * Math.min(1, dt / 200);
+        if (Math.abs(cur) < 0.5 && Math.abs(v) < 0.5) { if (cur !== 0) { cur = 0; cards().forEach((c) => setY(c)(0)); } return; }
+        const w = innerWidth;
+        cards().forEach((c) => {
+          const r = c.getBoundingClientRect();
+          if (r.right < -w * 0.2 || r.left > w * 1.2) return;
+          const p = ((r.left + r.width / 2) / w) * 2 - 1; // -1 left edge, 0 centre, 1 right edge
+          setY(c)(Math.max(-FX.max, Math.min(FX.max, cur * FX.para * p)));
+        });
+      };
+      g.ticker.add(tick);
+      root._fxStop = () => { vio.disconnect(); };
+    }
+
+    root._fx = () => {
+      io && io.disconnect();
+      tick && g.ticker.remove(tick);
+      root._fxStop && root._fxStop();
+      delete root._fx;
+    };
+    live.add(root);
+  });
+
+  // If the slider never mounts (no slides), never leave anything hidden
+  App.inits.push((scope = document) => {
+    setTimeout(() => (scope || document).querySelectorAll('[data-case-slider]').forEach((r) => r.classList.add('fx-ready')), 4000);
+  });
+  App.destroys.push(() => { live.forEach((r) => r._fx && r._fx()); live.clear(); });
+})();
+
+/* ---------- CardPress ---------- */
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const SCALE = 0.96;
+  let pressed = null;
+  const target = (el) => el && el.closest && el.closest('.project-card');
+  const media = (card) => card.querySelector('.project-card_media') || card;
+  const down = (e) => {
+    if (e.button && e.button !== 0) return;
+    const card = target(e.target); if (!card || !window.gsap) return;
+    pressed = media(card);
+    gsap.to(pressed, { scale: SCALE, duration: 0.35, ease: 'power3.out', overwrite: 'auto' });
+  };
+  const up = () => {
+    if (!pressed) return;
+    gsap.to(pressed, { scale: 1, duration: 0.8, ease: 'elastic.out(1, 0.55)', overwrite: 'auto', clearProps: 'scale' });
+    pressed = null;
+  };
+  document.addEventListener('pointerdown', down, { passive: true });
+  ['pointerup', 'pointercancel', 'dragstart'].forEach((t) => document.addEventListener(t, up, { passive: true }));
+  window.addEventListener('blur', up);
+  App.destroys.push(() => { if (pressed) { gsap.set(pressed, { clearProps: 'scale' }); pressed = null; } });
 })();
