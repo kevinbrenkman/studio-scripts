@@ -1,46 +1,86 @@
 /*!
  * paloma.js: Paloma site bundle (kevinbrenkman/studio-scripts)
- * Load a tagged version only: cdn.jsdelivr.net/gh/kevinbrenkman/studio-scripts@vX.Y.Z/projects/paloma/paloma.js
+ * Load a pinned version only (commit hash): cdn.jsdelivr.net/gh/kevinbrenkman/studio-scripts@<sha>/projects/paloma/paloma.js
  * Registers into the Swup shell registry (App.inits / App.destroys) from the site footer.
  *
  * Modules
- *  - EmblemMask 2.0.0: replaces HoverMask 1.1.0 (spinning SVG). Project card hover shows the
- *    thumbnail inside the spinning 3D emblem (alpha video, Quy). Canvas: video alpha masks the thumbnail.
+ *  - EmblemMask 2.1.0: replaces HoverMask 1.1.0 (spinning SVG). Project card hover shows the
+ *    thumbnail inside the spinning 3D emblem (Quy). WebGL: a grayscale matte video (white = emblem)
+ *    is the alpha for the thumbnail. One H.264 file for every browser, because Safari drops the
+ *    alpha of HEVC video when it is drawn to a canvas.
  */
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
 
   /* ---------- EmblemMask ---------- */
-  // Swap to Paloma's own Bunny pull zone before launch. Never Bunny Stream: it re-encodes and drops the alpha.
+  // Matte: white emblem on black, square, H.264 MP4. Must be served with CORS (jsDelivr does).
+  // Override per site without a release: put data-emblem-matte="https://..." on any element (e.g. the project card).
   const EMBLEM = {
-    hevc: 'https://kevin-brenkman.b-cdn.net/paloma%20temp/paloma-emblem-square-prores-1.mov', // Safari / iOS (HEVC with alpha)
-    webm: 'https://kevin-brenkman.b-cdn.net/paloma%20temp/paloma-emblem.webm',               // everyone else (VP9 alpha)
-    size: 0.55,    // emblem width as a share of the card width (same as HoverMask)
-    fill: 0.975,   // share of the video frame the emblem fills (square crop)
-  };
-
-  const isApple = () => {
-    const u = navigator.userAgent;
-    return /iP(hone|ad|od)/.test(u) || (/Macintosh/.test(u) && navigator.maxTouchPoints > 1) ||
-      (/Safari/.test(u) && !/Chrome|Chromium|Edg|OPR|Firefox|Android/.test(u));
+    matte: 'https://cdn.jsdelivr.net/gh/kevinbrenkman/studio-scripts@96954ed645564c3cd53c1209ccc2e21bef11c79b/projects/paloma/assets/emblem-matte.mp4',
+    size: 0.55,   // emblem width as a share of the card width (same as HoverMask)
+    fill: 0.975,  // share of the video frame the emblem fills (square crop)
   };
   const fine = () => matchMedia('(hover:hover) and (pointer:fine)').matches;
+  const matteUrl = () => {
+    const el = document.querySelector('[data-emblem-matte]');
+    return (el && el.getAttribute('data-emblem-matte').trim()) || EMBLEM.matte;
+  };
 
-  // One shared video for every card: only one card is hovered at a time.
-  // No crossOrigin on purpose: Bunny sends no CORS headers for video, and drawing to a visible canvas doesn't need them.
-  let video = null;
+  // Shared across cards: one video, one WebGL canvas (only one card is hovered at a time)
+  let video = null, gl = null, cv = null, prog = null, texV = null, texT = null, loc = {};
   const getVideo = () => {
     if (video) return video;
     video = document.createElement('video');
+    video.crossOrigin = 'anonymous';
     video.muted = video.loop = video.playsInline = true;
     ['muted', 'loop', 'playsinline'].forEach((a) => video.setAttribute(a, ''));
     video.preload = 'auto';
-    video.src = isApple() ? EMBLEM.hevc : EMBLEM.webm;
+    video.src = matteUrl();
     video.load();
     return video;
   };
 
+  const VS = 'attribute vec2 p;varying vec2 uv;void main(){uv=p*.5+.5;gl_Position=vec4(p,0.,1.);}';
+  const FS = 'precision mediump float;varying vec2 uv;uniform sampler2D t,m;uniform vec4 c,r;' +
+    'void main(){vec2 q=(uv-r.xy)/r.zw;float a=0.;' +
+    'if(q.x>=0.&&q.x<=1.&&q.y>=0.&&q.y<=1.)a=texture2D(m,q).r;' +
+    'a=smoothstep(.04,.96,a);gl_FragColor=vec4(texture2D(t,uv*c.xy+c.zw).rgb*a,a);}';
+
+  const getGL = () => {
+    if (gl) return gl;
+    cv = document.createElement('canvas');
+    cv.className = 'hover-mask';
+    cv.setAttribute('aria-hidden', 'true');
+    cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none';
+    gl = cv.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false });
+    if (!gl) return null;
+    const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; };
+    prog = gl.createProgram();
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS));
+    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+    gl.linkProgram(prog); gl.useProgram(prog);
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    const pa = gl.getAttribLocation(prog, 'p');
+    gl.enableVertexAttribArray(pa); gl.vertexAttribPointer(pa, 2, gl.FLOAT, false, 0, 0);
+    const tex = (unit) => {
+      const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t);
+      [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T].forEach((k) => gl.texParameteri(gl.TEXTURE_2D, k, gl.CLAMP_TO_EDGE));
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      return t;
+    };
+    texT = tex(0); texV = tex(1);
+    gl.uniform1i(gl.getUniformLocation(prog, 't'), 0);
+    gl.uniform1i(gl.getUniformLocation(prog, 'm'), 1);
+    loc.c = gl.getUniformLocation(prog, 'c'); loc.r = gl.getUniformLocation(prog, 'r');
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    return gl;
+  };
+
   const live = new Set();
+  let warned = false;
 
   const setup = (card) => {
     if (card._emblem) return;
@@ -48,45 +88,53 @@
     const thumb = media && media.querySelector('img');
     if (!thumb) return;
 
-    let cv = null, ctx = null, pic = null, raf = 0, on = false;
+    let pic = null, raf = 0, on = false;
 
-    // Thumbnail drawn once per size into its own canvas (object-fit: cover)
-    const paint = () => {
-      const d = Math.min(devicePixelRatio || 1, 2);
-      const w = Math.round(media.offsetWidth * d), h = Math.round(media.offsetHeight * d);
-      cv.width = w; cv.height = h;
-      pic = document.createElement('canvas'); pic.width = w; pic.height = h;
-      const iw = thumb.naturalWidth, ih = thumb.naturalHeight;
-      if (!iw) return;
-      const s = Math.max(w / iw, h / ih);
-      pic.getContext('2d').drawImage(thumb, (w - iw * s) / 2, (h - ih * s) / 2, iw * s, ih * s);
+    // CORS copy of the thumbnail (needed to use it as a WebGL texture)
+    const getPic = () => {
+      const src = thumb.currentSrc || thumb.src;
+      if (pic && pic._src === src) return pic;
+      pic = new Image(); pic.crossOrigin = 'anonymous'; pic.decoding = 'async'; pic._src = src; pic.src = src;
+      return pic;
     };
 
     const frame = () => {
       if (!on) return;
-      const v = video;
-      if (v.readyState >= 2 && pic) {
-        const w = cv.width, h = cv.height, s = (EMBLEM.size * w) / EMBLEM.fill;
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.clearRect(0, 0, w, h);
-        ctx.drawImage(v, (w - s) / 2, (h - s) / 2, s, s);
-        ctx.globalCompositeOperation = 'source-in';
-        ctx.drawImage(pic, 0, 0);
+      if (cv.parentNode !== media || cv.nextSibling) media.appendChild(cv); // stay above HoverFlip's stack, which loads later
+      const v = video, im = pic;
+      if (v.readyState >= 2 && im.complete && im.naturalWidth) {
+        const d = Math.min(devicePixelRatio || 1, 2);
+        const w = Math.round(media.offsetWidth * d), h = Math.round(media.offsetHeight * d);
+        if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+        gl.viewport(0, 0, w, h);
+        try {
+          gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texT);
+          if (texT._src !== im._src) { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, im); texT._src = im._src; }
+          gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, texV);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, v);
+        } catch (e) {
+          if (!warned) { warned = true; console.warn('[EmblemMask] texture blocked, check CORS on the matte and thumbnail hosts', e); }
+          on = false; return;
+        }
+        // object-fit: cover for the thumbnail
+        const ir = im.naturalWidth / im.naturalHeight, cr = w / h;
+        const sx = cr > ir ? 1 : cr / ir, sy = cr > ir ? ir / cr : 1;
+        gl.uniform4f(loc.c, sx, sy, (1 - sx) / 2, (1 - sy) / 2);
+        // emblem square, centred, in card uv space
+        const s = (EMBLEM.size * w) / EMBLEM.fill, rw = s / w, rh = s / h;
+        gl.uniform4f(loc.r, (1 - rw) / 2, (1 - rh) / 2, rw, rh);
+        gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       }
       raf = requestAnimationFrame(frame);
     };
 
     const enter = () => {
+      if (!getGL()) return;
       const v = getVideo();
-      if (!cv) {
-        cv = document.createElement('canvas');
-        cv.className = 'hover-mask';
-        cv.setAttribute('aria-hidden', 'true');
-        cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2';
-        ctx = cv.getContext('2d');
-      }
-      paint();
-      media.appendChild(cv); // appended last, so it sits above HoverFlip's stack
+      getPic();
+      if (gl) { gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); } // no flash of the previous card
+      media.appendChild(cv);
       on = true;
       try { v.currentTime = 0; } catch (_) {}
       const p = v.play(); p && p.catch && p.catch(() => {});
@@ -95,8 +143,7 @@
 
     const leave = () => {
       on = false; cancelAnimationFrame(raf);
-      if (video) video.pause();
-      if (cv) { ctx.clearRect(0, 0, cv.width, cv.height); cv.remove(); }
+      if (cv && cv.parentNode === media) { if (video) video.pause(); cv.remove(); }
     };
 
     card.addEventListener('pointerenter', enter);
@@ -105,7 +152,7 @@
       leave();
       card.removeEventListener('pointerenter', enter);
       card.removeEventListener('pointerleave', leave);
-      cv = ctx = pic = null;
+      pic = null;
       delete card._emblem;
     };
     live.add(card);
@@ -116,13 +163,13 @@
     const cards = (scope || document).querySelectorAll('.project-card');
     if (!cards.length) return;
     cards.forEach(setup);
-    // Warm the video once the page has settled, so the first hover is instant
+    // Warm the matte once the page has settled, so the first hover is instant
     const warm = () => (window.requestIdleCallback ? requestIdleCallback(getVideo, { timeout: 2000 }) : setTimeout(getVideo, 500));
     document.readyState === 'complete' ? warm() : addEventListener('load', warm, { once: true });
   };
 
   App.inits.push(initEmblem);
+  App.destroys.push(() => { live.forEach((c) => c._emblem && c._emblem()); live.clear(); });
   // If this file arrives after the shell's first run (async load), init the first page ourselves. setup() is idempotent.
   if (document.readyState !== 'loading') initEmblem(document);
-  App.destroys.push(() => { live.forEach((c) => c._emblem && c._emblem()); live.clear(); });
 })();
