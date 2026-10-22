@@ -4,7 +4,7 @@
  * Registers into the Swup shell registry (App.inits / App.destroys) from the site footer.
  *
  * Modules
- *  - EmblemMask 2.2.0: replaces HoverMask 1.1.0 (spinning SVG). Project card hover shows the
+ *  - EmblemMask 2.3.0: replaces HoverMask 1.1.0 (spinning SVG). Project card hover shows the
  *    thumbnail inside the spinning 3D emblem (Quy). WebGL: a grayscale matte video (white = emblem)
  *    is the alpha for the thumbnail. One H.264 file for every browser, because Safari drops the
  *    alpha of HEVC video when it is drawn to a canvas.
@@ -17,7 +17,7 @@
   // Override per site without a release: put data-emblem-matte="https://..." on any element (e.g. the project card).
   const EMBLEM = {
     matte: 'https://cdn.jsdelivr.net/gh/kevinbrenkman/studio-scripts@96954ed645564c3cd53c1209ccc2e21bef11c79b/projects/paloma/assets/emblem-matte.mp4',
-    size: 0.7,    // emblem width as a share of the card width
+    size: 0.7,    // emblem size as a share of the card's shortest side (width on square/tall cards, height on wide cards)
     fill: 0.975,  // share of the video frame the emblem fills (square crop)
   };
   const fine = () => matchMedia('(hover:hover) and (pointer:fine)').matches;
@@ -121,7 +121,7 @@
         const sx = cr > ir ? 1 : cr / ir, sy = cr > ir ? ir / cr : 1;
         gl.uniform4f(loc.c, sx, sy, (1 - sx) / 2, (1 - sy) / 2);
         // emblem square, centred, in card uv space
-        const s = (EMBLEM.size * w) / EMBLEM.fill, rw = s / w, rh = s / h;
+        const s = (EMBLEM.size * Math.min(w, h)) / EMBLEM.fill, rw = s / w, rh = s / h;
         gl.uniform4f(loc.r, (1 - rw) / 2, (1 - rh) / 2, rw, rh);
         gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
