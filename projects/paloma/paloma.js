@@ -13,7 +13,7 @@
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
  *  - SliderFX 1.0.0: Case Slider cards fade up in a stagger when the slider comes into view, and get a
  *    vertical parallax while the slider moves (speed based). Hooks into CaseSlider's slider:ready event.
- *  - CardPress 1.0.0: project cards zoom out a little while pressed and spring back on release.
+ *  - CardPress 1.0.1: project cards (grid and slider) zoom out a little while pressed and spring back on release.
  */
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
@@ -378,7 +378,7 @@
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const SCALE = 0.96;
   let pressed = null;
-  const target = (el) => el && el.closest && el.closest('.project-card');
+  const target = (el) => el && el.closest && el.closest('.project-card, .case-slider_slide'); // grid cards and slider cards
   const media = (card) => card.querySelector('.project-card_media') || card;
   const down = (e) => {
     if (e.button && e.button !== 0) return;
