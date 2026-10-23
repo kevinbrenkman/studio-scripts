@@ -11,12 +11,12 @@
  *  - Jobs 1.2.0 (open/close uses the ReadMore motion): Careers page (CMS > Jobs). Tags load from the Jobs template page (CMS > Job Types), like CaseTags;
  *    rows with a Description open and close, empty Apply link falls back to hello@wearepaloma.be.
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
- *  - SliderFX 1.2.0: the cards in view slide up one by one, once, when the slider first comes into view.
+ *  - SliderFX 1.3.0: the cards in view slide up one by one each time the slider scrolls into view.
  *    Depth: images are scaled up in their frame and move sideways with the card's position (horizontal parallax). Hooks into CaseSlider's slider:ready event.
- *  - GridFX 1.0.0: Selected projects grid. Cards reveal on scroll, spread apart towards the top and bottom of the
- *    screen and close up in the centre, images get a vertical parallax. Case pages: image parallax only.
- *  - ArrowLinks 1.0.0: arrow links (More about us, slider heading) scale on hover and press, arrow nudges right.
- *    Apply link: arrow nudges right. Services: the hover card image is zoomed and follows the cursor.
+ *  - GridFX 1.1.0: Selected projects grid and case pages. Grid cards reveal on scroll. Cards / case blocks spread
+ *    apart (max 20px) towards the top and bottom of the screen; images and loop videos get a vertical parallax.
+ *  - ArrowLinks 1.1.0: arrow links (More about us, slider heading, Apply): on hover the arrow nudges right and the
+ *    text follows a beat later; on press a small scale. Services: the hover card image is zoomed and follows the cursor.
  *  - CardPress 1.2.0: project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
 (() => {
@@ -335,47 +335,55 @@
     const slides = () => [...root.querySelectorAll('.splide__slide')];
     const cards = () => slides().map((s) => s.querySelector('.project-card') || s.firstElementChild).filter(Boolean);
 
-    /* Reveal: cards in view stagger up from the left, the rest are simply placed */
+    /* Reveal: cards in view stagger up from the left, every time the slider scrolls back into view */
     let io = null;
     if (RM) root.classList.add('fx-ready');
     else {
       g.set(slides(), { autoAlpha: 0, y: FX.rise });
       root.classList.add('fx-ready');
+      let shown = false;
       const reveal = () => {
         const w = innerWidth;
         const all = slides();
         const vis = all.filter((s) => { const r = s.getBoundingClientRect(); return r.right > 0 && r.left < w; })
           .sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+        g.killTweensOf(all);
         g.set(all.filter((s) => !vis.includes(s)), { autoAlpha: 1, y: 0 });
         g.to(vis, { autoAlpha: 1, y: 0, duration: FX.duration, ease: 'power3.out', stagger: FX.stagger, clearProps: 'transform' });
       };
-      io = new IntersectionObserver((e) => { if (e[0].isIntersecting) { io.disconnect(); io = null; reveal(); } }, { threshold: 0.2 });
+      const hide = () => { const all = slides(); g.killTweensOf(all); g.set(all, { autoAlpha: 0, y: FX.rise }); };
+      io = new IntersectionObserver((es) => es.forEach((e) => {
+        if (e.isIntersecting && e.intersectionRatio >= 0.2 && !shown) { shown = true; reveal(); }
+        else if (!e.isIntersecting && shown) { shown = false; hide(); } // fully out of view: ready to play again
+      }), { threshold: [0, 0.2] });
       io.observe(track || root);
     }
 
     /* Depth: images sit scaled up inside their frame and slide left/right with the card's position on screen.
-       Position based, so it works at any speed, auto scroll included. The cards themselves never move vertically. */
+       Only recalculated when the slider actually moved, and only while it is in view. */
     let tick = null;
     if (!RM) {
-      const imgs = (c) => c._fxImgs || (c._fxImgs = [...c.querySelectorAll('.project-card_media img')]);
+      const Move = sp.Components.Move;
       const setX = new Map();
       const setter = (img) => {
         if (!setX.has(img)) { g.set(img, { scale: FX.zoom, force3D: true }); setX.set(img, g.quickSetter(img, 'xPercent')); }
         return setX.get(img);
       };
-      let inView = true;
-      const vio = new IntersectionObserver((e) => { inView = e[0].isIntersecting; });
+      let inView = true, last = null, frames = 0;
+      const vio = new IntersectionObserver((e) => { inView = e[0].isIntersecting; if (inView) last = null; });
       vio.observe(root);
       tick = () => {
         if (!inView) return;
+        const pos = Move.getPosition();
+        if (pos === last && ++frames % 30) return; // idle: re-check twice a second (HoverFlip adds images on hover)
+        last = pos;
         const w = innerWidth;
         cards().forEach((c) => {
           const r = c.getBoundingClientRect();
           if (r.right < -w * 0.25 || r.left > w * 1.25) return;
           const p = Math.max(-1.25, Math.min(1.25, ((r.left + r.width / 2) / w) * 2 - 1)); // -1 left edge, 1 right edge
           const x = -p * FX.shift; // image lags behind the card: moves against the travel direction
-          c._fxImgs = null; // HoverFlip adds images on hover, pick them up
-          imgs(c).forEach((img) => setter(img)(x));
+          c.querySelectorAll('.project-card_media img').forEach((img) => setter(img)(x));
         });
       };
       g.ticker.add(tick);
@@ -428,7 +436,7 @@
   window.App = window.App || { inits: [], destroys: [] };
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const FX = {
-    spread: 0.09,   // share of the viewport height a card moves away at the top/bottom edge (0 in the centre)
+    spread: 20,     // px a card (or case block) moves away at the top/bottom edge of the screen, 0 in the centre
     zoom: 1.15,     // image scale inside the frame
     shift: 6,       // yPercent the image travels at the edges (stay under (zoom - 1) / 2 * 100)
     rise: 50,       // px, reveal
@@ -440,11 +448,13 @@
     if (!window.gsap) return;
     scope = scope || document;
     const grid = scope.querySelector('.projects-grid');
-    const caseImgs = [...scope.querySelectorAll('.case-media_item img')];
-    if (!grid && !caseImgs.length) return;
+    // Case pages: loop images and videos inside the media blocks. Not the Full Video Player (it has its own controls).
+    const caseImgs = [...scope.querySelectorAll('.case-media_item img, .case-media_item video')].filter((m) => !m.closest('[data-bunny-player-init]'));
+    const blocks = grid ? [] : [...scope.querySelectorAll('.case-media, .case-mt, .case-quote')];
+    if (!grid && !caseImgs.length && !blocks.length) return;
     stop();
-    const cards = grid ? [...grid.querySelectorAll('.project-card')] : [];
-    const links = cards.map((c) => c.querySelector('.project-card_link') || c);
+    const cards = grid ? [...grid.querySelectorAll('.project-card')] : blocks;
+    const links = grid ? cards.map((c) => c.querySelector('.project-card_link') || c) : []; // reveal: grid only
 
     /* Reveal: cards fade up as they enter, cards entering together stagger */
     if (links.length) {
@@ -469,15 +479,20 @@
     const q = (map, el, prop, unit) => { if (!map.has(el)) map.set(el, gsap.quickSetter(el, prop, unit)); return map.get(el); };
     const prep = (img) => { if (!img._fxz) { img._fxz = 1; gsap.set(img, { scale: FX.zoom, force3D: true }); } };
     const small = () => innerWidth < 768;
+    let lastY = null, frames = 0;
     tick = () => {
+      // Only work when the page actually scrolled (plus a re-check twice a second for late images)
+      const sy = window.lenis ? window.lenis.scroll : window.scrollY;
+      if (sy === lastY && ++frames % 30) return;
+      lastY = sy;
       const vh = innerHeight, mid = vh / 2;
       cards.forEach((c) => {
         const cur = ys.get(c) || 0;
         const r = c.getBoundingClientRect();
         const top = r.top - cur, h = r.height;
         if (top > vh * 1.5 || top + h < -vh * 0.5) return;
-        const n = Math.max(-1.5, Math.min(1.5, (top + h / 2 - mid) / mid)); // -1 top edge, 0 centre, 1 bottom edge
-        const y = n * Math.abs(n) * vh * FX.spread * (small() ? 0.5 : 1);
+        const n = Math.max(-1, Math.min(1, (top + h / 2 - mid) / mid)); // -1 top edge, 0 centre, 1 bottom edge
+        const y = n * Math.abs(n) * FX.spread * (small() ? 0.5 : 1);
         ys.set(c, y); q(setY, c, 'y', 'px')(y);
         c.querySelectorAll('.project-card_media img').forEach((img) => { prep(img); q(imgY, img, 'yPercent', '')(-Math.max(-1, Math.min(1, n)) * FX.shift); });
       });
@@ -501,54 +516,51 @@
   window.App = window.App || { inits: [], destroys: [] };
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const fine = () => matchMedia('(hover:hover) and (pointer:fine)').matches;
-  const FULL = '.arrow-link, .case-slider_heading';
-  const NUDGE = 0.3; // em the arrow moves right on hover
+  const SEL = '.arrow-link, .case-slider_heading, .jobs_apply';
+  const NUDGE = 0.3;  // em the arrow moves right on hover
+  const FOLLOW = 0.4; // share of that the text moves, a beat later
 
-  const arrowOf = (a) => {
-    if (a._arrow !== undefined) return a._arrow;
-    let el = a.querySelector('.w-embed, svg');
-    if (!el) {
-      // Text arrow (Apply →): wrap the last → so it can move on its own
+  // Arrow + text parts. Text arrows (Apply →) get the → and the words wrapped in spans first.
+  const partsOf = (a) => {
+    if (a._parts) return a._parts;
+    let arrow = a.querySelector('.w-embed, svg');
+    let text = a.querySelector('.arrow-link_text, .case-slider_heading-text');
+    if (!arrow) {
       const walker = document.createTreeWalker(a, NodeFilter.SHOW_TEXT);
       let node; while ((node = walker.nextNode())) {
         const i = node.data.lastIndexOf('→');
         if (i < 0) continue;
         const after = node.splitText(i); after.splitText(1);
-        el = document.createElement('span'); el.style.display = 'inline-block';
-        after.parentNode.replaceChild(el, after); el.appendChild(after); break;
+        arrow = document.createElement('span'); arrow.style.display = 'inline-block';
+        after.parentNode.replaceChild(arrow, after); arrow.appendChild(after);
+        if (node.data.trim()) { text = document.createElement('span'); text.style.display = 'inline-block'; node.parentNode.replaceChild(text, node); text.appendChild(node); }
+        break;
       }
     }
-    return (a._arrow = el || null);
+    return (a._parts = { arrow, text });
   };
   const em = (a) => parseFloat(getComputedStyle(a).fontSize) || 16;
-
-  const enter = (a) => {
-    const ar = arrowOf(a);
-    if (ar) gsap.to(ar, { x: em(a) * NUDGE, duration: 0.45, ease: 'power3.out', overwrite: 'auto' });
-    if (a.matches(FULL)) gsap.to(a, { scale: 1.03, duration: 0.45, ease: 'power3.out', overwrite: 'auto' });
+  const move = (a, on) => {
+    const { arrow, text } = partsOf(a), d = on ? em(a) * NUDGE : 0;
+    if (arrow) gsap.to(arrow, { x: d, duration: on ? 0.45 : 0.5, ease: 'power3.out', overwrite: 'auto' });
+    if (text) gsap.to(text, { x: d * FOLLOW, duration: on ? 0.5 : 0.5, delay: on ? 0.07 : 0, ease: 'power3.out', overwrite: 'auto' });
   };
-  const leave = (a) => {
-    const ar = arrowOf(a);
-    if (ar) gsap.to(ar, { x: 0, duration: 0.5, ease: 'power3.out', overwrite: 'auto' });
-    if (a.matches(FULL)) gsap.to(a, { scale: 1, duration: 0.5, ease: 'power3.out', overwrite: 'auto' });
-  };
-  const SEL = FULL + ', .jobs_apply';
   document.addEventListener('pointerover', (e) => {
     if (!fine() || !window.gsap) return;
     const a = e.target.closest && e.target.closest(SEL);
     if (!a || (e.relatedTarget && a.contains(e.relatedTarget))) return;
-    if (a.matches(FULL)) gsap.set(a, { transformOrigin: 'left center' });
-    enter(a);
+    move(a, true);
   });
   document.addEventListener('pointerout', (e) => {
     if (!window.gsap) return;
     const a = e.target.closest && e.target.closest(SEL);
     if (!a || (e.relatedTarget && a.contains(e.relatedTarget))) return;
-    leave(a);
+    move(a, false);
   });
+  // Press: small scale, spring back. No scale on hover.
   let pressed = null;
   document.addEventListener('pointerdown', (e) => {
-    const a = e.target.closest && e.target.closest(FULL);
+    const a = e.target.closest && e.target.closest(SEL);
     if (!a || !window.gsap) return;
     pressed = a; gsap.set(a, { transformOrigin: 'left center' });
     gsap.to(a, { scale: 0.97, duration: 0.25, ease: 'power3.out', overwrite: 'auto' });
@@ -556,7 +568,7 @@
   const up = () => {
     if (!pressed) return;
     const a = pressed; pressed = null;
-    gsap.to(a, { scale: fine() && a.matches(':hover') ? 1.03 : 1, duration: 0.7, ease: 'elastic.out(1, 0.55)', overwrite: 'auto' });
+    gsap.to(a, { scale: 1, duration: 0.7, ease: 'elastic.out(1, 0.55)', overwrite: 'auto' });
   };
   ['pointerup', 'pointercancel'].forEach((t) => document.addEventListener(t, up, { passive: true }));
 
@@ -585,7 +597,9 @@
           ty = Math.max(-1, Math.min(1, (py - (r.top + r.height / 2)) / (r.height * 1.5)));
         }
       } else { tx = 0; ty = 0; }
-      x += (tx - x) * 0.08; y += (ty - y) * 0.08;
+      const nx = x + (tx - x) * 0.08, ny = y + (ty - y) * 0.08;
+      if (Math.abs(nx - x) < 0.0005 && Math.abs(ny - y) < 0.0005) return; // settled: no style writes
+      x = nx; y = ny;
       document.documentElement.style.setProperty('--svc-x', x.toFixed(4));
       document.documentElement.style.setProperty('--svc-y', y.toFixed(4));
     };
