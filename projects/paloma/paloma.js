@@ -196,6 +196,8 @@
     st.id = 'paloma-jobs-css';
     st.textContent =
       '.jobs_item.is-open .jobs_plus{transform:rotate(45deg)}' +
+      '[data-jobs] [data-job] .case-header_tag-list{display:flex;flex-direction:row;flex-wrap:nowrap;justify-content:flex-end}' +
+      '@media (max-width:767px){[data-jobs] [data-job] .case-header_tag-list{justify-content:flex-start}}' +
       '.jobs_item.is-static .jobs_row{cursor:default}.jobs_item.is-static .jobs_plus{visibility:hidden}' +
       '.jobs_row:focus-visible{outline:1px solid currentColor;outline-offset:4px}' +
       '.footer_count{font-size:.6em;margin-left:.15em;line-height:0}.footer_count:empty{display:none}';
@@ -249,7 +251,7 @@
     const detail = item.querySelector('[data-job-detail]');
     const body = item.querySelector('.w-richtext, .rich-text');
     const hasBody = body && body.textContent.trim().length > 0 && !body.classList.contains('w-dyn-bind-empty');
-    if (body && !hasBody) body.style.display = 'none';
+    if (body && !hasBody) { body.style.display = 'none'; item.classList.add('no-desc'); }
     if (!row || !detail) return;
     if (!hasBody && !apply) { item.classList.add('is-static'); return; }
 
@@ -257,6 +259,9 @@
     let open = false;
     // Same motion as ReadMore 1.3.0: height opens (0.5s power3.inOut), then the content fades up 8px
     const inner = detail.firstElementChild || detail;
+    const tight = item.classList.contains('no-desc');
+    const TIGHT = '1.5rem';
+    const rowPad = getComputedStyle(row).paddingBottom;
     let tl = null;
     const set = (v) => {
       open = v; item.classList.toggle('is-open', v); row.setAttribute('aria-expanded', String(v));
@@ -266,12 +271,16 @@
       tl = g.timeline({ onComplete: resize });
       if (v) {
         g.set(inner, { opacity: 0, y: 8 });
-        tl.fromTo(detail, { height: detail.offsetHeight }, { height: 'auto', duration: 0.5, ease: 'power3.inOut' })
+        // No description: only the Apply link opens, so pull it closer to the intro text
+        if (tight) tl.to(row, { paddingBottom: TIGHT, duration: 0.5, ease: 'power3.inOut' }, 0);
+        tl.fromTo(detail, { height: detail.offsetHeight }, { height: 'auto', duration: 0.5, ease: 'power3.inOut' }, 0)
           .to(inner, { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' }, '-=0.1');
       } else {
         tl.to(inner, { opacity: 0, y: 8, duration: 0.3, ease: 'power2.in' })
-          .to(detail, { height: 0, duration: 0.45, ease: 'power3.inOut' })
-          .set(inner, { clearProps: 'opacity,transform' });
+          .to(detail, { height: 0, duration: 0.45, ease: 'power3.inOut' });
+        if (tight) tl.to(row, { paddingBottom: rowPad, duration: 0.45, ease: 'power3.inOut' }, '<');
+        if (tight) tl.set(row, { clearProps: 'paddingBottom' });
+        tl.set(inner, { clearProps: 'opacity,transform' });
       }
     };
     const click = (e) => { if (e.target.closest('a')) return; set(!open); };
@@ -353,8 +362,12 @@
       };
       const hide = () => { const all = slides(); g.killTweensOf(all); g.set(all, { autoAlpha: 0, y: FX.rise }); };
       io = new IntersectionObserver((es) => es.forEach((e) => {
-        if (e.isIntersecting && e.intersectionRatio >= 0.2 && !shown) { shown = true; reveal(); }
-        else if (!e.isIntersecting && shown) { shown = false; hide(); } // fully out of view: ready to play again
+        if (e.isIntersecting && e.intersectionRatio >= 0.2 && !shown) {
+          shown = true;
+          // Only when scrolling down (slider enters from the bottom). Scrolling back up: just show it.
+          if (e.boundingClientRect.top > 0) reveal();
+          else { const all = slides(); g.killTweensOf(all); g.set(all, { autoAlpha: 1, y: 0, clearProps: 'transform' }); }
+        } else if (!e.isIntersecting && shown) { shown = false; hide(); } // fully out of view: ready to play again
       }), { threshold: [0, 0.2] });
       io.observe(track || root);
     }
@@ -436,7 +449,7 @@
   window.App = window.App || { inits: [], destroys: [] };
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const FX = {
-    spread: 20,     // px a card (or case block) moves away at the top/bottom edge of the screen, 0 in the centre
+    spread: 40,     // px a card (or case block) moves away at the top/bottom edge of the screen, 0 in the centre
     zoom: 1.15,     // image scale inside the frame
     shift: 6,       // yPercent the image travels at the edges (stay under (zoom - 1) / 2 * 100)
     rise: 50,       // px, reveal
@@ -449,7 +462,8 @@
     scope = scope || document;
     const grid = scope.querySelector('.projects-grid');
     // Case pages: loop images and videos inside the media blocks. Not the Full Video Player (it has its own controls).
-    const caseImgs = [...scope.querySelectorAll('.case-media_item img, .case-media_item video')].filter((m) => !m.closest('[data-bunny-player-init]'));
+    // Images in case media, plus the Full Video Player thumbnail. No video elements: the playing video stays put.
+    const caseImgs = [...scope.querySelectorAll('.case-media_item img, [data-bunny-player-init] img')];
     const blocks = grid ? [] : [...scope.querySelectorAll('.case-media, .case-mt, .case-quote')];
     if (!grid && !caseImgs.length && !blocks.length) return;
     stop();
@@ -564,7 +578,7 @@
     const a = e.target.closest && e.target.closest(SEL);
     if (!a || !window.gsap) return;
     pressed = a; gsap.set(a, { transformOrigin: 'left center' });
-    gsap.to(a, { scale: 0.97, duration: 0.25, ease: 'power3.out', overwrite: 'auto' });
+    gsap.to(a, { scale: 0.99, duration: 0.25, ease: 'power3.out', overwrite: 'auto' });
   }, { passive: true });
   const up = () => {
     if (!pressed) return;
