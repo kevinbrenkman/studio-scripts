@@ -13,7 +13,11 @@
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
  *  - SliderFX 1.2.0: the cards in view slide up one by one, once, when the slider first comes into view.
  *    Depth: images are scaled up in their frame and move sideways with the card's position (horizontal parallax). Hooks into CaseSlider's slider:ready event.
- *  - CardPress 1.1.0: project cards (grid and slider) scale to 99% zoom out a little while pressed and spring back on release.
+ *  - GridFX 1.0.0: Selected projects grid. Cards reveal on scroll, spread apart towards the top and bottom of the
+ *    screen and close up in the centre, images get a vertical parallax. Case pages: image parallax only.
+ *  - ArrowLinks 1.0.0: arrow links (More about us, slider heading) scale on hover and press, arrow nudges right.
+ *    Apply link: arrow nudges right. Services: the hover card image is zoomed and follows the cursor.
+ *  - CardPress 1.2.0: project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
@@ -401,7 +405,7 @@
   const SCALE = 0.99;
   let pressed = null;
   const target = (el) => el && el.closest && el.closest('.project-card, .case-slider_slide'); // grid cards and slider cards
-  const media = (card) => card.querySelector('.project-card_media') || card;
+  const media = (card) => card.querySelector('.project-card_link') || card; // whole link: image and info below it
   const down = (e) => {
     if (e.button && e.button !== 0) return;
     const card = target(e.target); if (!card || !window.gsap) return;
@@ -417,4 +421,180 @@
   ['pointerup', 'pointercancel', 'dragstart'].forEach((t) => document.addEventListener(t, up, { passive: true }));
   window.addEventListener('blur', up);
   App.destroys.push(() => { if (pressed) { gsap.set(pressed, { clearProps: 'scale' }); pressed = null; } });
+})();
+
+/* ---------- GridFX ---------- */
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const FX = {
+    spread: 0.09,   // share of the viewport height a card moves away at the top/bottom edge (0 in the centre)
+    zoom: 1.15,     // image scale inside the frame
+    shift: 6,       // yPercent the image travels at the edges (stay under (zoom - 1) / 2 * 100)
+    rise: 50,       // px, reveal
+  };
+  let tick = null, io = null, revealed = new WeakSet();
+  const stop = () => { if (tick) gsap.ticker.remove(tick); tick = null; if (io) io.disconnect(); io = null; };
+
+  const init = (scope = document) => {
+    if (!window.gsap) return;
+    scope = scope || document;
+    const grid = scope.querySelector('.projects-grid');
+    const caseImgs = [...scope.querySelectorAll('.case-media_item img')];
+    if (!grid && !caseImgs.length) return;
+    stop();
+    const cards = grid ? [...grid.querySelectorAll('.project-card')] : [];
+    const links = cards.map((c) => c.querySelector('.project-card_link') || c);
+
+    /* Reveal: cards fade up as they enter, cards entering together stagger */
+    if (links.length) {
+      gsap.set(links.filter((l) => !revealed.has(l)), { autoAlpha: 0, y: FX.rise }); // init can run twice on first load
+      let queue = [], t = 0;
+      const flush = () => {
+        queue.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top || a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+        gsap.to(queue, { autoAlpha: 1, y: 0, duration: 1, ease: 'power3.out', stagger: 0.12, overwrite: 'auto' });
+        queue = [];
+      };
+      io = new IntersectionObserver((es) => es.forEach((e) => {
+        if (!e.isIntersecting) return;
+        const l = e.target.querySelector('.project-card_link') || e.target;
+        if (revealed.has(l)) return; revealed.add(l); io.unobserve(e.target);
+        queue.push(l); clearTimeout(t); t = setTimeout(flush, 30);
+      }), { rootMargin: '0px 0px -8% 0px' });
+      cards.forEach((c) => io.observe(c));
+    }
+
+    /* Spread + image parallax, driven by each element's untransformed position on screen */
+    const setY = new Map(), imgY = new Map(), ys = new Map();
+    const q = (map, el, prop, unit) => { if (!map.has(el)) map.set(el, gsap.quickSetter(el, prop, unit)); return map.get(el); };
+    const prep = (img) => { if (!img._fxz) { img._fxz = 1; gsap.set(img, { scale: FX.zoom, force3D: true }); } };
+    const small = () => innerWidth < 768;
+    tick = () => {
+      const vh = innerHeight, mid = vh / 2;
+      cards.forEach((c) => {
+        const cur = ys.get(c) || 0;
+        const r = c.getBoundingClientRect();
+        const top = r.top - cur, h = r.height;
+        if (top > vh * 1.5 || top + h < -vh * 0.5) return;
+        const n = Math.max(-1.5, Math.min(1.5, (top + h / 2 - mid) / mid)); // -1 top edge, 0 centre, 1 bottom edge
+        const y = n * Math.abs(n) * vh * FX.spread * (small() ? 0.5 : 1);
+        ys.set(c, y); q(setY, c, 'y', 'px')(y);
+        c.querySelectorAll('.project-card_media img').forEach((img) => { prep(img); q(imgY, img, 'yPercent', '')(-Math.max(-1, Math.min(1, n)) * FX.shift); });
+      });
+      caseImgs.forEach((img) => {
+        const r = (img.parentElement || img).getBoundingClientRect();
+        if (r.top > vh || r.bottom < 0) return;
+        const n = Math.max(-1, Math.min(1, (r.top + r.height / 2 - mid) / (mid + r.height / 2)));
+        prep(img); q(imgY, img, 'yPercent', '')(-n * FX.shift);
+      });
+    };
+    gsap.ticker.add(tick);
+  };
+
+  App.inits.push(init);
+  App.destroys.push(stop);
+  if (document.readyState !== 'loading') init(document);
+})();
+
+/* ---------- ArrowLinks + Services image ---------- */
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const fine = () => matchMedia('(hover:hover) and (pointer:fine)').matches;
+  const FULL = '.arrow-link, .case-slider_heading';
+  const NUDGE = 0.3; // em the arrow moves right on hover
+
+  const arrowOf = (a) => {
+    if (a._arrow !== undefined) return a._arrow;
+    let el = a.querySelector('.w-embed, svg');
+    if (!el) {
+      // Text arrow (Apply →): wrap the last → so it can move on its own
+      const walker = document.createTreeWalker(a, NodeFilter.SHOW_TEXT);
+      let node; while ((node = walker.nextNode())) {
+        const i = node.data.lastIndexOf('→');
+        if (i < 0) continue;
+        const after = node.splitText(i); after.splitText(1);
+        el = document.createElement('span'); el.style.display = 'inline-block';
+        after.parentNode.replaceChild(el, after); el.appendChild(after); break;
+      }
+    }
+    return (a._arrow = el || null);
+  };
+  const em = (a) => parseFloat(getComputedStyle(a).fontSize) || 16;
+
+  const enter = (a) => {
+    const ar = arrowOf(a);
+    if (ar) gsap.to(ar, { x: em(a) * NUDGE, duration: 0.45, ease: 'power3.out', overwrite: 'auto' });
+    if (a.matches(FULL)) gsap.to(a, { scale: 1.03, duration: 0.45, ease: 'power3.out', overwrite: 'auto' });
+  };
+  const leave = (a) => {
+    const ar = arrowOf(a);
+    if (ar) gsap.to(ar, { x: 0, duration: 0.5, ease: 'power3.out', overwrite: 'auto' });
+    if (a.matches(FULL)) gsap.to(a, { scale: 1, duration: 0.5, ease: 'power3.out', overwrite: 'auto' });
+  };
+  const SEL = FULL + ', .jobs_apply';
+  document.addEventListener('pointerover', (e) => {
+    if (!fine() || !window.gsap) return;
+    const a = e.target.closest && e.target.closest(SEL);
+    if (!a || (e.relatedTarget && a.contains(e.relatedTarget))) return;
+    if (a.matches(FULL)) gsap.set(a, { transformOrigin: 'left center' });
+    enter(a);
+  });
+  document.addEventListener('pointerout', (e) => {
+    if (!window.gsap) return;
+    const a = e.target.closest && e.target.closest(SEL);
+    if (!a || (e.relatedTarget && a.contains(e.relatedTarget))) return;
+    leave(a);
+  });
+  let pressed = null;
+  document.addEventListener('pointerdown', (e) => {
+    const a = e.target.closest && e.target.closest(FULL);
+    if (!a || !window.gsap) return;
+    pressed = a; gsap.set(a, { transformOrigin: 'left center' });
+    gsap.to(a, { scale: 0.97, duration: 0.25, ease: 'power3.out', overwrite: 'auto' });
+  }, { passive: true });
+  const up = () => {
+    if (!pressed) return;
+    const a = pressed; pressed = null;
+    gsap.to(a, { scale: fine() && a.matches(':hover') ? 1.03 : 1, duration: 0.7, ease: 'elastic.out(1, 0.55)', overwrite: 'auto' });
+  };
+  ['pointerup', 'pointercancel'].forEach((t) => document.addEventListener(t, up, { passive: true }));
+
+  /* Services: hover card image zoomed in its frame and drifting towards the cursor */
+  const SV = { zoom: 1.2, shift: 8 }; // shift in % of the image, stay under (zoom - 1) / 2 * 100
+  if (!document.getElementById('paloma-svc-css')) {
+    const st = document.createElement('style');
+    st.id = 'paloma-svc-css';
+    st.textContent = '[data-services] .services_card-img{scale:' + SV.zoom + ';translate:calc(var(--svc-x,0) * ' + SV.shift + '%) calc(var(--svc-y,0) * ' + SV.shift + '%)}';
+    document.head.appendChild(st);
+  }
+  let svcTick = null;
+  const svcInit = (scope = document) => {
+    const root = (scope || document).querySelector('[data-services]');
+    if (!root || !fine() || !window.gsap || root._svcfx) return;
+    root._svcfx = true;
+    let tx = 0, ty = 0, x = 0, y = 0, px = 0, py = 0, active = false;
+    root.addEventListener('pointermove', (e) => { px = e.clientX; py = e.clientY; active = true; }, { passive: true });
+    root.addEventListener('pointerleave', () => { active = false; }, { passive: true });
+    svcTick = () => {
+      if (active) {
+        const card = document.querySelector('.services_float.is-card .services_card') || root.querySelector('.services_card');
+        if (card) {
+          const r = card.getBoundingClientRect();
+          tx = Math.max(-1, Math.min(1, (px - (r.left + r.width / 2)) / (r.width * 1.5)));
+          ty = Math.max(-1, Math.min(1, (py - (r.top + r.height / 2)) / (r.height * 1.5)));
+        }
+      } else { tx = 0; ty = 0; }
+      x += (tx - x) * 0.08; y += (ty - y) * 0.08;
+      document.documentElement.style.setProperty('--svc-x', x.toFixed(4));
+      document.documentElement.style.setProperty('--svc-y', y.toFixed(4));
+    };
+    gsap.ticker.add(svcTick);
+  };
+  App.inits.push(svcInit);
+  App.destroys.push(() => {
+    if (svcTick) gsap.ticker.remove(svcTick); svcTick = null;
+    document.querySelectorAll('[data-services]').forEach((r) => { delete r._svcfx; });
+  });
+  if (document.readyState !== 'loading') svcInit(document);
 })();
