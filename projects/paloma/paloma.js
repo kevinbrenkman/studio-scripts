@@ -493,7 +493,8 @@
         if (top > vh * 1.5 || top + h < -vh * 0.5) return;
         const n = Math.max(-1, Math.min(1, (top + h / 2 - mid) / mid)); // -1 top edge, 0 centre, 1 bottom edge
         const y = n * Math.abs(n) * FX.spread * (small() ? 0.5 : 1);
-        ys.set(c, y); q(setY, c, 'y', 'px')(y);
+        // CSS translate (not transform): stacks on top of Webflow's own scroll animations instead of fighting them
+        ys.set(c, y); c.style.translate = '0 ' + y.toFixed(2) + 'px';
         c.querySelectorAll('.project-card_media img').forEach((img) => { prep(img); q(imgY, img, 'yPercent', '')(-Math.max(-1, Math.min(1, n)) * FX.shift); });
       });
       caseImgs.forEach((img) => {
