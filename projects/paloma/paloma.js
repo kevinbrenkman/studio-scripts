@@ -17,6 +17,8 @@
  *    bottom of the screen. Grid, case media and the video player thumbnail: images get a vertical parallax.
  *  - ArrowLinks 1.3.0 (links left on # are visual only): arrow links (More about us, slider heading, Apply): on hover the arrow nudges right and the
  *    text follows a beat later; on press a small scale. Services: the hover card image is zoomed and follows the cursor.
+ *  - CaseTags 1.7.0: moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
+ *    without the stagger.
  *  - CardPress 1.2.0: project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
 (() => {
@@ -228,7 +230,6 @@
       if (!list.length) return;
       el.innerHTML = '<div class="case-header_tag-list">' + list.map(tagHtml).join('') + '</div>';
       App.inits.forEach((fn) => { if (fn !== init) try { fn(el); } catch (_) {} }); // glass button script picks the tags up
-      if (window.gsap) gsap.from(el.querySelectorAll('[data-glow-button]'), { opacity: 0, y: 6, duration: 0.5, stagger: 0.05, ease: 'power2.out' });
     });
   };
 
@@ -545,7 +546,7 @@
   window.App = window.App || { inits: [], destroys: [] };
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const fine = () => matchMedia('(hover:hover) and (pointer:fine)').matches;
-  const SEL = '.arrow-link:not(.is-static), .case-slider_heading:not(.is-static), .jobs_apply';
+  const SEL = '.arrow-link:not(.is-static), .case-slider_heading:not(.is-static), .case-header_more, .jobs_apply';
 
   // Arrow links without a real link (Case Slider heading on case pages, link left on #): visual only.
   // Removing href makes it plain text for the browser and Swup: no pointer, no click, no motion.
@@ -563,7 +564,7 @@
   const partsOf = (a) => {
     if (a._parts) return a._parts;
     let arrow = a.querySelector('.w-embed, svg');
-    let text = a.querySelector('.arrow-link_text, .case-slider_heading-text');
+    let text = a.querySelector('.arrow-link_text, .case-slider_heading-text, .case-header_more-label');
     if (!arrow) {
       const walker = document.createTreeWalker(a, NodeFilter.SHOW_TEXT);
       let node; while ((node = walker.nextNode())) {
@@ -651,4 +652,47 @@
     document.querySelectorAll('[data-services]').forEach((r) => { delete r._svcfx; });
   });
   if (document.readyState !== 'loading') svcInit(document);
+})();
+
+/* ---------- CaseTags (was registered script CaseTags 1.6.0) ---------- */
+// Tags from the Projects template page (/project-data/{slug}, [data-case-tags] [data-tag]) into [data-tags-from].
+// Slug: the attribute value, else the closest link, else the current page. data-tags-format="text" = comma list.
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const docs = App._docs = App._docs || new Map();
+  App.projectDoc = App.projectDoc || ((s) => {
+    if (!docs.has(s)) docs.set(s, fetch('/project-data/' + encodeURIComponent(s)).then((r) => (r.ok ? r.text() : ''))
+      .then((h) => new DOMParser().parseFromString(h, 'text/html')).catch(() => null));
+    return docs.get(s);
+  });
+  const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const tag = (t) => '<div class="nav_button" data-glow-button><div class="nav_button-glow" data-glow-layer="1"></div><div class="nav_button-stroke">' +
+    '<div class="nav_button-stroke-gradient is-one" data-rim="0"></div><div class="nav_button-stroke-gradient is-two" data-rim="180"></div></div>' +
+    '<div class="nav_button-text"><div class="nav_button-label">' + esc(t) + '</div></div></div>';
+  const last = (p) => (p || '').replace(/\/$/, '').split('/').pop() || '';
+  const slugOf = (el) => {
+    const v = (el.getAttribute('data-tags-from') || '').trim();
+    if (v) return v;
+    const a = el.closest('a[href]');
+    if (a) { try { const s = last(new URL(a.href, location.origin).pathname); if (s) return s; } catch (_) {} }
+    return last(location.pathname);
+  };
+  const fill = (el, slug) => App.projectDoc(slug).then((d) => {
+    const list = d ? [...d.querySelectorAll('[data-case-tags] [data-tag]')].map((t) => t.textContent.trim()).filter(Boolean) : [];
+    if (!list.length || !el.isConnected) return;
+    if (el.getAttribute('data-tags-format') === 'text') { el.textContent = list.join(', '); return; }
+    el.innerHTML = '<div class="case-header_tag-list">' + list.map(tag).join('') + '</div>';
+    App.inits.forEach((fn) => { if (fn !== init) try { fn(el); } catch (_) {} }); // glass buttons pick the tags up
+  });
+  let io = null;
+  function init(scope = document) {
+    io = io || new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { io.unobserve(e.target); fill(e.target, e.target._slug); } }), { rootMargin: '400px 0px' });
+    (scope || document).querySelectorAll('[data-tags-from]').forEach((el) => {
+      if (el._tags) return; el._tags = true; el._slug = slugOf(el);
+      if (el._slug) io.observe(el);
+    });
+  }
+  App.inits.push(init);
+  App.destroys.push(() => { if (io) { io.disconnect(); io = null; } });
+  if (document.readyState !== 'loading') init(document);
 })();
