@@ -11,11 +11,11 @@
  *  - Jobs 1.2.0 (open/close uses the ReadMore motion): Careers page (CMS > Jobs). Tags load from the Jobs template page (CMS > Job Types), like CaseTags;
  *    rows with a Description open and close, empty Apply link falls back to hello@wearepaloma.be.
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
- *  - SliderFX 1.3.0: the cards in view slide up one by one each time the slider scrolls into view.
+ *  - SliderFX 1.4.0 (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
  *    Depth: images are scaled up in their frame and move sideways with the card's position (horizontal parallax). Hooks into CaseSlider's slider:ready event.
  *  - GridFX 1.1.0: Selected projects grid and case pages. Grid cards reveal on scroll. Cards / case blocks spread
  *    apart (max 20px) towards the top and bottom of the screen; images and loop videos get a vertical parallax.
- *  - ArrowLinks 1.1.0: arrow links (More about us, slider heading, Apply): on hover the arrow nudges right and the
+ *  - ArrowLinks 1.2.0: arrow links (More about us, slider heading, Apply): on hover the arrow nudges right and the
  *    text follows a beat later; on press a small scale. Services: the hover card image is zoomed and follows the cursor.
  *  - CardPress 1.2.0: project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
@@ -400,7 +400,21 @@
         });
       };
       g.ticker.add(tick);
-      root._fxStop = () => { vio.disconnect(); setX.forEach((_, img) => g.set(img, { clearProps: 'transform' })); };
+
+      /* Fix: auto scroll moves the list without telling Splide, so its index stays behind. A trackpad swipe
+         (SliderMotion: go('>')) or a drag then started from that old index and the slider jumped back.
+         Sync the index to the real position before any swipe or drag. */
+      const Ctrl = sp.Components.Controller;
+      const sync = () => {
+        if (sp.state.is(Splide.STATES.MOVING)) return;
+        const i = Move.toIndex(Move.getPosition());
+        if (i !== Ctrl.getIndex()) Ctrl.setIndex(i);
+      };
+      ['wheel', 'pointerdown', 'touchstart'].forEach((t) => root.addEventListener(t, sync, { capture: true, passive: true }));
+      root._fxStop = () => {
+        vio.disconnect(); setX.forEach((_, img) => g.set(img, { clearProps: 'transform' }));
+        ['wheel', 'pointerdown', 'touchstart'].forEach((t) => root.removeEventListener(t, sync, { capture: true }));
+      };
     }
 
     root._fx = () => {
@@ -532,7 +546,7 @@
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const fine = () => matchMedia('(hover:hover) and (pointer:fine)').matches;
   const SEL = '.arrow-link, .case-slider_heading, .jobs_apply';
-  const NUDGE = 0.3;  // em the arrow moves right on hover
+  const NUDGE = 0.5;  // em the arrow moves right on hover
   const FOLLOW = 0.4; // share of that the text moves, a beat later
 
   // Arrow + text parts. Text arrows (Apply →) get the → and the words wrapped in spans first.
@@ -557,8 +571,9 @@
   const em = (a) => parseFloat(getComputedStyle(a).fontSize) || 16;
   const move = (a, on) => {
     const { arrow, text } = partsOf(a), d = on ? em(a) * NUDGE : 0;
-    if (arrow) gsap.to(arrow, { x: d, duration: on ? 0.45 : 0.5, ease: 'power3.out', overwrite: 'auto' });
-    if (text) gsap.to(text, { x: d * FOLLOW, duration: on ? 0.5 : 0.5, delay: on ? 0.07 : 0, ease: 'power3.out', overwrite: 'auto' });
+    if (arrow) gsap.to(arrow, { x: d, duration: on ? 0.45 : 0.5, ease: 'power3.out', overwrite: 'auto', force3D: false });
+    // Whole pixels, no GPU layer: keeps the underline crisp and the same weight while it moves
+    if (text) gsap.to(text, { x: d * FOLLOW, duration: 0.5, delay: on ? 0.07 : 0, ease: 'power3.out', overwrite: 'auto', snap: 'x', force3D: false });
   };
   document.addEventListener('pointerover', (e) => {
     if (!fine() || !window.gsap) return;
