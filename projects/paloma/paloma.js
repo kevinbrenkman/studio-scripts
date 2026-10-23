@@ -13,9 +13,9 @@
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
  *  - SliderFX 1.4.0 (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
  *    Depth: images are scaled up in their frame and move sideways with the card's position (horizontal parallax). Hooks into CaseSlider's slider:ready event.
- *  - GridFX 1.1.0: Selected projects grid and case pages. Grid cards reveal on scroll. Cards / case blocks spread
- *    apart (max 20px) towards the top and bottom of the screen; images and loop videos get a vertical parallax.
- *  - ArrowLinks 1.2.0: arrow links (More about us, slider heading, Apply): on hover the arrow nudges right and the
+ *  - GridFX 1.2.0: Selected projects grid: cards reveal on scroll and spread apart (max 40px) towards the top and
+ *    bottom of the screen. Grid, case media and the video player thumbnail: images get a vertical parallax.
+ *  - ArrowLinks 1.3.0 (links left on # are visual only): arrow links (More about us, slider heading, Apply): on hover the arrow nudges right and the
  *    text follows a beat later; on press a small scale. Services: the hover card image is zoomed and follows the cursor.
  *  - CardPress 1.2.0: project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
@@ -464,8 +464,8 @@
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const FX = {
     spread: 40,     // px a card (or case block) moves away at the top/bottom edge of the screen, 0 in the centre
-    zoom: 1.15,     // image scale inside the frame
-    shift: 6,       // yPercent the image travels at the edges (stay under (zoom - 1) / 2 * 100)
+    zoom: 1.2,      // image scale inside the frame
+    shift: 9,       // yPercent the image travels at the edges (stay under (zoom - 1) / 2 * 100)
     rise: 50,       // px, reveal
   };
   let tick = null, io = null, revealed = new WeakSet();
@@ -478,7 +478,7 @@
     // Case pages: loop images and videos inside the media blocks. Not the Full Video Player (it has its own controls).
     // Images in case media, plus the Full Video Player thumbnail. No video elements: the playing video stays put.
     const caseImgs = [...scope.querySelectorAll('.case-media_item img, [data-bunny-player-init] img')];
-    const blocks = grid ? [] : [...scope.querySelectorAll('.case-media, .case-mt, .case-quote')];
+    const blocks = []; // spread on case pages removed: too much there. Grid only.
     if (!grid && !caseImgs.length && !blocks.length) return;
     stop();
     const cards = grid ? [...grid.querySelectorAll('.project-card')] : blocks;
@@ -545,7 +545,17 @@
   window.App = window.App || { inits: [], destroys: [] };
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const fine = () => matchMedia('(hover:hover) and (pointer:fine)').matches;
-  const SEL = '.arrow-link, .case-slider_heading, .jobs_apply';
+  const SEL = '.arrow-link:not(.is-static), .case-slider_heading:not(.is-static), .jobs_apply';
+
+  // Arrow links without a real link (Case Slider heading on case pages, link left on #): visual only.
+  // Removing href makes it plain text for the browser and Swup: no pointer, no click, no motion.
+  const statics = (scope = document) => (scope || document).querySelectorAll('.arrow-link, .case-slider_heading').forEach((a) => {
+    const h = (a.getAttribute('href') || '').trim();
+    if (h && h !== '#') return;
+    a.removeAttribute('href'); a.classList.add('is-static'); a.style.cursor = 'default';
+  });
+  App.inits.push(statics);
+  if (document.readyState !== 'loading') statics(document);
   const NUDGE = 0.5;  // em the arrow moves right on hover
   const FOLLOW = 0.4; // share of that the text moves, a beat later
 
