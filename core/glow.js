@@ -1,17 +1,19 @@
 /*!
- * glow.js 1.0.0 (kevinbrenkman/studio-scripts/core)
+ * glow.js 1.1.0 (kevinbrenkman/studio-scripts/core)
  * Cursor-following radial glow + rim light on buttons. Markup free: the layers are injected, so it works on any
  * button. Same idea as the Paloma glass buttons, without needing their nav_button markup.
  *
  * Use: add data-glow to a button, or set the selector on the script tag:
  *   <script src=".../core/glow.js" data-glow-selector=".btn"></script>
- * Per button (optional): data-glow-color="255,255,255"  data-glow-strength="0.18"  data-glow-rim="0.6"
+ * Per button or on the script tag (optional): data-glow-color="255,255,255"  data-glow-strength="0.18"
+ * Rim light is off by default; data-glow-rim="0.6" turns a 1px border glow on.
  * Desktop only (hover + fine pointer), off with reduced motion. Swup / Barba safe: re-scans on DOM changes.
  */
 (() => {
   if (window.__glow) return; window.__glow = true;
   const script = document.currentScript;
   const SEL = (script && script.getAttribute('data-glow-selector')) || '[data-glow]';
+  const def = (k, v) => (script && script.getAttribute(k)) || v;
   if (!matchMedia('(hover:hover) and (pointer:fine)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
   const css = document.createElement('style');
@@ -33,10 +35,11 @@
     else { el.style.isolation = 'isolate'; [...el.children].forEach((c) => { if (getComputedStyle(c).position === 'static') { c.style.position = 'relative'; c.style.zIndex = '1'; } }); }
     const fx = document.createElement('span');
     fx.className = 'glow-fx'; fx.setAttribute('aria-hidden', 'true');
-    fx.innerHTML = '<span class="glow-fx_fill"></span><span class="glow-fx_rim"></span>';
-    fx.style.setProperty('--glow-c', el.getAttribute('data-glow-color') || '255,255,255');
-    fx.style.setProperty('--glow-s', el.getAttribute('data-glow-strength') || '0.18');
-    fx.style.setProperty('--glow-r', el.getAttribute('data-glow-rim') || '0.6');
+    const rim = parseFloat(el.getAttribute('data-glow-rim') || def('data-glow-rim', '0')) || 0;
+    fx.innerHTML = '<span class="glow-fx_fill"></span>' + (rim > 0 ? '<span class="glow-fx_rim"></span>' : '');
+    fx.style.setProperty('--glow-c', el.getAttribute('data-glow-color') || def('data-glow-color', '255,255,255'));
+    fx.style.setProperty('--glow-s', el.getAttribute('data-glow-strength') || def('data-glow-strength', '0.18'));
+    fx.style.setProperty('--glow-r', String(rim));
     el.prepend(fx);
     let raf = 0, x = 0, y = 0;
     const paint = () => { raf = 0; fx.style.setProperty('--gx', x + 'px'); fx.style.setProperty('--gy', y + 'px'); };
