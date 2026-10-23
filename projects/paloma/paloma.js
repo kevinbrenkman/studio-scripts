@@ -8,12 +8,12 @@
  *    thumbnail inside the spinning 3D emblem (Quy). WebGL: a grayscale matte video (white = emblem)
  *    is the alpha for the thumbnail. One H.264 file for every browser, because Safari drops the
  *    alpha of HEVC video when it is drawn to a canvas.
- *  - Jobs 1.1.0: Careers page (CMS > Jobs). Tags load from the Jobs template page (CMS > Job Types), like CaseTags;
+ *  - Jobs 1.2.0 (open/close uses the ReadMore motion): Careers page (CMS > Jobs). Tags load from the Jobs template page (CMS > Job Types), like CaseTags;
  *    rows with a Description open and close, empty Apply link falls back to hello@wearepaloma.be.
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
- *  - SliderFX 1.1.0: Case Slider cards fade up in a stagger once, when the slider first comes into view.
- *    Perspective: cards sink towards the screen edges (arc), plus extra vertical parallax from the slider speed. Hooks into CaseSlider's slider:ready event.
- *  - CardPress 1.0.1: project cards (grid and slider) zoom out a little while pressed and spring back on release.
+ *  - SliderFX 1.2.0: the cards in view slide up one by one, once, when the slider first comes into view.
+ *    Depth: images are scaled up in their frame and move sideways with the card's position (horizontal parallax). Hooks into CaseSlider's slider:ready event.
+ *  - CardPress 1.1.0: project cards (grid and slider) scale to 99% zoom out a little while pressed and spring back on release.
  */
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
@@ -251,14 +251,24 @@
 
     row.setAttribute('role', 'button'); row.tabIndex = 0; row.setAttribute('aria-expanded', 'false');
     let open = false;
+    // Same motion as ReadMore 1.3.0: height opens (0.5s power3.inOut), then the content fades up 8px
+    const inner = detail.firstElementChild || detail;
+    let tl = null;
     const set = (v) => {
       open = v; item.classList.toggle('is-open', v); row.setAttribute('aria-expanded', String(v));
       const g = window.gsap;
-      if (g) {
-        g.killTweensOf(detail);
-        if (v) g.fromTo(detail, { height: detail.offsetHeight }, { height: 'auto', duration: 0.6, ease: 'power3.inOut', onComplete: resize });
-        else g.to(detail, { height: 0, duration: 0.5, ease: 'power3.inOut', onComplete: resize });
-      } else { detail.style.height = v ? 'auto' : '0px'; resize(); }
+      if (!g) { detail.style.height = v ? 'auto' : '0px'; resize(); return; }
+      if (tl) tl.kill();
+      tl = g.timeline({ onComplete: resize });
+      if (v) {
+        g.set(inner, { opacity: 0, y: 8 });
+        tl.fromTo(detail, { height: detail.offsetHeight }, { height: 'auto', duration: 0.5, ease: 'power3.inOut' })
+          .to(inner, { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' }, '-=0.1');
+      } else {
+        tl.to(inner, { opacity: 0, y: 8, duration: 0.3, ease: 'power2.in' })
+          .to(detail, { height: 0, duration: 0.45, ease: 'power3.inOut' })
+          .set(inner, { clearProps: 'opacity,transform' });
+      }
     };
     const click = (e) => { if (e.target.closest('a')) return; set(!open); };
     const key = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set(!open); } };
@@ -276,7 +286,7 @@
       new DOMParser().parseFromString(h, 'text/html').querySelectorAll('[data-jobs] [data-job]').length).catch(() => 0);
     return countP;
   };
-  const fill = (n) => document.querySelectorAll('[data-jobs-count]').forEach((el) => { el.textContent = n > 0 ? String(n) : ''; });
+  const fill = (n) => document.querySelectorAll('[data-jobs-count]').forEach((el) => { el.textContent = n > 0 ? '(' + n + ')' : ''; });
 
   function init(scope = document) {
     scope = scope || document;
@@ -298,11 +308,10 @@
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const FX = {
     rise: 60,       // px the cards travel up in the reveal
-    stagger: 0.08,  // s between cards
+    stagger: 0.18,  // s between cards: first, second, third
     duration: 1,    // s per card
-    para: 0.035,    // speed parallax: px of vertical offset per px/s of slider speed, at the edges
-    max: 36,        // px, speed parallax clamp
-    arc: 48,        // px, perspective: cards sink this much at the screen edges, centre stays up. Always on, also at slow speed
+    zoom: 1.15,     // images scaled up inside their frame, room for the sideways parallax
+    shift: 6,       // xPercent the image moves at the screen edges (must stay under (zoom - 1) / 2 * 100)
   };
 
   // Hide the cards before Splide mounts, so the reveal never flashes. Only while this script runs.
@@ -340,36 +349,33 @@
       io.observe(track || root);
     }
 
-    /* Parallax: speed of the list drives a vertical offset, edges move most, centre stays put */
+    /* Depth: images sit scaled up inside their frame and slide left/right with the card's position on screen.
+       Position based, so it works at any speed, auto scroll included. The cards themselves never move vertically. */
     let tick = null;
     if (!RM) {
-      const Move = sp.Components.Move;
-      let last = Move.getPosition(), v = 0, cur = 0;
-      const setters = new Map();
-      const setY = (el) => { if (!setters.has(el)) setters.set(el, g.quickSetter(el, 'y', 'px')); return setters.get(el); };
+      const imgs = (c) => c._fxImgs || (c._fxImgs = [...c.querySelectorAll('.project-card_media img')]);
+      const setX = new Map();
+      const setter = (img) => {
+        if (!setX.has(img)) { g.set(img, { scale: FX.zoom, force3D: true }); setX.set(img, g.quickSetter(img, 'xPercent')); }
+        return setX.get(img);
+      };
       let inView = true;
       const vio = new IntersectionObserver((e) => { inView = e[0].isIntersecting; });
       vio.observe(root);
-      tick = (t, dt) => {
-        if (!inView || !dt) return;
-        const pos = Move.getPosition();
-        let d = pos - last; last = pos;
-        if (Math.abs(d) > innerWidth) d = 0; // loop jump, not real movement
-        const speed = (d / dt) * 1000; // px/s, negative = moving left
-        v += (speed - v) * Math.min(1, dt / 120);
-        cur += (v - cur) * Math.min(1, dt / 200);
+      tick = () => {
+        if (!inView) return;
         const w = innerWidth;
         cards().forEach((c) => {
           const r = c.getBoundingClientRect();
-          if (r.right < -w * 0.2 || r.left > w * 1.2) return;
-          const p = ((r.left + r.width / 2) / w) * 2 - 1; // -1 left edge, 0 centre, 1 right edge
-          const speedY = Math.max(-FX.max, Math.min(FX.max, cur * FX.para * p));
-          const arcY = FX.arc * Math.min(1, p * p); // curved surface, like the row bends away from you
-          setY(c)(arcY + speedY);
+          if (r.right < -w * 0.25 || r.left > w * 1.25) return;
+          const p = Math.max(-1.25, Math.min(1.25, ((r.left + r.width / 2) / w) * 2 - 1)); // -1 left edge, 1 right edge
+          const x = -p * FX.shift; // image lags behind the card: moves against the travel direction
+          c._fxImgs = null; // HoverFlip adds images on hover, pick them up
+          imgs(c).forEach((img) => setter(img)(x));
         });
       };
       g.ticker.add(tick);
-      root._fxStop = () => { vio.disconnect(); };
+      root._fxStop = () => { vio.disconnect(); setX.forEach((_, img) => g.set(img, { clearProps: 'transform' })); };
     }
 
     root._fx = () => {
@@ -392,7 +398,7 @@
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const SCALE = 0.96;
+  const SCALE = 0.99;
   let pressed = null;
   const target = (el) => el && el.closest && el.closest('.project-card, .case-slider_slide'); // grid cards and slider cards
   const media = (card) => card.querySelector('.project-card_media') || card;
