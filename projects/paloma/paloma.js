@@ -15,7 +15,7 @@
  *    Depth: images are scaled up in their frame and move sideways with the card's position (horizontal parallax). Hooks into CaseSlider's slider:ready event.
  *  - GridFX 1.2.0: Selected projects grid: cards reveal on scroll and spread apart (max 40px) towards the top and
  *    bottom of the screen. Grid, case media and the video player thumbnail: images get a vertical parallax.
- *  - ArrowLinks 1.4.0: hover motion moved to the native Webflow interaction "Arrow link hover" (tweak on the canvas).
+ *  - ArrowLinks 1.4.1 (static check only on real links; the slider heading wrapper is a div): hover motion moved to the native Webflow interaction "Arrow link hover" (tweak on the canvas).
  *    Script keeps: press scale on all arrow links, the Apply text arrow hover, links left on # visual only. Services: the hover card image is zoomed and follows the cursor.
  *  - CaseTags 1.7.0: moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
  *    without the stagger.
@@ -550,7 +550,7 @@
 
   // Arrow links without a real link (Case Slider heading on case pages, link left on #): visual only.
   // Removing href makes it plain text for the browser and Swup: no pointer, no click, no motion.
-  const statics = (scope = document) => (scope || document).querySelectorAll('.arrow-link, .case-slider_heading').forEach((a) => {
+  const statics = (scope = document) => (scope || document).querySelectorAll('a.arrow-link, a.case-slider_heading').forEach((a) => {
     const h = (a.getAttribute('href') || '').trim();
     if (h && h !== '#') return;
     a.removeAttribute('href'); a.classList.add('is-static'); a.style.cursor = 'default';
@@ -565,7 +565,7 @@
   const HOVER = '.jobs_apply';
   if (!document.getElementById('paloma-arrow-css')) {
     const st = document.createElement('style'); st.id = 'paloma-arrow-css';
-    st.textContent = '.arrow-link.is-static,.case-slider_heading.is-static{pointer-events:none}';
+    st.textContent = 'a.arrow-link.is-static,a.case-slider_heading.is-static{pointer-events:none}';
     document.head.appendChild(st);
   }
 
