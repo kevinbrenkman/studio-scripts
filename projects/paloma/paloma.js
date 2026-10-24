@@ -11,12 +11,12 @@
  *  - Jobs 1.2.0 (open/close uses the ReadMore motion): Careers page (CMS > Jobs). Tags load from the Jobs template page (CMS > Job Types), like CaseTags;
  *    rows with a Description open and close, empty Apply link falls back to hello@wearepaloma.be.
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
- *  - SliderFX 1.4.0 (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
+ *  - SliderFX 1.5.0 (parallax matches the grid: zoom 1.2, shift 8) (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
  *    Depth: images are scaled up in their frame and move sideways with the card's position (horizontal parallax). Hooks into CaseSlider's slider:ready event.
  *  - GridFX 1.2.0: Selected projects grid: cards reveal on scroll and spread apart (max 40px) towards the top and
  *    bottom of the screen. Grid, case media and the video player thumbnail: images get a vertical parallax.
- *  - ArrowLinks 1.3.0 (links left on # are visual only): arrow links (More about us, slider heading, Apply): on hover the arrow nudges right and the
- *    text follows a beat later; on press a small scale. Services: the hover card image is zoomed and follows the cursor.
+ *  - ArrowLinks 1.4.0: hover motion moved to the native Webflow interaction "Arrow link hover" (tweak on the canvas).
+ *    Script keeps: press scale on all arrow links, the Apply text arrow hover, links left on # visual only. Services: the hover card image is zoomed and follows the cursor.
  *  - CaseTags 1.7.0: moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
  *    without the stagger.
  *  - CardPress 1.2.0: project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
@@ -324,8 +324,8 @@
     rise: 60,       // px the cards travel up in the reveal
     stagger: 0.18,  // s between cards: first, second, third
     duration: 1,    // s per card
-    zoom: 1.15,     // images scaled up inside their frame, room for the sideways parallax
-    shift: 6,       // xPercent the image moves at the screen edges (must stay under (zoom - 1) / 2 * 100)
+    zoom: 1.2,      // images scaled up inside their frame, room for the sideways parallax (same as the grid)
+    shift: 8,       // xPercent the image moves at the screen edges (must stay under (zoom - 1) / 2 * 100)
   };
 
   // Hide the cards before Splide mounts, so the reveal never flashes. Only while this script runs.
@@ -557,8 +557,17 @@
   });
   App.inits.push(statics);
   if (document.readyState !== 'loading') statics(document);
+  // Hover motion for .arrow-link / .case-slider_heading / .case-header_more is a native Webflow
+  // interaction now ("Arrow link hover", tweak it in the Interactions panel). Only the Apply text
+  // arrow (Careers CMS rich text, no classes to target) stays scripted here.
   const NUDGE = 0.5;  // em the arrow moves right on hover
-  const FOLLOW = 0.4; // share of that the text moves, a beat later
+  const FOLLOW = 0.8; // share of that the text moves, a beat later
+  const HOVER = '.jobs_apply';
+  if (!document.getElementById('paloma-arrow-css')) {
+    const st = document.createElement('style'); st.id = 'paloma-arrow-css';
+    st.textContent = '.arrow-link.is-static,.case-slider_heading.is-static{pointer-events:none}';
+    document.head.appendChild(st);
+  }
 
   // Arrow + text parts. Text arrows (Apply →) get the → and the words wrapped in spans first.
   const partsOf = (a) => {
@@ -588,13 +597,13 @@
   };
   document.addEventListener('pointerover', (e) => {
     if (!fine() || !window.gsap) return;
-    const a = e.target.closest && e.target.closest(SEL);
+    const a = e.target.closest && e.target.closest(HOVER);
     if (!a || (e.relatedTarget && a.contains(e.relatedTarget))) return;
     move(a, true);
   });
   document.addEventListener('pointerout', (e) => {
     if (!window.gsap) return;
-    const a = e.target.closest && e.target.closest(SEL);
+    const a = e.target.closest && e.target.closest(HOVER);
     if (!a || (e.relatedTarget && a.contains(e.relatedTarget))) return;
     move(a, false);
   });
