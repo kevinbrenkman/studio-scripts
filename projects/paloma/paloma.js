@@ -19,7 +19,8 @@
  *    Script keeps: press scale on all arrow links, the Apply text arrow hover, links left on # visual only. Services: the hover card image is zoomed and follows the cursor.
  *  - CaseTags 1.7.0: moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
  *    without the stagger.
- *  - SocialSlider 1.1.0: Case Study Slider component (Social Cards and/or Media Cards). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
+ *  - SocialSlider 1.2.0: Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed.
+ *  - MediaPoster 1.0.0: hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
  *    same slider:ready event, so SliderMotion (trackpad, auto scroll) and SliderFX (reveal, parallax) run on it too.
  *    Own module because CaseSlider removes slides that link to the current page (the play button is href="#").
  *  - SocialCard 1.0.0: Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
@@ -768,6 +769,16 @@
   if (document.readyState !== 'loading') init(document);
 })();
 
+/* ---------- MediaPoster ---------- */
+// Case Media, Case Media Text, Social Card, Media Card: once the video loop plays, hide the image under it
+// (it could peek out 1px at the edge). Waits for the video fade-in (MediaReveal) before hiding.
+(() => {
+  if (document.getElementById('paloma-poster-css')) return;
+  const st = document.createElement('style'); st.id = 'paloma-poster-css';
+  st.textContent = '[data-case-media]:has(> video.is-revealed) > img{visibility:hidden;transition:visibility 0s linear 1s}';
+  document.head.appendChild(st);
+})();
+
 /* ---------- SocialSlider ---------- */
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
@@ -789,8 +800,8 @@
     const list = slide0 && slide0.parentElement;
     const track = list && list.parentElement;
     const slides = list ? [...list.children].filter((c) => c.querySelector(CARD)) : [];
-    // Arrows get the nav glass (rim reflections, glow, magnetic, press) from the site footer script
-    root.querySelectorAll('.social-slider_arrows').forEach((a) => a.setAttribute('data-glow-button', ''));
+    // Each arrow is its own nav glass button (rim reflections, glow, magnetic, press: site footer script)
+    root.querySelectorAll('[data-social-prev], [data-social-next]').forEach((a) => a.setAttribute('data-glow-button', ''));
     if (!track || !list || !slides.length) { root.style.display = 'none'; return; }
     if (slides.length < 2) { root.classList.add('is-single', 'fx-ready'); return; }
     loadSplide().then(() => {
@@ -816,7 +827,26 @@
         sp.go(b.hasAttribute('data-social-next') ? '>' : '<');
       };
       root.addEventListener('click', go);
-      root._ssStop = () => root.removeEventListener('click', go);
+      // Press: the pressed arrow splits off from the other one (slides out, its inner corners round off),
+      // then snaps back. 'left' and the radii, because the glass script already uses x/y (magnetic) and scale (press).
+      const R = '0.75rem';
+      const split = (btn, on) => {
+        const next = btn.hasAttribute('data-social-next');
+        const inner = next ? ['borderTopLeftRadius', 'borderBottomLeftRadius'] : ['borderTopRightRadius', 'borderBottomRightRadius'];
+        const v = { left: on ? (next ? 5 : -5) : 0, duration: on ? 0.22 : 0.7, ease: on ? 'power3.out' : 'elastic.out(1, 0.55)', overwrite: 'auto' };
+        inner.forEach((k) => { v[k] = on ? R : '0rem'; });
+        if (!on) v.onComplete = () => window.gsap.set(btn, { clearProps: 'left,' + inner.join(',') });
+        window.gsap && window.gsap.to(btn, v);
+      };
+      let held = null;
+      const down = (e) => { const b = e.target.closest && e.target.closest('[data-social-prev], [data-social-next]'); if (!b || !root.contains(b)) return; held = b; split(b, true); };
+      const up = () => { if (held) { split(held, false); held = null; } };
+      root.addEventListener('pointerdown', down);
+      ['pointerup', 'pointercancel'].forEach((t) => document.addEventListener(t, up));
+      root._ssStop = () => {
+        root.removeEventListener('click', go); root.removeEventListener('pointerdown', down);
+        ['pointerup', 'pointercancel'].forEach((t) => document.removeEventListener(t, up));
+      };
       root.dispatchEvent(new CustomEvent('slider:ready', { bubbles: true }));
     });
   };
