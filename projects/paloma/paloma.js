@@ -11,7 +11,7 @@
  *  - Jobs 1.2.0 (open/close uses the ReadMore motion): Careers page (CMS > Jobs). Tags load from the Jobs template page (CMS > Job Types), like CaseTags;
  *    rows with a Description open and close, empty Apply link falls back to hello@wearepaloma.be.
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
- *  - SliderFX 1.6.0 (also runs on the Social Slider; parallax matches the grid: zoom 1.2, shift 8) (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
+ *  - SliderFX 1.7.0 (Case Study Slider: parallax + swipe fix, no stagger; never empty when scrolling back up; parallax matches the grid: zoom 1.2, shift 8) (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
  *    Depth: images are scaled up in their frame and move sideways with the card's position (horizontal parallax). Hooks into CaseSlider's slider:ready event.
  *  - GridFX 1.2.0: Selected projects grid: cards reveal on scroll and spread apart (max 40px) towards the top and
  *    bottom of the screen. Grid, case media and the video player thumbnail: images get a vertical parallax.
@@ -19,13 +19,14 @@
  *    Script keeps: press scale on all arrow links, the Apply text arrow hover, links left on # visual only. Services: the hover card image is zoomed and follows the cursor.
  *  - CaseTags 1.7.0: moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
  *    without the stagger.
- *  - SocialSlider 1.2.0: Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed.
+ *  - SocialSlider 1.3.0: Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
+ *    and glow in the direction you slide. Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
  *  - MediaPoster 1.0.0: hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
  *    same slider:ready event, so SliderMotion (trackpad, auto scroll) and SliderFX (reveal, parallax) run on it too.
  *    Own module because CaseSlider removes slides that link to the current page (the play button is href="#").
  *  - SocialCard 1.0.0: Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
- *  - CardPress 1.2.0: project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
+ *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
@@ -338,7 +339,7 @@
   if (!RM && !document.getElementById('paloma-sliderfx-css')) {
     const st = document.createElement('style');
     st.id = 'paloma-sliderfx-css';
-    st.textContent = '[data-case-slider]:not(.fx-ready) .case-slider_slide,[data-social-slider]:not(.fx-ready) .social-slider_list>*{opacity:0}';
+    st.textContent = '[data-case-slider]:not(.fx-ready) .case-slider_slide{opacity:0}';
     document.head.appendChild(st);
   }
 
@@ -353,7 +354,8 @@
 
     /* Reveal: cards in view stagger up from the left, every time the slider scrolls back into view */
     let io = null;
-    if (RM) root.classList.add('fx-ready');
+    // Case Study Slider: no stagger (too much on case pages); the whole slider fades in with Section reveal
+    if (RM || root.hasAttribute('data-social-slider')) root.classList.add('fx-ready');
     else {
       g.set(slides(), { autoAlpha: 0, y: FX.rise });
       root.classList.add('fx-ready');
@@ -369,12 +371,16 @@
       };
       const hide = () => { const all = slides(); g.killTweensOf(all); g.set(all, { autoAlpha: 0, y: FX.rise }); };
       io = new IntersectionObserver((es) => es.forEach((e) => {
-        if (e.isIntersecting && e.intersectionRatio >= 0.2 && !shown) {
+        if (e.isIntersecting && !shown && e.boundingClientRect.top <= 0) { // coming back from above: show straight away
+          shown = true; const all = slides(); g.killTweensOf(all); g.set(all, { autoAlpha: 1, y: 0, clearProps: 'transform' });
+        } else if (e.isIntersecting && e.intersectionRatio >= 0.2 && !shown) {
           shown = true;
           // Only when scrolling down (slider enters from the bottom). Scrolling back up: just show it.
           if (e.boundingClientRect.top > 0) reveal();
           else { const all = slides(); g.killTweensOf(all); g.set(all, { autoAlpha: 1, y: 0, clearProps: 'transform' }); }
-        } else if (!e.isIntersecting && shown) { shown = false; hide(); } // fully out of view: ready to play again
+        } else if (!e.isIntersecting && shown && e.boundingClientRect.top > 0) { shown = false; hide(); }
+        // Reset only when it leaves at the bottom (scrolled back up past it): it plays again on the way down.
+        // Leaving at the top keeps it visible, so scrolling back up never shows it empty.
       }), { threshold: [0, 0.2] });
       io.observe(track || root);
     }
@@ -451,9 +457,17 @@
   const down = (e) => {
     if (e.button && e.button !== 0) return;
     const card = target(e.target); if (!card || !window.gsap) return;
-    pressed = media(card);
+    pressed = media(card); sx = e.clientX; sy = e.clientY;
     gsap.to(pressed, { scale: SCALE, duration: 0.35, ease: 'power3.out', overwrite: 'auto' });
   };
+  // Dragging a slider is not a press: let go at once, without the spring (that read as the info jumping)
+  let sx = 0, sy = 0;
+  const move = (e) => {
+    if (!pressed || Math.hypot(e.clientX - sx, e.clientY - sy) < 6) return;
+    gsap.to(pressed, { scale: 1, duration: 0.25, ease: 'power2.out', overwrite: 'auto', clearProps: 'scale' });
+    pressed = null;
+  };
+  document.addEventListener('pointermove', move, { passive: true });
   const up = () => {
     if (!pressed) return;
     gsap.to(pressed, { scale: 1, duration: 0.8, ease: 'elastic.out(1, 0.55)', overwrite: 'auto', clearProps: 'scale' });
@@ -775,7 +789,9 @@
 (() => {
   if (document.getElementById('paloma-poster-css')) return;
   const st = document.createElement('style'); st.id = 'paloma-poster-css';
-  st.textContent = '[data-case-media]:has(> video.is-revealed) > img{visibility:hidden;transition:visibility 0s linear 1s}';
+  st.textContent = '[data-case-media]:has(> video.is-revealed) > img{visibility:hidden;transition:visibility 0s linear 1s}' +
+    // Video 1px bigger on every side (the box clips it): no background line at the edge from sub-pixel rounding
+    '[data-case-media]{overflow:hidden}[data-case-media]>video.case-media_video{top:-1px!important;left:-1px!important;right:auto!important;bottom:auto!important;width:calc(100% + 2px)!important;height:calc(100% + 2px)!important}';
   document.head.appendChild(st);
 })();
 
@@ -827,26 +843,49 @@
         sp.go(b.hasAttribute('data-social-next') ? '>' : '<');
       };
       root.addEventListener('click', go);
-      // Press: the pressed arrow splits off from the other one (slides out, its inner corners round off),
-      // then snaps back. 'left' and the radii, because the glass script already uses x/y (magnetic) and scale (press).
-      const R = '0.75rem';
+      // Press: the arrows split. The pressed one moves out and rounds off fully, the other gets its own
+      // rounded corners on all sides; both snap back on release. 'left' + radii: the glass script owns x/y/scale.
+      const R = '0.75rem', PILL = '1.25rem';
+      const arrows = [...root.querySelectorAll('[data-social-prev], [data-social-next]')];
+      const CORNERS = ['borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomRightRadius', 'borderBottomLeftRadius'];
       const split = (btn, on) => {
-        const next = btn.hasAttribute('data-social-next');
-        const inner = next ? ['borderTopLeftRadius', 'borderBottomLeftRadius'] : ['borderTopRightRadius', 'borderBottomRightRadius'];
-        const v = { left: on ? (next ? 5 : -5) : 0, duration: on ? 0.22 : 0.7, ease: on ? 'power3.out' : 'elastic.out(1, 0.55)', overwrite: 'auto' };
-        inner.forEach((k) => { v[k] = on ? R : '0rem'; });
-        if (!on) v.onComplete = () => window.gsap.set(btn, { clearProps: 'left,' + inner.join(',') });
-        window.gsap && window.gsap.to(btn, v);
+        if (!window.gsap) return;
+        arrows.forEach((a) => {
+          const next = a.hasAttribute('data-social-next'), me = a === btn;
+          const v = { duration: on ? 0.25 : 0.7, ease: on ? 'power3.out' : 'elastic.out(1, 0.55)', overwrite: 'auto' };
+          if (on) { CORNERS.forEach((k) => { v[k] = me ? PILL : R; }); v.left = me ? (next ? 6 : -6) : 0; }
+          else {
+            const rest = next ? ['0rem', R, R, '0rem'] : [R, '0rem', '0rem', R];
+            CORNERS.forEach((k, i) => { v[k] = rest[i]; }); v.left = 0;
+            v.onComplete = () => gsap.set(a, { clearProps: 'left,' + CORNERS.join(',') });
+          }
+          gsap.to(a, v);
+        });
       };
       let held = null;
       const down = (e) => { const b = e.target.closest && e.target.closest('[data-social-prev], [data-social-next]'); if (!b || !root.contains(b)) return; held = b; split(b, true); };
       const up = () => { if (held) { split(held, false); held = null; } };
       root.addEventListener('pointerdown', down);
       ['pointerup', 'pointercancel'].forEach((t) => document.addEventListener(t, up));
+      // Moving the slider (drag, swipe, arrows) makes the arrow of that direction glow for a moment
+      const Move = sp.Components.Move;
+      const flash = (btn) => { if (!btn) return; btn.classList.remove('is-flash'); void btn.offsetWidth; btn.classList.add('is-flash'); clearTimeout(btn._fl); btn._fl = setTimeout(() => btn.classList.remove('is-flash'), 450); };
+      sp.on('move', (index, prev, dest) => {
+        const to = Move.toPosition(dest, true), from = Move.getPosition();
+        flash(root.querySelector(to < from ? '[data-social-next]' : '[data-social-prev]'));
+      });
       root._ssStop = () => {
         root.removeEventListener('click', go); root.removeEventListener('pointerdown', down);
         ['pointerup', 'pointercancel'].forEach((t) => document.removeEventListener(t, up));
       };
+      // Auto scroll comes from the component variant (Off / Slow / Fast); SliderMotion reads data-autoscroll
+      // Fast = 4 (80px a second, same as the homepage slider), Slow = 2 (40px a second)
+      const VAR = /^data-wf--.*slider.*--variant$/; // only this slider's own variant, not e.g. Page Theme
+      let variant = '';
+      for (let el = root; el && el !== document.body && !variant; el = el.parentElement) {
+        const at = [...el.attributes].find((x) => VAR.test(x.name)); if (at) variant = at.value;
+      }
+      root.setAttribute('data-autoscroll', /fast/.test(variant) ? '4' : /slow/.test(variant) ? '2' : '0');
       root.dispatchEvent(new CustomEvent('slider:ready', { bubbles: true }));
     });
   };
