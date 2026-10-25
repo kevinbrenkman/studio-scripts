@@ -4,7 +4,7 @@
  * Registers into the Swup shell registry (App.inits / App.destroys) from the site footer.
  *
  * Modules
- *  - EmblemMask 2.5.0 (same emblem size on every card, 30vw, optically +10% on square cards):  replaces HoverMask 1.1.0 (spinning SVG). Project card hover shows the
+ *  - EmblemMask 2.5.0 (same emblem size on every card, 30vw, optically +10% on square, -8% on portrait cards):  replaces HoverMask 1.1.0 (spinning SVG). Project card hover shows the
  *    thumbnail inside the spinning 3D emblem (Quy). WebGL: a grayscale matte video (white = emblem)
  *    is the alpha for the thumbnail. One H.264 file for every browser, because Safari drops the
  *    alpha of HEVC video when it is drawn to a canvas.
@@ -41,6 +41,7 @@
     size: 0.3,    // emblem size as a share of the viewport width: the same on every card (portrait, square, wide)
     max: 0.85,    // never more than this share of the card's shortest side (small cards, narrow screens)
     square: 0.1,  // optical boost on square cards (looks smaller there): +10% on a perfect square, fading out towards 1.6:1
+    portrait: 0.08, // optical reduction on portrait cards (looks bigger there): -8% at 4:5 or taller
     fill: 0.975,  // share of the video frame the emblem fills (square crop)
   };
   const fine = () => matchMedia('(hover:hover) and (pointer:fine)').matches;
@@ -145,7 +146,8 @@
         gl.uniform4f(loc.c, sx, sy, (1 - sx) / 2, (1 - sy) / 2);
         // emblem square, centred, in card uv space
         const sq = Math.max(0, 1 - Math.abs(Math.log(w / h)) / Math.log(1.6)); // 1 = square, 0 = 1.6:1 or longer
-        const px = Math.min(EMBLEM.size * innerWidth * d * (1 + EMBLEM.square * sq), EMBLEM.max * Math.min(w, h));
+        const tall = Math.max(0, Math.min(1, (h / w - 1) / 0.25)); // 0 = square or wide, 1 = 4:5 or taller
+        const px = Math.min(EMBLEM.size * innerWidth * d * (1 + EMBLEM.square * sq - EMBLEM.portrait * tall), EMBLEM.max * Math.min(w, h));
         const s = px / EMBLEM.fill, rw = s / w, rh = s / h;
         gl.uniform4f(loc.r, (1 - rw) / 2, (1 - rh) / 2, rw, rh);
         gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
