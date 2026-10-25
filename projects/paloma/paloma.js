@@ -19,12 +19,12 @@
  *    Script keeps: press scale on all arrow links, the Apply text arrow hover, links left on # visual only. Services: the hover card image is zoomed and follows the cursor.
  *  - CaseTags 1.7.0: moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
  *    without the stagger.
- *  - SocialSlider 1.3.0: Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
- *    and glow in the direction you slide. Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
+ *  - SocialSlider 1.4.0: Case Study Slider component (Social Cards and/or Media Cards). Trackpad drags it (settles on
+ *    the nearest card, no page scroll while swiping). Arrows split apart when pressed and glow in the direction you slide. Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
  *  - MediaPoster 1.0.0: hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
  *    same slider:ready event, so SliderMotion (trackpad, auto scroll) and SliderFX (reveal, parallax) run on it too.
  *    Own module because CaseSlider removes slides that link to the current page (the play button is href="#").
- *  - SocialCard 1.0.0: Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
+ *  - SocialCard 1.1.0 (Enlarge = lightbox): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
@@ -758,6 +758,52 @@
   };
   const stop = (card) => { const v = videoOf(card); if (v) { v.pause(); v.muted = true; } setUi(card, false); };
 
+  /* Lightbox: the Enlarge button (only shown while playing) moves the card into a centred overlay, bigger,
+     same styling; it flies there from its spot (FLIP). Clicking outside, the button again or Esc puts it back. */
+  if (!document.getElementById('paloma-lightbox-css')) {
+    const st = document.createElement('style'); st.id = 'paloma-lightbox-css';
+    st.textContent = '.social-lightbox{position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;' +
+      'background-color:color-mix(in srgb,var(--_theme---background) 82%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}' +
+      // card height = media (width x 647/364) + bar (50px + 20px gap): fits the screen with 4rem air, or the width on phones
+      '.social-lightbox .social-card{width:min(calc((100svh - 4rem - 4.375rem) * 364 / 647),calc(100vw - 2.5rem))!important;max-width:none!important;margin:0!important}';
+    document.head.appendChild(st);
+  }
+  let box = null;
+  const lockScroll = (on) => { if (window.lenis) on ? lenis.stop() : lenis.start(); };
+  const openBox = (card) => {
+    if (box || !window.gsap) return;
+    const from = card.getBoundingClientRect();
+    const hold = document.createElement('div'); // keeps the card's place (and the slider's width) while it's away
+    hold.style.cssText = 'width:' + from.width + 'px;height:' + card.offsetHeight + 'px;flex:none';
+    card.parentNode.insertBefore(hold, card);
+    const ov = document.createElement('div'); ov.className = 'social-lightbox';
+    (card.closest('.page-theme') || document.body).appendChild(ov); // inside the page theme: same colours
+    ov.appendChild(card); card.classList.add('is-boxed');
+    const v = videoOf(card); if (v && card.classList.contains('is-sound')) play(v);
+    const to = card.getBoundingClientRect();
+    gsap.fromTo(ov, { opacity: 0 }, { opacity: 1, duration: 0.4, ease: 'power2.out' });
+    gsap.fromTo(card, { x: from.left - to.left, y: from.top - to.top, scale: from.width / to.width, transformOrigin: '0 0' },
+      { x: 0, y: 0, scale: 1, duration: 0.7, ease: 'power3.inOut' });
+    lockScroll(true);
+    box = { ov, card, hold };
+  };
+  const closeBox = (instant) => {
+    if (!box) return;
+    const { ov, card, hold } = box; box = null;
+    const done = () => { gsap.set(card, { clearProps: 'transform,transformOrigin' }); card.classList.remove('is-boxed'); hold.replaceWith(card); ov.remove(); lockScroll(false);
+      const v = videoOf(card); if (v && card.classList.contains('is-sound')) play(v); };
+    if (instant || !hold.isConnected) { done(); return; }
+    const a = card.getBoundingClientRect(), b = hold.getBoundingClientRect();
+    gsap.to(ov, { opacity: 0, duration: 0.5, delay: 0.2, ease: 'power2.in' });
+    gsap.to(card, { x: b.left - a.left, y: b.top - a.top, scale: b.width / a.width, transformOrigin: '0 0', duration: 0.6, ease: 'power3.inOut', onComplete: done });
+  };
+  document.addEventListener('click', (e) => {
+    const f = e.target.closest && e.target.closest('[data-social-full]');
+    if (f) { e.preventDefault(); const card = f.closest(CARD); box ? closeBox() : card && openBox(card); return; }
+    if (box && e.target === box.ov) closeBox(); // click outside the card
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeBox(); });
+
   document.addEventListener('click', (e) => {
     const b = e.target.closest && e.target.closest('[data-social-play]');
     if (!b) return;
@@ -777,6 +823,7 @@
   };
   App.inits.push(init);
   App.destroys.push(() => {
+    closeBox(true);
     document.querySelectorAll(CARD).forEach((c) => { if (c._wait) { c._wait.disconnect(); c._wait = null; } mute(c); });
     if (io) { io.disconnect(); io = null; }
   });
@@ -843,9 +890,10 @@
         sp.go(b.hasAttribute('data-social-next') ? '>' : '<');
       };
       root.addEventListener('click', go);
-      // Press: the arrows split. The pressed one moves out and rounds off fully, the other gets its own
-      // rounded corners on all sides; both snap back on release. 'left' + radii: the glass script owns x/y/scale.
-      const R = '0.75rem', PILL = '1.25rem';
+      // Press: the arrows split into two separate buttons. Both get the same rounded corners all round, the pressed
+      // one slides out a little; both snap back on release. No shrink on press (the glass script's 95% is undone here).
+      // 'left' + radii, because the glass script owns x/y (magnetic) and scale (press).
+      const R = '0.75rem';
       const arrows = [...root.querySelectorAll('[data-social-prev], [data-social-next]')];
       const CORNERS = ['borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomRightRadius', 'borderBottomLeftRadius'];
       const split = (btn, on) => {
@@ -853,7 +901,7 @@
         arrows.forEach((a) => {
           const next = a.hasAttribute('data-social-next'), me = a === btn;
           const v = { duration: on ? 0.25 : 0.7, ease: on ? 'power3.out' : 'elastic.out(1, 0.55)', overwrite: 'auto' };
-          if (on) { CORNERS.forEach((k) => { v[k] = me ? PILL : R; }); v.left = me ? (next ? 6 : -6) : 0; }
+          if (on) { CORNERS.forEach((k) => { v[k] = R; }); v.left = me ? (next ? 6 : -6) : 0; }
           else {
             const rest = next ? ['0rem', R, R, '0rem'] : [R, '0rem', '0rem', R];
             CORNERS.forEach((k, i) => { v[k] = rest[i]; }); v.left = 0;
@@ -861,6 +909,7 @@
           }
           gsap.to(a, v);
         });
+        if (on) requestAnimationFrame(() => { gsap.killTweensOf(btn, 'scale'); gsap.to(btn, { scale: 1, duration: 0.15, overwrite: false }); });
       };
       let held = null;
       const down = (e) => { const b = e.target.closest && e.target.closest('[data-social-prev], [data-social-next]'); if (!b || !root.contains(b)) return; held = b; split(b, true); };
@@ -869,14 +918,38 @@
       ['pointerup', 'pointercancel'].forEach((t) => document.addEventListener(t, up));
       // Moving the slider (drag, swipe, arrows) makes the arrow of that direction glow for a moment
       const Move = sp.Components.Move;
-      const flash = (btn) => { if (!btn) return; btn.classList.remove('is-flash'); void btn.offsetWidth; btn.classList.add('is-flash'); clearTimeout(btn._fl); btn._fl = setTimeout(() => btn.classList.remove('is-flash'), 450); };
+      const flash = (btn) => { if (!btn) return; btn.classList.remove('is-flash'); void btn.offsetWidth; btn.classList.add('is-flash'); clearTimeout(btn._fl); btn._fl = setTimeout(() => btn.classList.remove('is-flash'), 500); };
       sp.on('move', (index, prev, dest) => {
         const to = Move.toPosition(dest, true), from = Move.getPosition();
         flash(root.querySelector(to < from ? '[data-social-next]' : '[data-social-prev]'));
       });
+      // Trackpad: a horizontal swipe drags the slider with your fingers (you can go back mid-swipe); when you let go
+      // it settles on the nearest card. While swiping sideways the page doesn't scroll up/down (Lenis and the
+      // native scroll get nothing). Replaces SliderMotion's one-swipe-one-card on this slider.
+      const Ctrl = sp.Components.Controller;
+      let lock = 0, lockT = 0, snapT = 0, snapTw = null, flashed = false;
+      const snap = () => {
+        flashed = false;
+        const pos = Move.getPosition(), i = Move.toIndex(pos), o = { p: pos };
+        snapTw = gsap.to(o, { p: Move.toPosition(i), duration: 0.6, ease: 'power3.out', onUpdate: () => Move.translate(o.p), onComplete: () => { Ctrl.setIndex(i); snapTw = null; } });
+      };
+      const wheel = (e) => {
+        const ax = Math.abs(e.deltaX), ay = Math.abs(e.deltaY);
+        if (!lock && ax <= ay) return; // vertical: normal page scroll
+        lock = 1; clearTimeout(lockT); lockT = setTimeout(() => { lock = 0; }, 220);
+        e.preventDefault(); e.stopPropagation();
+        if (snapTw) { snapTw.kill(); snapTw = null; }
+        if (sp.state.is(Splide.STATES.MOVING)) Move.cancel();
+        if (!flashed && ax > 2) { flashed = true; flash(root.querySelector(e.deltaX > 0 ? '[data-social-next]' : '[data-social-prev]')); }
+        Move.translate(Move.getPosition() - e.deltaX);
+        clearTimeout(snapT); snapT = setTimeout(snap, 140);
+      };
+      root.addEventListener('wheel', wheel, { capture: true, passive: false });
       root._ssStop = () => {
         root.removeEventListener('click', go); root.removeEventListener('pointerdown', down);
+        root.removeEventListener('wheel', wheel, { capture: true });
         ['pointerup', 'pointercancel'].forEach((t) => document.removeEventListener(t, up));
+        if (snapTw) snapTw.kill();
       };
       // Auto scroll comes from the component variant (Off / Slow / Fast); SliderMotion reads data-autoscroll
       // Fast = 4 (80px a second, same as the homepage slider), Slow = 2 (40px a second)
