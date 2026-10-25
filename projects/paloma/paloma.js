@@ -17,7 +17,7 @@
  *    bottom of the screen. Grid, case media and the video player thumbnail: images get a vertical parallax.
  *  - ArrowLinks 1.4.1 (static check only on real links; the slider heading wrapper is a div): hover motion moved to the native Webflow interaction "Arrow link hover" (tweak on the canvas).
  *    Script keeps: press scale on all arrow links, the Apply text arrow hover, links left on # visual only. Services: the hover card image is zoomed and follows the cursor.
- *  - CaseTags 1.7.0: moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
+ *  - CaseTags 1.8.0: tags 28px tall (design), default cursor. Moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
  *    without the stagger.
  *  - SocialSlider 1.5.0: Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
@@ -26,7 +26,7 @@
  *  - MediaPoster 1.0.0: hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
  *    same slider:ready event, so SliderMotion (trackpad, auto scroll) and SliderFX (reveal, parallax) run on it too.
  *    Own module because CaseSlider removes slides that link to the current page (the play button is href="#").
- *  - SocialCard 1.2.0 (other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
+ *  - SocialCard 1.3.0 (pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
@@ -690,6 +690,13 @@
 // Slug: the attribute value, else the closest link, else the current page. data-tags-format="text" = comma list.
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
+  // Every tag on the site (project cards, case header, jobs): 28px tall as in the design, no link cursor
+  // (a tag inside a project card still opens the project, it just doesn't announce itself as its own button)
+  if (!document.getElementById('paloma-tags-css')) {
+    const st = document.createElement('style'); st.id = 'paloma-tags-css';
+    st.textContent = '.case-header_tag-list .nav_button{display:inline-flex;align-items:center;height:1.75rem;padding-top:0;padding-bottom:0;cursor:default}';
+    document.head.appendChild(st);
+  }
   const docs = App._docs = App._docs || new Map();
   App.projectDoc = App.projectDoc || ((s) => {
     if (!docs.has(s)) docs.set(s, fetch('/project-data/' + encodeURIComponent(s)).then((r) => (r.ok ? r.text() : ''))
@@ -730,7 +737,7 @@
 
 /* ---------- SocialCard ---------- */
 // Social Card component: CaseMedia plays the muted loop ([data-case-media] on .social-card_media).
-// Play ([data-social-play]) restarts the video with sound and mutes every other card; press again to pause.
+// Play ([data-social-play]) restarts the video with sound and mutes every other card; press again to mute (keeps looping).
 // Leaving the screen or a page transition mutes it again, so a card never plays sound out of view.
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
@@ -782,7 +789,8 @@
     v.muted = false; v.loop = true;
     play(v); setUi(card, true); hold(card);
   };
-  const stop = (card) => { const v = videoOf(card); if (v) { v.pause(); v.muted = true; } setUi(card, false); release(card); };
+  // Pause = sound off: the video keeps looping muted, like the other cards
+  const stop = (card) => { const v = videoOf(card); if (v) { v.muted = true; if (v.paused) play(v); } setUi(card, false); release(card); };
 
   document.addEventListener('click', (e) => {
     const b = e.target.closest && e.target.closest('[data-social-play]');
