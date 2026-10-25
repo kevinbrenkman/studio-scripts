@@ -19,12 +19,13 @@
  *    Script keeps: press scale on all arrow links, the Apply text arrow hover, links left on # visual only. Services: the hover card image is zoomed and follows the cursor.
  *  - CaseTags 1.7.0: moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
  *    without the stagger.
- *  - SocialSlider 1.4.0: Case Study Slider component (Social Cards and/or Media Cards). Trackpad drags it (settles on
- *    the nearest card, no page scroll while swiping). Arrows split apart when pressed and glow in the direction you slide. Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
+ *  - SocialSlider 1.5.0: Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
+ *    and glow in the direction you slide.
+ *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
  *  - MediaPoster 1.0.0: hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
  *    same slider:ready event, so SliderMotion (trackpad, auto scroll) and SliderFX (reveal, parallax) run on it too.
  *    Own module because CaseSlider removes slides that link to the current page (the play button is href="#").
- *  - SocialCard 1.1.0 (Enlarge = lightbox): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
+ *  - SocialCard 1.2.0 (other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
@@ -736,12 +737,35 @@
   let io = null;
   const videoOf = (card) => card.querySelector('video');
   const setUi = (card, on) => {
+    if (!on && card.classList.contains('is-sound')) { // glow fades out (CSS is-glow-out, 0.5s)
+      card.classList.add('is-glow-out'); clearTimeout(card._go); card._go = setTimeout(() => card.classList.remove('is-glow-out'), 500);
+    }
+    if (on) card.classList.remove('is-glow-out');
     card.classList.toggle('is-sound', on);
     const b = card.querySelector('[data-social-play]');
     if (b) { b.setAttribute('aria-pressed', on ? 'true' : 'false'); b.setAttribute('aria-label', on ? 'Pause' : 'Play with sound'); }
   };
-  const mute = (card) => { const v = videoOf(card); if (v) v.muted = true; setUi(card, false); };
   const play = (v) => { const p = v.play(); if (p && p.catch) p.catch(() => {}); };
+  // In a slider: while one card plays with sound, the other videos keep going for a moment, then slow down and
+  // stop, like the auto scroll easing out. They start again (speeding up) when the sound stops.
+  const others = (card) => { const sl = card.closest('[data-social-slider]'); return sl ? [...sl.querySelectorAll('video')].filter((v) => !card.contains(v)) : []; };
+  const hold = (card) => {
+    if (!window.gsap) return;
+    others(card).forEach((v) => {
+      if (v._held) return; v._held = true; gsap.killTweensOf(v);
+      gsap.to(v, { playbackRate: 0.1, duration: 1.6, delay: 0.8, ease: 'power2.in', onComplete: () => { v.pause(); v.playbackRate = 1; } });
+    });
+  };
+  const release = (card) => {
+    const sl = card.closest('[data-social-slider]');
+    if (!sl || !window.gsap || sl.querySelector('[data-social-card].is-sound')) return;
+    sl.querySelectorAll('video').forEach((v) => {
+      if (!v._held) return; v._held = false; gsap.killTweensOf(v);
+      if (v.paused) { v.playbackRate = 0.1; play(v); }
+      gsap.to(v, { playbackRate: 1, duration: 1.2, ease: 'power2.out' });
+    });
+  };
+  const mute = (card) => { const v = videoOf(card); if (v) v.muted = true; setUi(card, false); release(card); };
 
   const start = (card) => {
     const v = videoOf(card);
@@ -753,56 +777,11 @@
     }
     document.querySelectorAll(CARD + '.is-sound').forEach((c) => c !== card && mute(c));
     if (!card._heard) { card._heard = true; v.currentTime = 0; } // first play starts at the beginning
+    if (v._held) { v._held = false; gsap.killTweensOf(v); v.playbackRate = 1; }
     v.muted = false; v.loop = true;
-    play(v); setUi(card, true);
+    play(v); setUi(card, true); hold(card);
   };
-  const stop = (card) => { const v = videoOf(card); if (v) { v.pause(); v.muted = true; } setUi(card, false); };
-
-  /* Lightbox: the Enlarge button (only shown while playing) moves the card into a centred overlay, bigger,
-     same styling; it flies there from its spot (FLIP). Clicking outside, the button again or Esc puts it back. */
-  if (!document.getElementById('paloma-lightbox-css')) {
-    const st = document.createElement('style'); st.id = 'paloma-lightbox-css';
-    st.textContent = '.social-lightbox{position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;' +
-      'background-color:color-mix(in srgb,var(--_theme---background) 82%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}' +
-      // card height = media (width x 647/364) + bar (50px + 20px gap): fits the screen with 4rem air, or the width on phones
-      '.social-lightbox .social-card{width:min(calc((100svh - 4rem - 4.375rem) * 364 / 647),calc(100vw - 2.5rem))!important;max-width:none!important;margin:0!important}';
-    document.head.appendChild(st);
-  }
-  let box = null;
-  const lockScroll = (on) => { if (window.lenis) on ? lenis.stop() : lenis.start(); };
-  const openBox = (card) => {
-    if (box || !window.gsap) return;
-    const from = card.getBoundingClientRect();
-    const hold = document.createElement('div'); // keeps the card's place (and the slider's width) while it's away
-    hold.style.cssText = 'width:' + from.width + 'px;height:' + card.offsetHeight + 'px;flex:none';
-    card.parentNode.insertBefore(hold, card);
-    const ov = document.createElement('div'); ov.className = 'social-lightbox';
-    (card.closest('.page-theme') || document.body).appendChild(ov); // inside the page theme: same colours
-    ov.appendChild(card); card.classList.add('is-boxed');
-    const v = videoOf(card); if (v && card.classList.contains('is-sound')) play(v);
-    const to = card.getBoundingClientRect();
-    gsap.fromTo(ov, { opacity: 0 }, { opacity: 1, duration: 0.4, ease: 'power2.out' });
-    gsap.fromTo(card, { x: from.left - to.left, y: from.top - to.top, scale: from.width / to.width, transformOrigin: '0 0' },
-      { x: 0, y: 0, scale: 1, duration: 0.7, ease: 'power3.inOut' });
-    lockScroll(true);
-    box = { ov, card, hold };
-  };
-  const closeBox = (instant) => {
-    if (!box) return;
-    const { ov, card, hold } = box; box = null;
-    const done = () => { gsap.set(card, { clearProps: 'transform,transformOrigin' }); card.classList.remove('is-boxed'); hold.replaceWith(card); ov.remove(); lockScroll(false);
-      const v = videoOf(card); if (v && card.classList.contains('is-sound')) play(v); };
-    if (instant || !hold.isConnected) { done(); return; }
-    const a = card.getBoundingClientRect(), b = hold.getBoundingClientRect();
-    gsap.to(ov, { opacity: 0, duration: 0.5, delay: 0.2, ease: 'power2.in' });
-    gsap.to(card, { x: b.left - a.left, y: b.top - a.top, scale: b.width / a.width, transformOrigin: '0 0', duration: 0.6, ease: 'power3.inOut', onComplete: done });
-  };
-  document.addEventListener('click', (e) => {
-    const f = e.target.closest && e.target.closest('[data-social-full]');
-    if (f) { e.preventDefault(); const card = f.closest(CARD); box ? closeBox() : card && openBox(card); return; }
-    if (box && e.target === box.ov) closeBox(); // click outside the card
-  });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeBox(); });
+  const stop = (card) => { const v = videoOf(card); if (v) { v.pause(); v.muted = true; } setUi(card, false); release(card); };
 
   document.addEventListener('click', (e) => {
     const b = e.target.closest && e.target.closest('[data-social-play]');
@@ -816,14 +795,13 @@
     const cards = (scope || document).querySelectorAll(CARD);
     if (!cards.length) return;
     if (!io) io = new IntersectionObserver((es) => es.forEach((en) => {
-      if (en.isIntersecting) { const v = videoOf(en.target); if (v && v.paused && !en.target.classList.contains('is-sound')) play(v); }
+      if (en.isIntersecting) { const v = videoOf(en.target); if (v && v.paused && !v._held && !en.target.classList.contains('is-sound')) play(v); }
       else if (en.target.classList.contains('is-sound')) mute(en.target);
     }));
     cards.forEach((c) => io.observe(c));
   };
   App.inits.push(init);
   App.destroys.push(() => {
-    closeBox(true);
     document.querySelectorAll(CARD).forEach((c) => { if (c._wait) { c._wait.disconnect(); c._wait = null; } mute(c); });
     if (io) { io.disconnect(); io = null; }
   });
@@ -923,33 +901,9 @@
         const to = Move.toPosition(dest, true), from = Move.getPosition();
         flash(root.querySelector(to < from ? '[data-social-next]' : '[data-social-prev]'));
       });
-      // Trackpad: a horizontal swipe drags the slider with your fingers (you can go back mid-swipe); when you let go
-      // it settles on the nearest card. While swiping sideways the page doesn't scroll up/down (Lenis and the
-      // native scroll get nothing). Replaces SliderMotion's one-swipe-one-card on this slider.
-      const Ctrl = sp.Components.Controller;
-      let lock = 0, lockT = 0, snapT = 0, snapTw = null, flashed = false;
-      const snap = () => {
-        flashed = false;
-        const pos = Move.getPosition(), i = Move.toIndex(pos), o = { p: pos };
-        snapTw = gsap.to(o, { p: Move.toPosition(i), duration: 0.6, ease: 'power3.out', onUpdate: () => Move.translate(o.p), onComplete: () => { Ctrl.setIndex(i); snapTw = null; } });
-      };
-      const wheel = (e) => {
-        const ax = Math.abs(e.deltaX), ay = Math.abs(e.deltaY);
-        if (!lock && ax <= ay) return; // vertical: normal page scroll
-        lock = 1; clearTimeout(lockT); lockT = setTimeout(() => { lock = 0; }, 220);
-        e.preventDefault(); e.stopPropagation();
-        if (snapTw) { snapTw.kill(); snapTw = null; }
-        if (sp.state.is(Splide.STATES.MOVING)) Move.cancel();
-        if (!flashed && ax > 2) { flashed = true; flash(root.querySelector(e.deltaX > 0 ? '[data-social-next]' : '[data-social-prev]')); }
-        Move.translate(Move.getPosition() - e.deltaX);
-        clearTimeout(snapT); snapT = setTimeout(snap, 140);
-      };
-      root.addEventListener('wheel', wheel, { capture: true, passive: false });
       root._ssStop = () => {
         root.removeEventListener('click', go); root.removeEventListener('pointerdown', down);
-        root.removeEventListener('wheel', wheel, { capture: true });
         ['pointerup', 'pointercancel'].forEach((t) => document.removeEventListener(t, up));
-        if (snapTw) snapTw.kill();
       };
       // Auto scroll comes from the component variant (Off / Slow / Fast); SliderMotion reads data-autoscroll
       // Fast = 4 (80px a second, same as the homepage slider), Slow = 2 (40px a second)
@@ -969,4 +923,45 @@
     live.clear();
   });
   if (document.readyState !== 'loading') init(document);
+})();
+
+/* ---------- SliderDrag ---------- */
+// Every slider (homepage, More Cases, Case Study Slider): a horizontal trackpad swipe drags the slider with your
+// fingers, you can go back mid-swipe, and when you let go it settles on the nearest card. While swiping sideways
+// the page doesn't scroll up and down (Lenis and the native scroll get nothing). Replaces SliderMotion's
+// one-swipe-one-card. If the slider has arrows, the one in the swipe direction glows.
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const live = new Set();
+  document.addEventListener('slider:ready', (ev) => {
+    const root = ev.target, sp = root._sp;
+    if (!sp || root._drag || !window.gsap || !window.Splide) return;
+    const Move = sp.Components.Move, Ctrl = sp.Components.Controller;
+    let lock = 0, lockT = 0, snapT = 0, snapTw = null, flashed = false;
+    const flash = (sel) => {
+      const btn = root.querySelector(sel); if (!btn) return;
+      btn.classList.remove('is-flash'); void btn.offsetWidth; btn.classList.add('is-flash');
+      clearTimeout(btn._fl); btn._fl = setTimeout(() => btn.classList.remove('is-flash'), 500);
+    };
+    const snap = () => {
+      flashed = false;
+      const pos = Move.getPosition(), i = Move.toIndex(pos), o = { p: pos };
+      snapTw = gsap.to(o, { p: Move.toPosition(i), duration: 0.6, ease: 'power3.out', onUpdate: () => Move.translate(o.p), onComplete: () => { Ctrl.setIndex(i); snapTw = null; } });
+    };
+    const wheel = (e) => {
+      const ax = Math.abs(e.deltaX), ay = Math.abs(e.deltaY);
+      if (!lock && ax <= ay) return; // vertical: normal page scroll
+      lock = 1; clearTimeout(lockT); lockT = setTimeout(() => { lock = 0; }, 220);
+      e.preventDefault(); e.stopPropagation();
+      if (snapTw) { snapTw.kill(); snapTw = null; }
+      if (sp.state.is(Splide.STATES.MOVING)) Move.cancel();
+      if (!flashed && ax > 2) { flashed = true; flash(e.deltaX > 0 ? '[data-social-next]' : '[data-social-prev]'); }
+      Move.translate(Move.getPosition() - e.deltaX);
+      clearTimeout(snapT); snapT = setTimeout(snap, 140);
+    };
+    root.addEventListener('wheel', wheel, { capture: true, passive: false });
+    root._drag = () => { root.removeEventListener('wheel', wheel, { capture: true }); if (snapTw) snapTw.kill(); delete root._drag; };
+    live.add(root);
+  });
+  App.destroys.push(() => { live.forEach((r) => r._drag && r._drag()); live.clear(); });
 })();
