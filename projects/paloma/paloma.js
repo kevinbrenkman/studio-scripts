@@ -13,7 +13,7 @@
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
  *  - SliderFX 1.7.0 (Case Study Slider: parallax + swipe fix, no stagger; never empty when scrolling back up; parallax matches the grid: zoom 1.2, shift 8) (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
  *    Depth: images are scaled up in their frame and move sideways with the card's position (horizontal parallax). Hooks into CaseSlider's slider:ready event.
- *  - GridFX 1.2.0: Selected projects grid: cards reveal on scroll and spread apart (max 40px) towards the top and
+ *  - GridFX 1.3.0: projects grid (home + Selected projects): cards reveal on scroll and spread apart (max 20px) towards the top and
  *    bottom of the screen. Grid, case media and the video player thumbnail: images get a vertical parallax.
  *  - ArrowLinks 1.4.1 (static check only on real links; the slider heading wrapper is a div): hover motion moved to the native Webflow interaction "Arrow link hover" (tweak on the canvas).
  *    Script keeps: press scale on all arrow links, the Apply text arrow hover, links left on # visual only. Services: the hover card image is zoomed and follows the cursor.
@@ -486,7 +486,7 @@
   window.App = window.App || { inits: [], destroys: [] };
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const FX = {
-    spread: 40,     // px a card (or case block) moves away at the top/bottom edge of the screen, 0 in the centre
+    spread: 20,     // px a card (or case block) moves away at the top/bottom edge of the screen, 0 in the centre
     zoom: 1.2,      // image scale inside the frame
     shift: 9,       // yPercent the image travels at the edges (stay under (zoom - 1) / 2 * 100)
     rise: 50,       // px, reveal
