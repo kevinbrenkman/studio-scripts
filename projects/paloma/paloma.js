@@ -147,7 +147,7 @@
         // emblem square, centred, in card uv space
         const sq = Math.max(0, 1 - Math.abs(Math.log(w / h)) / Math.log(1.6)); // 1 = square, 0 = 1.6:1 or longer
         const tall = Math.max(0, Math.min(1, (h / w - 1) / 0.25)); // 0 = square or wide, 1 = 4:5 or taller
-        const px = Math.min(EMBLEM.size * innerWidth * d * (1 + EMBLEM.square * sq - EMBLEM.portrait * tall), EMBLEM.max * Math.min(w, h));
+        const px = Math.min(EMBLEM.size * innerWidth * d * (1 + EMBLEM.square * sq * (1 - tall) - EMBLEM.portrait * tall), EMBLEM.max * Math.min(w, h));
         const s = px / EMBLEM.fill, rw = s / w, rh = s / h;
         gl.uniform4f(loc.r, (1 - rw) / 2, (1 - rh) / 2, rw, rh);
         gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
