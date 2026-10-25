@@ -909,7 +909,7 @@
           }
           gsap.to(a, v);
         });
-        if (on) requestAnimationFrame(() => { gsap.killTweensOf(btn, 'scale'); gsap.to(btn, { scale: 1, duration: 0.15, overwrite: false }); });
+        if (on) setTimeout(() => { gsap.killTweensOf(btn, 'scale'); gsap.set(btn, { scale: 1 }); }, 0);
       };
       let held = null;
       const down = (e) => { const b = e.target.closest && e.target.closest('[data-social-prev], [data-social-next]'); if (!b || !root.contains(b)) return; held = b; split(b, true); };
