@@ -983,7 +983,7 @@
   const live = new Set();
   const setup = (a) => {
     if (a._mm || !window.gsap || !ok()) return; a._mm = true;
-    gsap.set(a, { transformPerspective: 900, transformOrigin: '50% 50%', display: 'inline-block' });
+    gsap.set(a, { transformPerspective: 900, transformOrigin: '50% 50%' });
     const q = (p) => gsap.quickTo(a, p, { duration: 0.8, ease: 'power3' });
     const to = { x: q('x'), y: q('y'), rx: q('rotationX'), ry: q('rotationY') };
     let on = false;
