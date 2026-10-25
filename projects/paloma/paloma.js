@@ -21,6 +21,7 @@
  *    without the stagger.
  *  - SocialSlider 1.5.0: Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
+ *  - MailMagnet 1.0.0: Mail CTA email leans towards the cursor in 3D (like the Services hover), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
  *  - MediaPoster 1.0.0: hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
  *    same slider:ready event, so SliderMotion (trackpad, auto scroll) and SliderFX (reveal, parallax) run on it too.
@@ -964,4 +965,49 @@
     live.add(root);
   });
   App.destroys.push(() => { live.forEach((r) => r._drag && r._drag()); live.clear(); });
+})();
+
+/* ---------- MailMagnet ---------- */
+// Mail CTA: the big email address leans towards the cursor like the Services hover on the homepage. It moves a
+// little with the cursor and tilts in 3D as if it hangs on its centre point; when the cursor leaves it springs back.
+// Active within MARGIN px around the link. Desktop only, off with reduced motion.
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const FX = {
+    follow: 0.12,  // share of the cursor distance the link travels (x), y is 1.5x that
+    tiltY: 14,     // max degrees left/right
+    tiltX: 12,     // max degrees up/down
+    margin: 60,    // px around the link where it already reacts
+  };
+  const ok = () => matchMedia('(hover: hover) and (pointer: fine)').matches && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const live = new Set();
+  const setup = (a) => {
+    if (a._mm || !window.gsap || !ok()) return; a._mm = true;
+    gsap.set(a, { transformPerspective: 900, transformOrigin: '50% 50%', display: 'inline-block' });
+    const q = (p) => gsap.quickTo(a, p, { duration: 0.8, ease: 'power3' });
+    const to = { x: q('x'), y: q('y'), rx: q('rotationX'), ry: q('rotationY') };
+    let on = false;
+    const move = (e) => {
+      const r = a.getBoundingClientRect(), m = FX.margin;
+      const inside = e.clientX > r.left - m && e.clientX < r.right + m && e.clientY > r.top - m && e.clientY < r.bottom + m;
+      if (!inside) { if (on) leave(); return; }
+      on = true;
+      // measure from the resting centre (without the current offset), so it never runs away from the cursor
+      const cx = r.left + r.width / 2 - gsap.getProperty(a, 'x'), cy = r.top + r.height / 2 - gsap.getProperty(a, 'y');
+      const dx = e.clientX - cx, dy = e.clientY - cy, nx = dx / (r.width / 2 + m), ny = dy / (r.height / 2 + m);
+      to.x(dx * FX.follow); to.y(dy * FX.follow * 1.5); to.ry(nx * FX.tiltY); to.rx(-ny * FX.tiltX);
+    };
+    const leave = () => {
+      on = false;
+      gsap.to(a, { x: 0, y: 0, rotationX: 0, rotationY: 0, duration: 1.2, ease: 'elastic.out(1, 0.45)', overwrite: true });
+    };
+    document.addEventListener('pointermove', move, { passive: true });
+    document.documentElement.addEventListener('pointerleave', () => on && leave());
+    a._mm = () => { document.removeEventListener('pointermove', move); gsap.set(a, { clearProps: 'transform' }); delete a._mm; };
+    live.add(a);
+  };
+  const init = (scope = document) => (scope || document).querySelectorAll('.mail-cta_link').forEach(setup);
+  App.inits.push(init);
+  App.destroys.push(() => { live.forEach((a) => typeof a._mm === 'function' && a._mm()); live.clear(); });
+  if (document.readyState !== 'loading') init(document);
 })();
