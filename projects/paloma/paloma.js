@@ -11,7 +11,7 @@
  *  - Jobs 1.2.0 (open/close uses the ReadMore motion): Careers page (CMS > Jobs). Tags load from the Jobs template page (CMS > Job Types), like CaseTags;
  *    rows with a Description open and close, empty Apply link falls back to hello@wearepaloma.be.
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
- *  - SliderFX 1.5.0 (parallax matches the grid: zoom 1.2, shift 8) (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
+ *  - SliderFX 1.6.0 (also runs on the Social Slider; parallax matches the grid: zoom 1.2, shift 8) (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
  *    Depth: images are scaled up in their frame and move sideways with the card's position (horizontal parallax). Hooks into CaseSlider's slider:ready event.
  *  - GridFX 1.2.0: Selected projects grid: cards reveal on scroll and spread apart (max 40px) towards the top and
  *    bottom of the screen. Grid, case media and the video player thumbnail: images get a vertical parallax.
@@ -19,6 +19,9 @@
  *    Script keeps: press scale on all arrow links, the Apply text arrow hover, links left on # visual only. Services: the hover card image is zoomed and follows the cursor.
  *  - CaseTags 1.7.0: moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
  *    without the stagger.
+ *  - SocialSlider 1.0.0: Social Slider component. Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
+ *    same slider:ready event, so SliderMotion (trackpad, auto scroll) and SliderFX (reveal, parallax) run on it too.
+ *    Own module because CaseSlider removes slides that link to the current page (the play button is href="#").
  *  - SocialCard 1.0.0: Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - CardPress 1.2.0: project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
@@ -334,7 +337,7 @@
   if (!RM && !document.getElementById('paloma-sliderfx-css')) {
     const st = document.createElement('style');
     st.id = 'paloma-sliderfx-css';
-    st.textContent = '[data-case-slider]:not(.fx-ready) .case-slider_slide{opacity:0}';
+    st.textContent = '[data-case-slider]:not(.fx-ready) .case-slider_slide,[data-social-slider]:not(.fx-ready) .social-slider_list>*{opacity:0}';
     document.head.appendChild(st);
   }
 
@@ -399,7 +402,7 @@
           if (r.right < -w * 0.25 || r.left > w * 1.25) return;
           const p = Math.max(-1.25, Math.min(1.25, ((r.left + r.width / 2) / w) * 2 - 1)); // -1 left edge, 1 right edge
           const x = -p * FX.shift; // image lags behind the card: moves against the travel direction
-          c.querySelectorAll('.project-card_media img').forEach((img) => setter(img)(x));
+          c.querySelectorAll('.project-card_media img, .social-card_media > img, .social-card_media > video').forEach((img) => setter(img)(x));
         });
       };
       g.ticker.add(tick);
@@ -431,7 +434,7 @@
 
   // If the slider never mounts (no slides), never leave anything hidden
   App.inits.push((scope = document) => {
-    setTimeout(() => (scope || document).querySelectorAll('[data-case-slider]').forEach((r) => r.classList.add('fx-ready')), 4000);
+    setTimeout(() => (scope || document).querySelectorAll('[data-case-slider], [data-social-slider]').forEach((r) => r.classList.add('fx-ready')), 4000);
   });
   App.destroys.push(() => { live.forEach((r) => r._fx && r._fx()); live.clear(); });
 })();
@@ -761,6 +764,60 @@
   App.destroys.push(() => {
     document.querySelectorAll(CARD).forEach((c) => { if (c._wait) { c._wait.disconnect(); c._wait = null; } mute(c); });
     if (io) { io.disconnect(); io = null; }
+  });
+  if (document.readyState !== 'loading') init(document);
+})();
+
+/* ---------- SocialSlider ---------- */
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const live = new Set();
+  let loading = null;
+  const loadSplide = () => loading || (loading = window.Splide ? Promise.resolve() : new Promise((res) => {
+    const sc = document.createElement('script');
+    sc.src = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
+    sc.onload = sc.onerror = res; document.head.appendChild(sc);
+  }));
+
+  const setup = (root) => {
+    if (root._ss) return; root._ss = 1;
+    const track = root.querySelector('.social-slider_track');
+    const list = root.querySelector('.social-slider_list');
+    const slides = list ? [...list.children].filter((c) => !c.matches('.w-embed')) : [];
+    if (!track || !list || !slides.length) { root.style.display = 'none'; return; }
+    if (slides.length < 2) { root.classList.add('is-single', 'fx-ready'); return; }
+    loadSplide().then(() => {
+      if (!root.isConnected || !window.Splide) return;
+      root.classList.add('splide'); track.classList.add('splide__track'); list.classList.add('splide__list');
+      slides.forEach((s) => s.classList.add('splide__slide'));
+      const sp = new Splide(root, {
+        type: 'loop', autoWidth: true, gap: '1.5625rem', focus: 0, arrows: false, pagination: false, speed: 1000,
+        padding: { left: '1.25rem', right: 0 },
+      });
+      sp.on('mounted', () => {
+        // Loop clones copy the DOM: drop videos CaseMedia already attached, the inits below give them their own
+        root.querySelectorAll('.splide__slide--clone video').forEach((v) => v.remove());
+        App.inits.forEach((fn) => { if (fn !== init) try { fn(root); } catch (_) {} });
+        window.lenis && lenis.resize();
+      });
+      sp.mount();
+      root._sp = sp; live.add(root);
+      const go = (e) => {
+        const b = e.target.closest && e.target.closest('[data-social-prev], [data-social-next]');
+        if (!b || !root.contains(b)) return;
+        e.preventDefault();
+        sp.go(b.hasAttribute('data-social-next') ? '>' : '<');
+      };
+      root.addEventListener('click', go);
+      root._ssStop = () => root.removeEventListener('click', go);
+      root.dispatchEvent(new CustomEvent('slider:ready', { bubbles: true }));
+    });
+  };
+  const init = (scope = document) => (scope || document).querySelectorAll('[data-social-slider]').forEach(setup);
+  App.inits.push(init);
+  App.destroys.push(() => {
+    live.forEach((r) => { try { r._ssStop && r._ssStop(); r._sp.destroy(true); } catch (_) {} });
+    live.clear();
   });
   if (document.readyState !== 'loading') init(document);
 })();
