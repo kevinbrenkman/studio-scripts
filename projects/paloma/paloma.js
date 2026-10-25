@@ -17,8 +17,7 @@
  *    bottom of the screen. Grid, case media and the video player thumbnail: images get a vertical parallax.
  *  - ArrowLinks 1.4.1 (static check only on real links; the slider heading wrapper is a div): hover motion moved to the native Webflow interaction "Arrow link hover" (tweak on the canvas).
  *    Script keeps: press scale on all arrow links, the Apply text arrow hover, links left on # visual only. Services: the hover card image is zoomed and follows the cursor.
- *  - TagRest 1.0.0: tags are static labels now (no press, rims or glow following the cursor), rims rest top-left.
- *  - CaseTags 1.8.0 (tags without data-glow-button): moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
+ *  - CaseTags 1.7.0: moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
  *    without the stagger.
  *  - SocialSlider 1.5.0: Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
@@ -212,14 +211,13 @@
       '@media (max-width:767px){[data-jobs] [data-job] .case-header_tag-list{justify-content:flex-start}}' +
       '.jobs_item.is-static .jobs_row{cursor:default}.jobs_item.is-static .jobs_plus{visibility:hidden}' +
       '.jobs_row:focus-visible{outline:1px solid currentColor;outline-offset:4px}' +
-      '.footer_count{font-size:.6em;margin-left:.15em;line-height:0}.footer_count:empty{display:none}' +
-      '.nav_button.is-tag{pointer-events:none}';
+      '.footer_count{font-size:.6em;margin-left:.15em;line-height:0}.footer_count:empty{display:none}';
     document.head.appendChild(st);
   }
 
   // Tags come from the Jobs template page (/job-data/{slug}, [data-case-tags] [data-tag]), same markup as CaseTags
   const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const tagHtml = (t) => '<div class="nav_button is-tag"><div class="nav_button-glow"></div><div class="nav_button-stroke">' +
+  const tagHtml = (t) => '<div class="nav_button" data-glow-button><div class="nav_button-glow" data-glow-layer="1"></div><div class="nav_button-stroke">' +
     '<div class="nav_button-stroke-gradient is-one" data-rim="0"></div><div class="nav_button-stroke-gradient is-two" data-rim="180"></div></div>' +
     '<div class="nav_button-text"><div class="nav_button-label">' + esc(t) + '</div></div></div>';
   const docs = new Map();
@@ -240,7 +238,7 @@
       const list = [...d.querySelectorAll('[data-case-tags] [data-tag]')].map((t) => t.textContent.trim()).filter(Boolean);
       if (!list.length) return;
       el.innerHTML = '<div class="case-header_tag-list">' + list.map(tagHtml).join('') + '</div>';
-      App.restTags(el);
+      App.inits.forEach((fn) => { if (fn !== init) try { fn(el); } catch (_) {} }); // glass button script picks the tags up
     });
   };
 
@@ -687,34 +685,6 @@
   if (document.readyState !== 'loading') svcInit(document);
 })();
 
-/* ---------- TagRest ---------- */
-// Static glass look for tags: rims at the glass buttons' resting angle (-135deg, top-left), glow centred.
-// Same edge maths as the footer glass button script, without any hover, press or magnetic behaviour.
-(() => {
-  window.App = window.App || { inits: [], destroys: [] };
-  const REST = -135;
-  const edge = (w, h, deg) => {
-    const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
-    const k = Math.min(Math.abs(c) > 1e-6 ? (w / 2) / Math.abs(c) : Infinity, Math.abs(s) > 1e-6 ? (h / 2) / Math.abs(s) : Infinity);
-    return { x: w / 2 + c * k, y: h / 2 + s * k };
-  };
-  const place = (btn) => {
-    const w = btn.offsetWidth, h = btn.offsetHeight;
-    if (!w || !h || !window.gsap) return false;
-    btn.querySelectorAll('[data-rim]').forEach((r) => {
-      const p = edge(w, h, REST + (parseFloat(r.dataset.rim) || 0));
-      gsap.set(r, { left: 0, top: 0, xPercent: -50, yPercent: -50, x: p.x, y: p.y });
-    });
-    btn.querySelectorAll('.nav_button-glow').forEach((g) => gsap.set(g, { left: '50%', top: '50%', xPercent: -50, yPercent: -50 }));
-    return true;
-  };
-  const ro = 'ResizeObserver' in window ? new ResizeObserver((es) => es.forEach((e) => place(e.target))) : null;
-  App.restTags = (scope) => (scope || document).querySelectorAll('.nav_button.is-tag').forEach((b) => {
-    if (!place(b)) requestAnimationFrame(() => place(b));
-    if (ro && !b._ro) { b._ro = true; ro.observe(b); }
-  });
-})();
-
 /* ---------- CaseTags (was registered script CaseTags 1.6.0) ---------- */
 // Tags from the Projects template page (/project-data/{slug}, [data-case-tags] [data-tag]) into [data-tags-from].
 // Slug: the attribute value, else the closest link, else the current page. data-tags-format="text" = comma list.
@@ -727,8 +697,7 @@
     return docs.get(s);
   });
   const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  // Tags are labels, not buttons: no data-glow-button (no press, no rims chasing the cursor), rims rest top-left
-  const tag = (t) => '<div class="nav_button is-tag"><div class="nav_button-glow"></div><div class="nav_button-stroke">' +
+  const tag = (t) => '<div class="nav_button" data-glow-button><div class="nav_button-glow" data-glow-layer="1"></div><div class="nav_button-stroke">' +
     '<div class="nav_button-stroke-gradient is-one" data-rim="0"></div><div class="nav_button-stroke-gradient is-two" data-rim="180"></div></div>' +
     '<div class="nav_button-text"><div class="nav_button-label">' + esc(t) + '</div></div></div>';
   const last = (p) => (p || '').replace(/\/$/, '').split('/').pop() || '';
@@ -744,7 +713,7 @@
     if (!list.length || !el.isConnected) return;
     if (el.getAttribute('data-tags-format') === 'text') { el.textContent = list.join(', '); return; }
     el.innerHTML = '<div class="case-header_tag-list">' + list.map(tag).join('') + '</div>';
-    App.restTags(el);
+    App.inits.forEach((fn) => { if (fn !== init) try { fn(el); } catch (_) {} }); // glass buttons pick the tags up
   });
   let io = null;
   function init(scope = document) {
