@@ -21,7 +21,7 @@
  *    without the stagger.
  *  - SocialSlider 1.5.0: Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
- *  - MailMagnet 1.1.0: Mail CTA email is pulled towards the cursor (flat, no tilt), springs back; works on every hover.
+ *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
  *  - MediaPoster 1.0.0: hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
  *    same slider:ready event, so SliderMotion (trackpad, auto scroll) and SliderFX (reveal, parallax) run on it too.
@@ -974,7 +974,8 @@
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
   const FX = {
-    follow: 0.12,  // share of the cursor distance the link travels (x), y is 1.5x that
+    followX: 0.04, // share of the cursor distance the link travels horizontally
+    followY: 0.18, // share of the cursor distance the link travels vertically
     margin: 60,    // px around the link where it already reacts
   };
   const ok = () => matchMedia('(hover: hover) and (pointer: fine)').matches && !matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -991,7 +992,10 @@
       if (!inside) { if (on) leave(); return; }
       on = true;
       const dx = e.clientX - (L + r.width / 2), dy = e.clientY - (T + r.height / 2);
-      gsap.to(a, { x: dx * FX.follow, y: dy * FX.follow * 1.5, duration: 0.8, ease: 'power3', overwrite: 'auto' });
+      // never push the text past the window edges
+      const minX = Math.min(0, -L), maxX = Math.max(0, innerWidth - (L + r.width));
+      const x = Math.max(minX, Math.min(maxX, dx * FX.followX));
+      gsap.to(a, { x, y: dy * FX.followY, duration: 0.8, ease: 'power3', overwrite: 'auto' });
     };
     const leave = () => {
       on = false;
