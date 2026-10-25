@@ -19,7 +19,7 @@
  *    Script keeps: press scale on all arrow links, the Apply text arrow hover, links left on # visual only. Services: the hover card image is zoomed and follows the cursor.
  *  - CaseTags 1.7.0: moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
  *    without the stagger.
- *  - SocialSlider 1.0.0: Social Slider component. Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
+ *  - SocialSlider 1.1.0: Case Study Slider component (Social Cards and/or Media Cards). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
  *    same slider:ready event, so SliderMotion (trackpad, auto scroll) and SliderFX (reveal, parallax) run on it too.
  *    Own module because CaseSlider removes slides that link to the current page (the play button is href="#").
  *  - SocialCard 1.0.0: Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
@@ -402,7 +402,7 @@
           if (r.right < -w * 0.25 || r.left > w * 1.25) return;
           const p = Math.max(-1.25, Math.min(1.25, ((r.left + r.width / 2) / w) * 2 - 1)); // -1 left edge, 1 right edge
           const x = -p * FX.shift; // image lags behind the card: moves against the travel direction
-          c.querySelectorAll('.project-card_media img, .social-card_media > img, .social-card_media > video').forEach((img) => setter(img)(x));
+          c.querySelectorAll('.project-card_media img, .social-card_media > img, .social-card_media > video, .media-card_media > img, .media-card_media > video').forEach((img) => setter(img)(x));
         });
       };
       g.ticker.add(tick);
@@ -783,11 +783,14 @@
     if (root._ss) return; root._ss = 1;
     // Slides = the Social Card instances. Webflow wraps slot content in its own div, so the list is whatever
     // holds the cards and the track is its parent (Splide needs the list as a direct child of the track).
-    const first = root.querySelector('[data-social-card]');
-    const slide0 = first && first.parentElement; // the Social Card instance root
+    const CARD = '[data-social-card], [data-media-card]';
+    const first = root.querySelector(CARD);
+    const slide0 = first && first.parentElement; // the card component's instance root
     const list = slide0 && slide0.parentElement;
     const track = list && list.parentElement;
-    const slides = list ? [...list.children].filter((c) => c.querySelector('[data-social-card]')) : [];
+    const slides = list ? [...list.children].filter((c) => c.querySelector(CARD)) : [];
+    // Arrows get the nav glass (rim reflections, glow, magnetic, press) from the site footer script
+    root.querySelectorAll('.social-slider_arrows').forEach((a) => a.setAttribute('data-glow-button', ''));
     if (!track || !list || !slides.length) { root.style.display = 'none'; return; }
     if (slides.length < 2) { root.classList.add('is-single', 'fx-ready'); return; }
     loadSplide().then(() => {
