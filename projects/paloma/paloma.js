@@ -19,6 +19,8 @@
  *    Script keeps: press scale on all arrow links, the Apply text arrow hover, links left on # visual only. Services: the hover card image is zoomed and follows the cursor.
  *  - CaseTags 1.7.0: moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
  *    without the stagger.
+ *  - SocialCard 1.0.0: Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
+ *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - CardPress 1.2.0: project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
 (() => {
@@ -703,5 +705,62 @@
   }
   App.inits.push(init);
   App.destroys.push(() => { if (io) { io.disconnect(); io = null; } });
+  if (document.readyState !== 'loading') init(document);
+})();
+
+/* ---------- SocialCard ---------- */
+// Social Card component: CaseMedia plays the muted loop ([data-case-media] on .social-card_media).
+// Play ([data-social-play]) restarts the video with sound and mutes every other card; press again to pause.
+// Leaving the screen or a page transition mutes it again, so a card never plays sound out of view.
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const CARD = '[data-social-card]';
+  let io = null;
+  const videoOf = (card) => card.querySelector('video');
+  const setUi = (card, on) => {
+    card.classList.toggle('is-sound', on);
+    const b = card.querySelector('[data-social-play]');
+    if (b) { b.setAttribute('aria-pressed', on ? 'true' : 'false'); b.setAttribute('aria-label', on ? 'Pause' : 'Play with sound'); }
+  };
+  const mute = (card) => { const v = videoOf(card); if (v) v.muted = true; setUi(card, false); };
+  const play = (v) => { const p = v.play(); if (p && p.catch) p.catch(() => {}); };
+
+  const start = (card) => {
+    const v = videoOf(card);
+    if (!v) { // HLS still attaching: wait for CaseMedia to add the video, then start
+      if (card._wait) return;
+      card._wait = new MutationObserver(() => { if (videoOf(card)) { card._wait.disconnect(); card._wait = null; start(card); } });
+      card._wait.observe(card, { childList: true, subtree: true });
+      return;
+    }
+    document.querySelectorAll(CARD + '.is-sound').forEach((c) => c !== card && mute(c));
+    if (!card._heard) { card._heard = true; v.currentTime = 0; } // first play starts at the beginning
+    v.muted = false; v.loop = true;
+    play(v); setUi(card, true);
+  };
+  const stop = (card) => { const v = videoOf(card); if (v) { v.pause(); v.muted = true; } setUi(card, false); };
+
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('[data-social-play]');
+    if (!b) return;
+    e.preventDefault();
+    const card = b.closest(CARD);
+    if (card) card.classList.contains('is-sound') ? stop(card) : start(card);
+  });
+
+  const init = (scope = document) => {
+    const cards = (scope || document).querySelectorAll(CARD);
+    if (!cards.length) return;
+    if (!io) io = new IntersectionObserver((es) => es.forEach((en) => {
+      if (en.isIntersecting) { const v = videoOf(en.target); if (v && v.paused && !en.target.classList.contains('is-sound')) play(v); }
+      else if (en.target.classList.contains('is-sound')) mute(en.target);
+    }));
+    cards.forEach((c) => io.observe(c));
+  };
+  App.inits.push(init);
+  App.destroys.push(() => {
+    document.querySelectorAll(CARD).forEach((c) => { if (c._wait) { c._wait.disconnect(); c._wait = null; } mute(c); });
+    if (io) { io.disconnect(); io = null; }
+  });
   if (document.readyState !== 'loading') init(document);
 })();
