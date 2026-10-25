@@ -781,9 +781,13 @@
 
   const setup = (root) => {
     if (root._ss) return; root._ss = 1;
-    const track = root.querySelector('.social-slider_track');
-    const list = root.querySelector('.social-slider_list');
-    const slides = list ? [...list.children].filter((c) => !c.matches('.w-embed')) : [];
+    // Slides = the Social Card instances. Webflow wraps slot content in its own div, so the list is whatever
+    // holds the cards and the track is its parent (Splide needs the list as a direct child of the track).
+    const first = root.querySelector('[data-social-card]');
+    const slide0 = first && first.parentElement; // the Social Card instance root
+    const list = slide0 && slide0.parentElement;
+    const track = list && list.parentElement;
+    const slides = list ? [...list.children].filter((c) => c.querySelector('[data-social-card]')) : [];
     if (!track || !list || !slides.length) { root.style.display = 'none'; return; }
     if (slides.length < 2) { root.classList.add('is-single', 'fx-ready'); return; }
     loadSplide().then(() => {
