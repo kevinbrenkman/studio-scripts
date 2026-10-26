@@ -17,10 +17,11 @@
  *    bottom of the screen. Grid, case media and the video player thumbnail: images get a vertical parallax.
  *  - ArrowLinks 1.4.1 (static check only on real links; the slider heading wrapper is a div): hover motion moved to the native Webflow interaction "Arrow link hover" (tweak on the canvas).
  *    Script keeps: press scale on all arrow links, the Apply text arrow hover, links left on # visual only. Services: the hover card image is zoomed and follows the cursor.
- *  - CaseTags 1.8.0: tags 28px tall (design), default cursor. Moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
+ *  - CaseTags 1.9.0: tags 28px tall (design), default cursor; slider cards get their tags straight away. Moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
  *    without the stagger.
  *  - SocialSlider 1.5.0: Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
+ *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
  *  - MediaPoster 1.1.0 (also the Full Video Player: thumbnail + video 2px bigger per side): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
@@ -733,7 +734,11 @@
     io = io || new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { io.unobserve(e.target); fill(e.target, e.target._slug); } }), { rootMargin: '400px 0px' });
     (scope || document).querySelectorAll('[data-tags-from]').forEach((el) => {
       if (el._tags) return; el._tags = true; el._slug = slugOf(el);
-      if (el._slug) io.observe(el);
+      if (!el._slug) return;
+      // In a slider the cards sit off-screen sideways (and clipped), so lazy loading would only fill them as they
+      // slide in: fill those right away. Grid cards further down the page stay lazy.
+      if (el.closest('.splide, .case-slider, [data-social-slider]')) fill(el, el._slug);
+      else io.observe(el);
     });
   }
   App.inits.push(init);
@@ -1030,5 +1035,48 @@
   const init = (scope = document) => (scope || document).querySelectorAll('.mail-cta_link').forEach(setup);
   App.inits.push(init);
   App.destroys.push(() => { live.forEach((a) => typeof a._mm === 'function' && a._mm()); live.clear(); });
+  if (document.readyState !== 'loading') init(document);
+})();
+
+/* ---------- PlayBounce ---------- */
+// Full Video Player big play button: a bouncier spring back when the cursor leaves (the glass button script's
+// default is elastic.out(1, 0.3) over 1.6s). Mirrors that script's release test (resting box + 12px), then takes
+// over the x/y tween one tick later, so the glass script's own release is replaced, not fought.
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const BOUNCE = {
+    ease: 'elastic.out(1.25, 0.22)', // amplitude, period: higher amplitude + shorter period = more wobble
+    duration: 1.9,
+    margin: 12,                      // same release margin as the glass button script
+  };
+  if (!matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+  const live = new Set();
+  const setup = (btn) => {
+    if (btn._pb || !window.gsap) return; btn._pb = true;
+    const inner = btn.querySelector('[data-magnetic-inner-target]');
+    let engaged = false;
+    const move = (e) => {
+      const r = btn.getBoundingClientRect();
+      const ox = gsap.getProperty(btn, 'x') || 0, oy = gsap.getProperty(btn, 'y') || 0;
+      const cx = r.left + r.width / 2 - ox, cy = r.top + r.height / 2 - oy;
+      const dx = e.clientX - cx, dy = e.clientY - cy, m = BOUNCE.margin;
+      const out = btn.dataset.glowShape === 'circle'
+        ? Math.hypot(dx, dy) > btn.offsetWidth / 2 + m
+        : Math.abs(dx) > btn.offsetWidth / 2 + m || Math.abs(dy) > btn.offsetHeight / 2 + m;
+      if (!out) { engaged = true; return; }
+      if (!engaged) return;
+      engaged = false;
+      setTimeout(() => {
+        gsap.to(btn, { x: 0, y: 0, ease: BOUNCE.ease, duration: BOUNCE.duration, overwrite: 'auto' });
+        if (inner) gsap.to(inner, { x: 0, y: 0, ease: BOUNCE.ease, duration: BOUNCE.duration + 0.3, overwrite: 'auto' });
+      }, 0);
+    };
+    window.addEventListener('pointermove', move, { passive: true });
+    btn._pbOff = () => { window.removeEventListener('pointermove', move); delete btn._pb; };
+    live.add(btn);
+  };
+  const init = (scope = document) => (scope || document).querySelectorAll('.bunny-player__big-btn[data-glow-button]').forEach(setup);
+  App.inits.push(init);
+  App.destroys.push(() => { live.forEach((b) => b._pbOff && b._pbOff()); live.clear(); });
   if (document.readyState !== 'loading') init(document);
 })();
