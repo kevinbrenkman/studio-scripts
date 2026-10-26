@@ -1097,10 +1097,12 @@
 // which swaps in the long serif label (CSS in the Navigation embed).
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
-  const FX = { open: 0.5, reverse: 1.25, stagger: 0.05, rise: 18 }; // reverse: closing speed vs opening
+  // reverse: closing speed vs opening (1 = same). pickFade: other links fade out after a link tap. pickHold: how long
+  // the tapped page name stays alone in the open panel before it shrinks back.
+  const FX = { open: 0.5, reverse: 0.9, stagger: 0.05, rise: 18, pickFade: 0.45, pickHold: 0.55 };
   const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const clean = (p) => (p || '').replace(/\/$/, '') || '/';
-  let wired = false, open = false, tl = null, fade = null, itemTw = null, picked = null, toggle, menu, lines;
+  let wired = false, open = false, tl = null, fade = null, itemTw = null, hold = null, picked = null, toggle, menu, lines;
 
   const markCurrent = () => {
     if (!menu) return;
@@ -1138,6 +1140,9 @@
       if (window.lenis) window.lenis.stop();
       if (tl) tl.kill();
       if (fade) fade.kill();
+      if (hold) hold.kill();
+      menu.classList.remove('is-leaving');
+      menu.querySelectorAll('.is-picked').forEach((el) => el.classList.remove('is-picked'));
       const [a, b, c] = lines;
       const gap = b && a ? b.offsetTop - a.offsetTop : 5;
       toggle.classList.add('is-open'); // its own glass hides: the panel is the glass now
@@ -1160,18 +1165,27 @@
       const finish = () => {
         toggle.classList.remove('is-open');
         fade = gsap.to(menu, { autoAlpha: 0, duration: fast ? 0 : 0.2, ease: 'none', onComplete: () => {
+          menu.classList.remove('is-leaving');
+          menu.querySelectorAll('.is-picked').forEach((el) => el.classList.remove('is-picked'));
           if (window.lenis) window.lenis.start();
           done();
         } });
       };
       if (itemTw) itemTw.kill();
-      // Closing from a link tap: the others fade first, the tapped link stays a beat longer
+      if (hold) hold.kill();
       const all = items(), keep = picked && all.includes(picked) ? picked : null; picked = null;
-      itemTw = gsap.timeline()
-        .to(all.filter((el) => el !== keep), { autoAlpha: 0, duration: fast ? 0 : 0.15, ease: 'power1.in', overwrite: true }, 0);
-      if (keep) itemTw.to(keep, { autoAlpha: 0, duration: fast ? 0 : 0.2, ease: 'power1.in', overwrite: true }, fast ? 0 : 0.15);
-      if (!tl || fast) { if (tl) tl.progress(0).pause(); finish(); return; }
-      tl.timeScale(FX.reverse).eventCallback('onReverseComplete', finish).reverse();
+      const reverse = () => tl.timeScale(FX.reverse).eventCallback('onReverseComplete', finish).reverse();
+      if (!tl || fast) { gsap.set(all, { autoAlpha: 0 }); if (tl) tl.progress(0).pause(); finish(); return; }
+      if (!keep) {
+        // Closed with the button / Escape: links fade, panel shrinks back into the button straight away
+        itemTw = gsap.to(all, { autoAlpha: 0, duration: 0.2, ease: 'power1.in', overwrite: true });
+        return reverse();
+      }
+      // Closed from a link: the other links fade out completely, the page we're going to stays alone in the panel
+      // for a moment, then the panel shrinks back into the button and wipes it away. Navigation waits for all of it.
+      menu.classList.add('is-leaving'); keep.classList.add('is-picked');
+      itemTw = gsap.to(all.filter((el) => el !== keep), { autoAlpha: 0, duration: FX.pickFade, ease: 'power2.out', overwrite: true });
+      hold = gsap.delayedCall(FX.pickHold, reverse);
     });
   };
 
@@ -1185,7 +1199,8 @@
     if (!document.getElementById('paloma-menu-press-css')) {
       const st = document.createElement('style'); st.id = 'paloma-menu-press-css';
       st.textContent = '.nav_menu-label{transition:opacity .2s ease}'
-        + '.nav_menu-links:has(.nav_menu-link:active) .nav_menu-link:not(:active) .nav_menu-label{opacity:.35}';
+        + '.nav_menu-links:has(.nav_menu-link:active) .nav_menu-link:not(:active) .nav_menu-label,'
+        + '[data-nav-menu].is-leaving .nav_menu-link:not(.is-picked) .nav_menu-label{opacity:.35}';
       document.head.appendChild(st);
     }
     toggle.addEventListener('click', () => setOpen(!open));
