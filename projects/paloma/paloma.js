@@ -24,6 +24,7 @@
  *  - MobileMenu 1.2.1 (links wait for the close, no flash on close): phone menu (below 480px): the glass toggle grows into the glass panel (clip from its corner), lines morph into one bar, current page in serif.
  *  - CardLoaded 1.0.0: project card media box switches to the page background once its image loaded (no 1px line).
  *  - LogoOnMedia 1.1.0: nav logo gets data-on-media over images/videos (filter lift in the Navigation embed); keeps the logo loop playing.
+ *  - LogoHover 1.0.0: hovering the nav logo brakes the spin to a stop facing forward (loop start/end), leaving spins it back up.
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
@@ -1245,7 +1246,7 @@
   const keep = () => {
     const v = document.querySelector('.nav_logo-video');
     if (!v || v._keep) return; v._keep = true;
-    const play = () => { if (document.visibilityState === 'visible' && v.paused) { const p = v.play(); if (p && p.catch) p.catch(() => {}); } };
+    const play = () => { if (!v._hold && document.visibilityState === 'visible' && v.paused) { const p = v.play(); if (p && p.catch) p.catch(() => {}); } };
     v.addEventListener('pause', () => setTimeout(play, 50));
     v.addEventListener('ended', play);
     document.addEventListener('visibilitychange', play);
@@ -1256,4 +1257,52 @@
   keep();
   App.destroys.push(() => { media = []; });
   if (document.readyState !== 'loading') { scan(); queue(); }
+})();
+
+/* ---------- LogoHover ---------- */
+// Nav glass logo, desktop: hovering brakes the spinning loop to a stop exactly where it faces forward (the start/end
+// frame of the loop), like the sliders easing out on hover. Leaving spins it back up.
+// Physics-style braking: the playback rate follows sqrt(2 * BRAKE * time left), so it slows down smoothly and lands on
+// the end frame; far from the end it first speeds up (up to MAX) so you never wait long.
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const BRAKE = 0.55;  // rate units per second: lower = longer, softer stop
+  const MAX = 2;       // fastest it spins while heading for the stop
+  const MIN = 0.07;    // browsers don't go much slower than this
+  const RAMP = 0.9;    // s to spin back up to normal speed after leaving
+  if (!matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+  let wired = false;
+  const wire = () => {
+    const logo = document.querySelector('.navigation .nav_logo');
+    const v = logo && logo.querySelector('.nav_logo-video');
+    if (!v || !window.gsap) return false;
+    let raf = 0, rate = 1, last = 0, spin = null;
+    const stop = () => { cancelAnimationFrame(raf); raf = 0; };
+    const brake = (t) => {
+      const dt = last ? Math.min(0.05, (t - last) / 1000) : 0.016; last = t;
+      const d = v.duration || 5;
+      let left = d - v.currentTime; if (left < 0) left += d;
+      if (left < 0.03 || (rate <= MIN + 0.001 && left < 0.08)) { v.pause(); v.currentTime = 0; stop(); return; }
+      const target = Math.max(MIN, Math.min(MAX, Math.sqrt(2 * BRAKE * left)));
+      rate += (target - rate) * Math.min(1, dt * 6); // smooth towards the braking curve
+      v.playbackRate = rate;
+      raf = requestAnimationFrame(brake);
+    };
+    logo.addEventListener('pointerenter', () => {
+      if (spin) { spin.kill(); spin = null; }
+      v._hold = true; rate = v.paused ? MIN : (v.playbackRate || 1); last = 0;
+      if (v.paused) { const p = v.play(); if (p && p.catch) p.catch(() => {}); }
+      stop(); raf = requestAnimationFrame(brake);
+    });
+    logo.addEventListener('pointerleave', () => {
+      stop(); v._hold = false;
+      const o = { r: Math.max(MIN, v.playbackRate || MIN) };
+      v.playbackRate = o.r;
+      const p = v.play(); if (p && p.catch) p.catch(() => {});
+      spin = gsap.to(o, { r: 1, duration: RAMP, ease: 'power2.in', onUpdate: () => { v.playbackRate = o.r; } });
+    });
+    return true;
+  };
+  App.inits.push(() => { if (!wired) wired = wire(); });
+  if (document.readyState !== 'loading') wired = wire();
 })();
