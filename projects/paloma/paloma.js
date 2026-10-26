@@ -876,7 +876,8 @@
       slides.forEach((s) => s.classList.add('splide__slide'));
       const sp = new Splide(root, {
         type: 'loop', autoWidth: true, gap: '1.5625rem', focus: 0, arrows: false, pagination: false, speed: 1000,
-        padding: { left: '1.25rem', right: 0 },
+        // left padding = Variables > Responsive > Page Margin (read from the page, so the Phone/Mobile mode applies)
+        padding: { left: getComputedStyle(root).getPropertyValue('--_responsive---page-margin').trim() || '1.25rem', right: 0 },
       });
       sp.on('mounted', () => {
         // Loop clones copy the DOM: drop videos CaseMedia already attached, the inits below give them their own
