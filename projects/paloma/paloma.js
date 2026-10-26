@@ -23,7 +23,7 @@
  *    and glow in the direction you slide.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
- *  - MediaPoster 1.0.0: hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
+ *  - MediaPoster 1.1.0 (also the Full Video Player: thumbnail + video 2px bigger per side): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
  *    same slider:ready event, so SliderMotion (trackpad, auto scroll) and SliderFX (reveal, parallax) run on it too.
  *    Own module because CaseSlider removes slides that link to the current page (the play button is href="#").
  *  - SocialCard 1.3.0 (pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
@@ -831,7 +831,9 @@
   const st = document.createElement('style'); st.id = 'paloma-poster-css';
   st.textContent = '[data-case-media]:has(> video.is-revealed) > img{visibility:hidden;transition:visibility 0s linear 1s}' +
     // Video 1px bigger on every side (the box clips it): no background line at the edge from sub-pixel rounding
-    '[data-case-media]{overflow:hidden}[data-case-media]>video.case-media_video{top:-1px!important;left:-1px!important;right:auto!important;bottom:auto!important;width:calc(100% + 2px)!important;height:calc(100% + 2px)!important}';
+    '[data-case-media]{overflow:hidden}[data-case-media]>video.case-media_video{top:-1px!important;left:-1px!important;right:auto!important;bottom:auto!important;width:calc(100% + 2px)!important;height:calc(100% + 2px)!important}' +
+    // Full Video Player: thumbnail and video 2px bigger on every side, so the player's background never shows at the edge
+    '.bunny-player>.bunny-player__placeholder,.bunny-player .bunny-player__video{top:-2px!important;left:-2px!important;width:calc(100% + 4px)!important;height:calc(100% + 4px)!important;max-width:none}';
   document.head.appendChild(st);
 })();
 
