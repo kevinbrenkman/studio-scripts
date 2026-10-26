@@ -1209,8 +1209,15 @@
     // A link in the menu: close first, then go (Swup would otherwise swap the page while the menu is still open).
     // Capture phase on window: runs before Swup's own link handler (Swup listens on document).
     window.addEventListener('click', (e) => {
+      if (!open) return;
+      // Tap outside the panel (and not on the toggle): close, and swallow the tap so nothing underneath fires
+      if (!menu.contains(e.target) && !toggle.contains(e.target)) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        setOpen(false);
+        return;
+      }
       const link = e.target.closest && e.target.closest('a');
-      if (!link || !open || !menu.contains(link)) return;
+      if (!link || !menu.contains(link)) return;
       const href = link.getAttribute('href') || '';
       if (e.metaKey || e.ctrlKey || e.shiftKey || link.target === '_blank') return;
       e.preventDefault(); e.stopImmediatePropagation();
