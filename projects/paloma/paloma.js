@@ -23,7 +23,7 @@
  *    and glow in the direction you slide.
  *  - MobileMenu 1.2.1 (links wait for the close, no flash on close): phone menu (below 480px): the glass toggle grows into the glass panel (clip from its corner), lines morph into one bar, current page in serif.
  *  - CardLoaded 1.0.0: project card media box switches to the page background once its image loaded (no 1px line).
- *  - LogoOnMedia 1.0.0: nav logo gets data-on-media over images/videos (filter lift in the Navigation embed).
+ *  - LogoOnMedia 1.1.0: nav logo gets data-on-media over images/videos (filter lift in the Navigation embed); keeps the logo loop playing.
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
@@ -1240,7 +1240,20 @@
   const queue = () => { if (!raf) raf = requestAnimationFrame(check); };
   addEventListener('scroll', queue, { passive: true });
   addEventListener('resize', queue);
-  App.inits.push(() => { scan(); queue(); });
+  // Keep the logo loop running: other scripts pause videos that scroll out of view or during transitions,
+  // and some of them catch the logo too. Any pause while the tab is visible is undone.
+  const keep = () => {
+    const v = document.querySelector('.nav_logo-video');
+    if (!v || v._keep) return; v._keep = true;
+    const play = () => { if (document.visibilityState === 'visible' && v.paused) { const p = v.play(); if (p && p.catch) p.catch(() => {}); } };
+    v.addEventListener('pause', () => setTimeout(play, 50));
+    v.addEventListener('ended', play);
+    document.addEventListener('visibilitychange', play);
+    setInterval(play, 2000);
+    play();
+  };
+  App.inits.push(() => { scan(); queue(); keep(); });
+  keep();
   App.destroys.push(() => { media = []; });
   if (document.readyState !== 'loading') { scan(); queue(); }
 })();
