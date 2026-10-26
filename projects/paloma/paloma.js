@@ -4,7 +4,7 @@
  * Registers into the Swup shell registry (App.inits / App.destroys) from the site footer.
  *
  * Modules
- *  - EmblemMask 2.5.0 (same emblem size on every card, 30vw, optically +10% on square, -8% on portrait cards):  replaces HoverMask 1.1.0 (spinning SVG). Project card hover shows the
+ *  - EmblemMask 2.6.0 (new matte: Bianca's better model, 5s loop; same emblem size on every card, 30vw, optically +10% on square, -8% on portrait cards):  replaces HoverMask 1.1.0 (spinning SVG). Project card hover shows the
  *    thumbnail inside the spinning 3D emblem (Quy). WebGL: a grayscale matte video (white = emblem)
  *    is the alpha for the thumbnail. One H.264 file for every browser, because Safari drops the
  *    alpha of HEVC video when it is drawn to a canvas.
@@ -21,7 +21,6 @@
  *    without the stagger.
  *  - SocialSlider 1.5.0: Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
- *  - TouchGlass 1.0.0: touch devices: glass button rims parked top-left, inner glow hidden (no stray highlight).
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
@@ -39,7 +38,7 @@
   // Matte: white emblem on black, square, H.264 MP4. Must be served with CORS (jsDelivr does).
   // Override per site without a release: put data-emblem-matte="https://..." on any element (e.g. the project card).
   const EMBLEM = {
-    matte: 'https://cdn.jsdelivr.net/gh/kevinbrenkman/studio-scripts@96954ed645564c3cd53c1209ccc2e21bef11c79b/projects/paloma/assets/emblem-matte.mp4',
+    matte: 'https://cdn.jsdelivr.net/gh/kevinbrenkman/studio-scripts@46960f18a1737f769cab31046b4b982cb87b558c/projects/paloma/assets/emblem-matte.mp4',
     size: 0.3,    // emblem size as a share of the viewport width: the same on every card (portrait, square, wide)
     max: 0.85,    // never more than this share of the card's shortest side (small cards, narrow screens)
     square: 0.1,  // optical boost on square cards (looks smaller there): +10% on a perfect square, fading out towards 1.6:1
@@ -1085,45 +1084,3 @@
   if (document.readyState !== 'loading') init(document);
 })();
 
-/* ---------- TouchGlass ---------- */
-// Touch devices: the glass button script only positions the rim highlights and inner glow while a mouse hovers,
-// so on a phone they sat at their unpositioned CSS spot (a stray round highlight inside the button). Here: rims
-// parked at the resting angle (top-left, same as on desktop when not hovered), inner glow hidden.
-(() => {
-  window.App = window.App || { inits: [], destroys: [] };
-  if (matchMedia('(hover: hover) and (pointer: fine)').matches) return;
-  if (!document.getElementById('paloma-touchglass-css')) {
-    const st = document.createElement('style'); st.id = 'paloma-touchglass-css';
-    st.textContent = '[data-glow-button] [data-glow-layer],[data-glow-button] .nav_button-glow{display:none}';
-    document.head.appendChild(st);
-  }
-  const REST = -135;
-  const edge = (w, h, deg, circle) => {
-    const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
-    if (circle) return { x: w / 2 + c * (w / 2), y: h / 2 + s * (h / 2) };
-    const k = Math.min(Math.abs(c) > 1e-6 ? (w / 2) / Math.abs(c) : Infinity, Math.abs(s) > 1e-6 ? (h / 2) / Math.abs(s) : Infinity);
-    return { x: w / 2 + c * k, y: h / 2 + s * k };
-  };
-  const place = (btn) => {
-    const w = btn.offsetWidth, h = btn.offsetHeight;
-    if (!w || !h || !window.gsap) return;
-    const circle = btn.dataset.glowShape === 'circle';
-    btn.querySelectorAll('[data-rim]').forEach((r) => {
-      const p = edge(w, h, REST + (parseFloat(r.dataset.rim) || 0), circle);
-      gsap.set(r, { left: 0, top: 0, xPercent: -50, yPercent: -50, x: p.x, y: p.y });
-    });
-  };
-  const ro = 'ResizeObserver' in window ? new ResizeObserver((es) => es.forEach((e) => place(e.target))) : null;
-  const init = (scope = document) => (scope || document).querySelectorAll('[data-glow-button]').forEach((b) => {
-    place(b);
-    if (ro && !b._tg) { b._tg = true; ro.observe(b); }
-  });
-  App.inits.push(init);
-  // Tags and service tags are added later by other modules: catch those too
-  const mo = new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach((n) => {
-    if (n.nodeType !== 1) return;
-    if (n.matches && n.matches('[data-glow-button]')) init(n.parentNode); else if (n.querySelector && n.querySelector('[data-glow-button]')) init(n);
-  })));
-  mo.observe(document.documentElement, { childList: true, subtree: true });
-  if (document.readyState !== 'loading') init(document);
-})();
