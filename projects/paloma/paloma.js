@@ -21,7 +21,7 @@
  *    without the stagger.
  *  - SocialSlider 1.5.0: Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
- *  - MobileMenu 1.2.1 (links wait for the close, no flash on close): phone menu (below 480px): the glass toggle grows into the glass panel (clip from its corner), lines morph into one bar, current page in serif.
+ *  - MobileMenu 1.3.0 (closing = the opening played in reverse; links wait for it): phone menu (below 480px): the glass toggle grows into the glass panel (clip from its corner), lines morph into one bar, current page in serif.
  *  - CardLoaded 1.0.0: project card media box switches to the page background once its image loaded (no 1px line).
  *  - LogoOnMedia 1.1.0: nav logo gets data-on-media over images/videos (filter lift in the Navigation embed); keeps the logo loop playing.
  *  - LogoHover 1.0.0: hovering the nav logo brakes the spin to a stop facing forward (loop start/end), leaving spins it back up.
@@ -1097,10 +1097,10 @@
 // which swaps in the long serif label (CSS in the Navigation embed).
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
-  const FX = { open: 0.5, close: 0.3, stagger: 0.05, rise: 18 };
+  const FX = { open: 0.5, reverse: 1.25, stagger: 0.05, rise: 18 }; // reverse: closing speed vs opening
   const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const clean = (p) => (p || '').replace(/\/$/, '') || '/';
-  let wired = false, open = false, tl = null, toggle, menu, lines;
+  let wired = false, open = false, tl = null, fade = null, toggle, menu, lines;
 
   const markCurrent = () => {
     if (!menu) return;
@@ -1125,39 +1125,45 @@
     return 'inset(' + v.join(' ') + ' round ' + R + 'px)';
   };
   const FULL = 'inset(0px 0px 0px 0px round ' + R + 'px)';
+  // One timeline for both directions: closing plays the opening in reverse (a bit quicker), so it is exactly as
+  // smooth as the opening. Returns a promise that resolves once the menu is fully closed (links wait for it).
   const setOpen = (v, instant) => {
-    if (!menu || v === open) return;
+    if (!menu || v === open) return Promise.resolve();
     open = v;
     toggle.setAttribute('aria-expanded', v ? 'true' : 'false');
     menu.setAttribute('aria-hidden', v ? 'false' : 'true');
     document.documentElement.classList.toggle('is-menu-open', v);
-    if (window.lenis) v ? window.lenis.stop() : window.lenis.start();
-    if (tl) tl.kill();
-    const d = instant || calm() ? 0 : 1;
-    const [a, b, c] = lines;
-    const gap = b && a ? b.offsetTop - a.offsetTop : 5;
-    tl = gsap.timeline();
+    const fast = instant || calm();
     if (v) {
+      if (window.lenis) window.lenis.stop();
+      if (tl) tl.kill();
+      if (fade) fade.kill();
+      const [a, b, c] = lines;
+      const gap = b && a ? b.offsetTop - a.offsetTop : 5;
       toggle.classList.add('is-open'); // its own glass hides: the panel is the glass now
       gsap.set(menu, { autoAlpha: 1, clipPath: toggleClip() });
       gsap.set(items(), { autoAlpha: 0, y: FX.rise });
-      tl.to(menu, { clipPath: FULL, duration: FX.open * 1.3 * d, ease: 'expo.inOut' }, 0)
-        .to(a, { y: gap, autoAlpha: 0, duration: 0.3 * d, ease: 'power2.inOut' }, 0)
-        .to(c, { y: -gap, autoAlpha: 0, duration: 0.3 * d, ease: 'power2.inOut' }, 0)
-        .to(b, { scaleX: 27 / 22, duration: 0.35 * d, ease: 'power3.out' }, 0.1 * d)
-        .to(items(), { autoAlpha: 1, y: 0, duration: FX.open * d, ease: 'power3.out', stagger: FX.stagger * d }, FX.open * 0.6 * d);
-    } else {
-      // Shrink back into the button, then hand over: panel glass fades out while the button's own glass
-      // fades in (0.2s CSS transition), so the two never stack up (that was the white flash)
-      const shrink = FX.close * 1.4 * d, end = 0.05 * d + shrink;
-      tl.to(items(), { autoAlpha: 0, duration: 0.15 * d, ease: 'power1.in' }, 0)
-        .to(menu, { clipPath: toggleClip(), duration: shrink, ease: 'expo.inOut' }, 0.05 * d)
-        .add(() => toggle.classList.remove('is-open'), end)
-        .to(menu, { autoAlpha: 0, duration: 0.2 * d, ease: 'none' }, end)
-        .to(b, { scaleX: 1, duration: 0.3 * d, ease: 'power2.inOut' }, 0)
-        .to([a, c], { y: 0, autoAlpha: 1, duration: 0.3 * d, ease: 'power2.out' }, 0.15 * d);
+      tl = gsap.timeline()
+        .to(menu, { clipPath: FULL, duration: FX.open * 1.3, ease: 'expo.inOut' }, 0)
+        .to(a, { y: gap, autoAlpha: 0, duration: 0.3, ease: 'power2.inOut' }, 0)
+        .to(c, { y: -gap, autoAlpha: 0, duration: 0.3, ease: 'power2.inOut' }, 0)
+        .to(b, { scaleX: 27 / 22, duration: 0.35, ease: 'power3.out' }, 0.1)
+        .to(items(), { autoAlpha: 1, y: 0, duration: FX.open, ease: 'power3.out', stagger: FX.stagger }, FX.open * 0.6);
+      if (fast) tl.progress(1);
+      return Promise.resolve();
     }
-    return tl;
+    return new Promise((done) => {
+      // Back at the button: panel glass fades out while the button's own glass fades in (0.2s CSS), never both
+      const finish = () => {
+        toggle.classList.remove('is-open');
+        fade = gsap.to(menu, { autoAlpha: 0, duration: fast ? 0 : 0.2, ease: 'none', onComplete: () => {
+          if (window.lenis) window.lenis.start();
+          done();
+        } });
+      };
+      if (!tl || fast) { if (tl) tl.progress(0).pause(); finish(); return; }
+      tl.timeScale(FX.reverse).eventCallback('onReverseComplete', finish).reverse();
+    });
   };
 
   const wire = () => {
@@ -1177,9 +1183,7 @@
       if (e.metaKey || e.ctrlKey || e.shiftKey || link.target === '_blank') return;
       e.preventDefault(); e.stopImmediatePropagation();
       const go = !href || href[0] === '#' || clean(new URL(link.href, location.origin).pathname) === clean(location.pathname) ? null : link.href;
-      const t = setOpen(false);
-      const nav = () => { if (!go) return; window.swup ? window.swup.navigate(go) : (location.href = go); };
-      t && t.duration() ? t.eventCallback('onComplete', nav) : nav();
+      setOpen(false).then(() => { if (go) window.swup ? window.swup.navigate(go) : (location.href = go); });
     }, true);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && open) { setOpen(false); toggle.focus(); } });
     matchMedia('(max-width: 479px)').addEventListener('change', (e) => { if (!e.matches) setOpen(false, true); });
