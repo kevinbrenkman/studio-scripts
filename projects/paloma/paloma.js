@@ -22,7 +22,7 @@
  *  - SocialSlider 1.5.0: Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
  *  - MobileMenu 1.3.0 (closing = the opening played in reverse; links wait for it): phone menu (below 480px): the glass toggle grows into the glass panel (clip from its corner), lines morph into one bar, current page in serif.
- *  - CardLoaded 1.0.0: project card media box switches to the page background once its image loaded (no 1px line).
+ *  - CardLoaded 1.1.0: project cards + case media / players: media box switches to the page background once its image loaded (no 1px line).
  *  - LogoOnMedia 1.1.0: nav logo gets data-on-media over images/videos (filter lift in the Navigation embed); keeps the logo loop playing.
  *  - LogoHover 1.0.0: hovering the nav logo brakes the spin to a stop facing forward (loop start/end), leaving spins it back up.
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
@@ -1204,6 +1204,9 @@
   if (document.readyState !== 'loading') init();
 })();
 
+// iOS Safari only applies :active (Webflow Pressed state) to links when a touchstart listener exists
+document.addEventListener('touchstart', () => {}, { passive: true });
+
 /* ---------- CardLoaded ---------- */
 // Project cards: the media box is filled with the theme text colour while the image loads. Once the image is in,
 // the box switches to the page background, so a sub-pixel edge between image and box (seen as a 1px pink/violet
@@ -1212,17 +1215,18 @@
   window.App = window.App || { inits: [], destroys: [] };
   if (!document.getElementById('paloma-cardloaded-css')) {
     const st = document.createElement('style'); st.id = 'paloma-cardloaded-css';
-    st.textContent = '.project-card_media.is-loaded{background-color:var(--_theme---background)}';
+    st.textContent = '.project-card_media.is-loaded,.case-media_item.is-loaded,.bunny-player.is-loaded{background-color:var(--_theme---background)}';
     document.head.appendChild(st);
   }
   const mark = (m) => {
     if (m._cl) return; m._cl = true;
-    const img = m.querySelector('img');
+    const img = m.querySelector('img'), vid = img ? null : m.querySelector('video');
     const done = () => m.classList.add('is-loaded');
-    if (!img || (img.complete && img.naturalWidth)) return done();
-    img.addEventListener('load', done, { once: true });
+    if (img) { if (img.complete && img.naturalWidth) return done(); return img.addEventListener('load', done, { once: true }); }
+    if (vid) { if (vid.readyState >= 2) return done(); return vid.addEventListener('loadeddata', done, { once: true }); }
+    done();
   };
-  const init = (scope = document) => (scope || document).querySelectorAll('.project-card_media').forEach(mark);
+  const init = (scope = document) => (scope || document).querySelectorAll('.project-card_media, .case-media_item, .bunny-player').forEach(mark);
   App.inits.push(init);
   if (document.readyState !== 'loading') init(document);
 })();
