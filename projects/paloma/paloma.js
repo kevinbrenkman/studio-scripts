@@ -1171,11 +1171,14 @@
       menu.classList.remove('is-leaving');
       menu.querySelectorAll('.is-picked').forEach((el) => el.classList.remove('is-picked'));
       toggle.classList.add('is-open'); // its own glass hides: the panel is the glass now
-      gsap.set(menu, { autoAlpha: 1, clipPath: toggleClip() });
+      // fromTo with our own inset strings: the browser shortens computed values (inset(0px round 7px)), and GSAP
+      // can only interpolate strings with the same amount of numbers
+      const from = toggleClip(), band = topBand();
+      gsap.set(menu, { autoAlpha: 1, clipPath: from });
       gsap.set(items(), { autoAlpha: 0, y: FX.rise });
       tl = gsap.timeline()
-        .to(menu, { clipPath: topBand(), duration: FX.step1, ease: 'power2.in' }, 0)
-        .to(menu, { clipPath: FULL, duration: FX.step2, ease: 'expo.out' }, FX.step1);
+        .fromTo(menu, { clipPath: from }, { clipPath: band, duration: FX.step1, ease: 'power2.in', immediateRender: false }, 0)
+        .fromTo(menu, { clipPath: band }, { clipPath: FULL, duration: FX.step2, ease: 'expo.out', immediateRender: false }, FX.step1);
       iconTo(tl, true, 0);
       // Links: their own tween (not in the timeline), so closing can fade them out right away
       if (itemTw) itemTw.kill();
@@ -1209,9 +1212,10 @@
       menu.classList.add('is-leaving'); keep.classList.add('is-picked');
       tl.kill();
       itemTw = gsap.to(all.filter((el) => el !== keep), { autoAlpha: 0, duration: FX.pickFade, ease: 'power2.out', overwrite: true });
+      const band = linkBand(keep), to = toggleClip();
       hold = gsap.timeline({ onComplete: finish })
-        .to(menu, { clipPath: linkBand(keep), duration: FX.step2 * 0.8, ease: 'power3.inOut' }, FX.pickHold)
-        .to(menu, { clipPath: toggleClip(), duration: FX.step1 * 1.3, ease: 'power3.in' }, '>-0.05');
+        .fromTo(menu, { clipPath: FULL }, { clipPath: band, duration: FX.step2 * 0.8, ease: 'power3.inOut', immediateRender: false }, FX.pickHold)
+        .fromTo(menu, { clipPath: band }, { clipPath: to, duration: FX.step1 * 1.3, ease: 'power3.in', immediateRender: false }, '>-0.05');
       iconTo(hold, false, hold.duration() - 0.35);
     });
   };
