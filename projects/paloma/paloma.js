@@ -1215,7 +1215,7 @@
       const band = linkBand(keep), to = toggleClip();
       hold = gsap.timeline({ onComplete: finish })
         .fromTo(menu, { clipPath: FULL }, { clipPath: band, duration: FX.step2 * 0.8, ease: 'power3.inOut', immediateRender: false }, FX.pickHold)
-        .fromTo(menu, { clipPath: band }, { clipPath: to, duration: FX.step1 * 1.3, ease: 'power3.in', immediateRender: false }, '>-0.05');
+        .fromTo(menu, { clipPath: band }, { clipPath: to, duration: FX.step1 * 1.3, ease: 'power3.in', immediateRender: false }, '>');
       iconTo(hold, false, hold.duration() - 0.35);
     });
   };
