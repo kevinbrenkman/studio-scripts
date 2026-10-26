@@ -21,10 +21,11 @@
  *    without the stagger.
  *  - SocialSlider 1.5.0: Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
+ *  - TouchGlass 1.0.0: touch devices: glass button rims parked top-left, inner glow hidden (no stray highlight).
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
- *  - MediaPoster 1.1.0 (also the Full Video Player: thumbnail + video 2px bigger per side): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
+ *  - MediaPoster 1.2.0 (also the Full Video Player: thumbnail + video 2px bigger per side, video hidden until first play): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
  *    same slider:ready event, so SliderMotion (trackpad, auto scroll) and SliderFX (reveal, parallax) run on it too.
  *    Own module because CaseSlider removes slides that link to the current page (the play button is href="#").
  *  - SocialCard 1.3.0 (pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
@@ -838,7 +839,9 @@
     // Video 1px bigger on every side (the box clips it): no background line at the edge from sub-pixel rounding
     '[data-case-media]{overflow:hidden}[data-case-media]>video.case-media_video{top:-1px!important;left:-1px!important;right:auto!important;bottom:auto!important;width:calc(100% + 2px)!important;height:calc(100% + 2px)!important}' +
     // Full Video Player: thumbnail and video 2px bigger on every side, so the player's background never shows at the edge
-    '.bunny-player .bunny-player__placeholder,.bunny-player .bunny-player__video{top:-2px!important;left:-2px!important;width:calc(100% + 4px)!important;height:calc(100% + 4px)!important;max-width:none}';
+    '.bunny-player .bunny-player__placeholder,.bunny-player .bunny-player__video{top:-2px!important;left:-2px!important;width:calc(100% + 4px)!important;height:calc(100% + 4px)!important;max-width:none}' +
+    // Video hidden until first play: on iPhone the (empty, black) native HLS video sat on top of the thumbnail
+    '[data-bunny-player-init]:not([data-player-activated="true"]) .bunny-player__video{opacity:0}';
   document.head.appendChild(st);
 })();
 
@@ -1078,5 +1081,48 @@
   const init = (scope = document) => (scope || document).querySelectorAll('.bunny-player__big-btn[data-glow-button]').forEach(setup);
   App.inits.push(init);
   App.destroys.push(() => { live.forEach((b) => b._pbOff && b._pbOff()); live.clear(); });
+  if (document.readyState !== 'loading') init(document);
+})();
+
+/* ---------- TouchGlass ---------- */
+// Touch devices: the glass button script only positions the rim highlights and inner glow while a mouse hovers,
+// so on a phone they sat at their unpositioned CSS spot (a stray round highlight inside the button). Here: rims
+// parked at the resting angle (top-left, same as on desktop when not hovered), inner glow hidden.
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  if (matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+  if (!document.getElementById('paloma-touchglass-css')) {
+    const st = document.createElement('style'); st.id = 'paloma-touchglass-css';
+    st.textContent = '[data-glow-button] [data-glow-layer],[data-glow-button] .nav_button-glow{display:none}';
+    document.head.appendChild(st);
+  }
+  const REST = -135;
+  const edge = (w, h, deg, circle) => {
+    const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    if (circle) return { x: w / 2 + c * (w / 2), y: h / 2 + s * (h / 2) };
+    const k = Math.min(Math.abs(c) > 1e-6 ? (w / 2) / Math.abs(c) : Infinity, Math.abs(s) > 1e-6 ? (h / 2) / Math.abs(s) : Infinity);
+    return { x: w / 2 + c * k, y: h / 2 + s * k };
+  };
+  const place = (btn) => {
+    const w = btn.offsetWidth, h = btn.offsetHeight;
+    if (!w || !h || !window.gsap) return;
+    const circle = btn.dataset.glowShape === 'circle';
+    btn.querySelectorAll('[data-rim]').forEach((r) => {
+      const p = edge(w, h, REST + (parseFloat(r.dataset.rim) || 0), circle);
+      gsap.set(r, { left: 0, top: 0, xPercent: -50, yPercent: -50, x: p.x, y: p.y });
+    });
+  };
+  const ro = 'ResizeObserver' in window ? new ResizeObserver((es) => es.forEach((e) => place(e.target))) : null;
+  const init = (scope = document) => (scope || document).querySelectorAll('[data-glow-button]').forEach((b) => {
+    place(b);
+    if (ro && !b._tg) { b._tg = true; ro.observe(b); }
+  });
+  App.inits.push(init);
+  // Tags and service tags are added later by other modules: catch those too
+  const mo = new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach((n) => {
+    if (n.nodeType !== 1) return;
+    if (n.matches && n.matches('[data-glow-button]')) init(n.parentNode); else if (n.querySelector && n.querySelector('[data-glow-button]')) init(n);
+  })));
+  mo.observe(document.documentElement, { childList: true, subtree: true });
   if (document.readyState !== 'loading') init(document);
 })();
