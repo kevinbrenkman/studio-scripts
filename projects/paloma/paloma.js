@@ -21,7 +21,7 @@
  *    without the stagger.
  *  - SocialSlider 1.5.0: Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
- *  - MobileMenu 1.1.0: phone menu (below 480px): the glass toggle grows into the glass panel (clip from its corner), lines morph into one bar, current page in serif.
+ *  - MobileMenu 1.2.0 (links wait for the close, no flash on close): phone menu (below 480px): the glass toggle grows into the glass panel (clip from its corner), lines morph into one bar, current page in serif.
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
@@ -1144,13 +1144,17 @@
         .to(b, { scaleX: 27 / 22, duration: 0.35 * d, ease: 'power3.out' }, 0.1 * d)
         .to(items(), { autoAlpha: 1, y: 0, duration: FX.open * d, ease: 'power3.out', stagger: FX.stagger * d }, FX.open * 0.6 * d);
     } else {
+      // Shrink back into the button, then hand over: panel glass fades out while the button's own glass
+      // fades in (0.2s CSS transition), so the two never stack up (that was the white flash)
+      const shrink = FX.close * 1.4 * d, end = 0.05 * d + shrink;
       tl.to(items(), { autoAlpha: 0, duration: 0.15 * d, ease: 'power1.in' }, 0)
-        .to(menu, { clipPath: toggleClip(), duration: FX.close * 1.4 * d, ease: 'expo.inOut' }, 0.05 * d)
-        .add(() => toggle.classList.remove('is-open'), (0.05 + FX.close * 1.25) * d)
-        .set(menu, { autoAlpha: 0 })
+        .to(menu, { clipPath: toggleClip(), duration: shrink, ease: 'expo.inOut' }, 0.05 * d)
+        .add(() => toggle.classList.remove('is-open'), end)
+        .to(menu, { autoAlpha: 0, duration: 0.2 * d, ease: 'none' }, end)
         .to(b, { scaleX: 1, duration: 0.3 * d, ease: 'power2.inOut' }, 0)
         .to([a, c], { y: 0, autoAlpha: 1, duration: 0.3 * d, ease: 'power2.out' }, 0.15 * d);
     }
+    return tl;
   };
 
   const wire = () => {
@@ -1161,7 +1165,19 @@
     gsap.set(menu, { autoAlpha: 0 });
     toggle.addEventListener('click', () => setOpen(!open));
     toggle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(!open); } });
-    menu.addEventListener('click', (e) => { if (e.target.closest('a')) setOpen(false); });
+    // A link in the menu: close first, then go (Swup would otherwise swap the page while the menu is still open).
+    // Capture phase, so this runs before Swup's own link handler.
+    menu.addEventListener('click', (e) => {
+      const link = e.target.closest('a');
+      if (!link || !open) return;
+      const href = link.getAttribute('href') || '';
+      if (e.metaKey || e.ctrlKey || e.shiftKey || link.target === '_blank') return;
+      e.preventDefault(); e.stopPropagation();
+      const go = !href || href[0] === '#' || clean(new URL(link.href, location.origin).pathname) === clean(location.pathname) ? null : link.href;
+      const t = setOpen(false);
+      const nav = () => { if (!go) return; window.swup ? window.swup.navigate(go) : (location.href = go); };
+      t && t.duration() ? t.eventCallback('onComplete', nav) : nav();
+    }, true);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && open) { setOpen(false); toggle.focus(); } });
     matchMedia('(max-width: 479px)').addEventListener('change', (e) => { if (!e.matches) setOpen(false, true); });
     if (window.swup) window.swup.hooks.on('visit:start', () => setOpen(false));
