@@ -21,7 +21,9 @@
  *    without the stagger.
  *  - SocialSlider 1.5.0: Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
- *  - MobileMenu 1.2.0 (links wait for the close, no flash on close): phone menu (below 480px): the glass toggle grows into the glass panel (clip from its corner), lines morph into one bar, current page in serif.
+ *  - MobileMenu 1.2.1 (links wait for the close, no flash on close): phone menu (below 480px): the glass toggle grows into the glass panel (clip from its corner), lines morph into one bar, current page in serif.
+ *  - CardLoaded 1.0.0: project card media box switches to the page background once its image loaded (no 1px line).
+ *  - LogoOnMedia 1.0.0: nav logo gets data-on-media over images/videos (filter lift in the Navigation embed).
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
@@ -978,7 +980,7 @@
       const ax = Math.abs(e.deltaX), ay = Math.abs(e.deltaY);
       if (!lock && ax <= ay) return; // vertical: normal page scroll
       lock = 1; clearTimeout(lockT); lockT = setTimeout(() => { lock = 0; }, 220);
-      e.preventDefault(); e.stopPropagation();
+      e.preventDefault(); e.stopImmediatePropagation();
       if (snapTw) { snapTw.kill(); snapTw = null; }
       if (sp.state.is(Splide.STATES.MOVING)) Move.cancel();
       if (!flashed && ax > 2) { flashed = true; flash(e.deltaX > 0 ? '[data-social-next]' : '[data-social-prev]'); }
@@ -1166,13 +1168,13 @@
     toggle.addEventListener('click', () => setOpen(!open));
     toggle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(!open); } });
     // A link in the menu: close first, then go (Swup would otherwise swap the page while the menu is still open).
-    // Capture phase, so this runs before Swup's own link handler.
-    menu.addEventListener('click', (e) => {
-      const link = e.target.closest('a');
-      if (!link || !open) return;
+    // Capture phase on window: runs before Swup's own link handler (Swup listens on document).
+    window.addEventListener('click', (e) => {
+      const link = e.target.closest && e.target.closest('a');
+      if (!link || !open || !menu.contains(link)) return;
       const href = link.getAttribute('href') || '';
       if (e.metaKey || e.ctrlKey || e.shiftKey || link.target === '_blank') return;
-      e.preventDefault(); e.stopPropagation();
+      e.preventDefault(); e.stopImmediatePropagation();
       const go = !href || href[0] === '#' || clean(new URL(link.href, location.origin).pathname) === clean(location.pathname) ? null : link.href;
       const t = setOpen(false);
       const nav = () => { if (!go) return; window.swup ? window.swup.navigate(go) : (location.href = go); };
@@ -1190,4 +1192,55 @@
   };
   App.inits.push(init);
   if (document.readyState !== 'loading') init();
+})();
+
+/* ---------- CardLoaded ---------- */
+// Project cards: the media box is filled with the theme text colour while the image loads. Once the image is in,
+// the box switches to the page background, so a sub-pixel edge between image and box (seen as a 1px pink/violet
+// line while scrolling) can no longer show.
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  if (!document.getElementById('paloma-cardloaded-css')) {
+    const st = document.createElement('style'); st.id = 'paloma-cardloaded-css';
+    st.textContent = '.project-card_media.is-loaded{background-color:var(--_theme---background)}';
+    document.head.appendChild(st);
+  }
+  const mark = (m) => {
+    if (m._cl) return; m._cl = true;
+    const img = m.querySelector('img');
+    const done = () => m.classList.add('is-loaded');
+    if (!img || (img.complete && img.naturalWidth)) return done();
+    img.addEventListener('load', done, { once: true });
+  };
+  const init = (scope = document) => (scope || document).querySelectorAll('.project-card_media').forEach(mark);
+  App.inits.push(init);
+  if (document.readyState !== 'loading') init(document);
+})();
+
+/* ---------- LogoOnMedia ---------- */
+// Nav glass logo: data-on-media on .nav_logo while it sits over an image or video (like NavOnMedia does for the
+// buttons), so the Navigation embed can give it a lift there (brightness + soft shadow, see --logo-filter-media).
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const MEDIA = '#swup img, #swup video, #swup [data-nav-media]', MIN = 60;
+  let media = [], raf = 0;
+  const scan = () => { media = [...document.querySelectorAll(MEDIA)].filter((el) => !el.closest('[data-nav-ignore]')); };
+  const check = () => {
+    raf = 0;
+    const logo = document.querySelector('.navigation .nav_logo');
+    if (!logo) return;
+    const r = logo.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+    const hit = media.some((el) => {
+      const q = el.getBoundingClientRect();
+      if (q.width < MIN || q.height < MIN || x < q.left || x > q.right || y < q.top || y > q.bottom) return false;
+      const st = getComputedStyle(el); return st.visibility !== 'hidden' && +st.opacity > 0.05;
+    });
+    logo.toggleAttribute('data-on-media', hit);
+  };
+  const queue = () => { if (!raf) raf = requestAnimationFrame(check); };
+  addEventListener('scroll', queue, { passive: true });
+  addEventListener('resize', queue);
+  App.inits.push(() => { scan(); queue(); });
+  App.destroys.push(() => { media = []; });
+  if (document.readyState !== 'loading') { scan(); queue(); }
 })();
