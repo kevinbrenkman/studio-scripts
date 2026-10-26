@@ -1045,8 +1045,8 @@
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
   const BOUNCE = {
-    ease: 'elastic.out(1.25, 0.22)', // amplitude, period: higher amplitude + shorter period = more wobble
-    duration: 1.9,
+    ease: 'elastic.out(1, 0.4)',     // amplitude, period: higher amplitude + shorter period = more wobble
+    duration: 1.6,
     margin: 12,                      // same release margin as the glass button script
   };
   if (!matchMedia('(hover: hover) and (pointer: fine)').matches) return;
