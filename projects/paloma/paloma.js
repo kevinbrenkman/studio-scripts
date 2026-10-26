@@ -1101,7 +1101,7 @@
   // the tapped page name stays alone in the open panel before it shrinks back.
   // step1 / step2: the two shape steps of the panel (toggle <-> strip, strip <-> full). bandPad: space above and
   // below the link inside the strip.
-  const FX = { open: 0.5, reverse: 0.9, stagger: 0.05, rise: 18, pickFade: 0.35, pickHold: 0.3, step1: 0.32, step2: 0.55, bandPad: 14 };
+  const FX = { open: 0.5, reverse: 0.9, stagger: 0.05, rise: 18, pickFade: 0.35, pickHold: 0.15, step1: 0.32, step2: 0.55, bandPad: 14 };
   const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const clean = (p) => (p || '').replace(/\/$/, '') || '/';
   let wired = false, open = false, tl = null, fade = null, itemTw = null, hold = null, picked = null, toggle, menu, lines;
