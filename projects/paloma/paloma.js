@@ -1100,7 +1100,7 @@
   const FX = { open: 0.5, reverse: 1.25, stagger: 0.05, rise: 18 }; // reverse: closing speed vs opening
   const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const clean = (p) => (p || '').replace(/\/$/, '') || '/';
-  let wired = false, open = false, tl = null, fade = null, itemTw = null, toggle, menu, lines;
+  let wired = false, open = false, tl = null, fade = null, itemTw = null, picked = null, toggle, menu, lines;
 
   const markCurrent = () => {
     if (!menu) return;
@@ -1165,7 +1165,11 @@
         } });
       };
       if (itemTw) itemTw.kill();
-      itemTw = gsap.to(items(), { autoAlpha: 0, duration: fast ? 0 : 0.15, ease: 'power1.in', overwrite: true });
+      // Closing from a link tap: the others fade first, the tapped link stays a beat longer
+      const all = items(), keep = picked && all.includes(picked) ? picked : null; picked = null;
+      itemTw = gsap.timeline()
+        .to(all.filter((el) => el !== keep), { autoAlpha: 0, duration: fast ? 0 : 0.15, ease: 'power1.in', overwrite: true }, 0);
+      if (keep) itemTw.to(keep, { autoAlpha: 0, duration: fast ? 0 : 0.2, ease: 'power1.in', overwrite: true }, fast ? 0 : 0.15);
       if (!tl || fast) { if (tl) tl.progress(0).pause(); finish(); return; }
       tl.timeScale(FX.reverse).eventCallback('onReverseComplete', finish).reverse();
     });
@@ -1177,6 +1181,13 @@
     if (!toggle || !menu || !window.gsap) return false;
     lines = [...toggle.querySelectorAll('.nav_toggle-line')];
     gsap.set(menu, { autoAlpha: 0 });
+    // Press feedback: while a link is held, the other links dim (labels, since GSAP owns the links' inline opacity)
+    if (!document.getElementById('paloma-menu-press-css')) {
+      const st = document.createElement('style'); st.id = 'paloma-menu-press-css';
+      st.textContent = '.nav_menu-label{transition:opacity .2s ease}'
+        + '.nav_menu-links:has(.nav_menu-link:active) .nav_menu-link:not(:active) .nav_menu-label{opacity:.35}';
+      document.head.appendChild(st);
+    }
     toggle.addEventListener('click', () => setOpen(!open));
     toggle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(!open); } });
     // A link in the menu: close first, then go (Swup would otherwise swap the page while the menu is still open).
@@ -1187,6 +1198,7 @@
       const href = link.getAttribute('href') || '';
       if (e.metaKey || e.ctrlKey || e.shiftKey || link.target === '_blank') return;
       e.preventDefault(); e.stopImmediatePropagation();
+      picked = link;
       const go = !href || href[0] === '#' || clean(new URL(link.href, location.origin).pathname) === clean(location.pathname) ? null : link.href;
       setOpen(false).then(() => { if (go) window.swup ? window.swup.navigate(go) : (location.href = go); });
     }, true);
