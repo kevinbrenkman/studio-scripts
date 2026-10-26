@@ -21,6 +21,7 @@
  *    without the stagger.
  *  - SocialSlider 1.5.0: Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
+ *  - MobileMenu 1.0.0: phone menu (below 480px): glass toggle opens the glass panel, lines morph into one bar, current page in serif.
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
@@ -1084,3 +1085,79 @@
   if (document.readyState !== 'loading') init(document);
 })();
 
+
+/* ---------- MobileMenu ---------- */
+// Phone menu (Navigation component, below 480px): the glass toggle [data-nav-toggle] opens the glass panel
+// [data-nav-menu]. Lines: the outer two slide into the middle one, which stretches into a single bar (close icon).
+// Closes on a link, the toggle, Escape, a page change and when the screen gets wider than a phone.
+// Current page: .is-current on the matching .nav_menu-link (href, or data-nav-match="/projects" for the sections under it),
+// which swaps in the long serif label (CSS in the Navigation embed).
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const FX = { open: 0.5, close: 0.3, stagger: 0.05, rise: 18 };
+  const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const clean = (p) => (p || '').replace(/\/$/, '') || '/';
+  let wired = false, open = false, tl = null, toggle, menu, lines;
+
+  const markCurrent = () => {
+    if (!menu) return;
+    const path = clean(location.pathname);
+    menu.querySelectorAll('.nav_menu-link').forEach((a) => {
+      const raw = a.getAttribute('href') || '';
+      let on = false;
+      if (raw && raw[0] !== '#') on = clean(new URL(a.href, location.origin).pathname) === path;
+      const m = a.dataset.navMatch;
+      if (!on && m) on = m.split(',').some((p) => { p = clean(p.trim()); return p !== '/' && (path === p || path.startsWith(p + '/')); });
+      a.classList.toggle('is-current', on);
+      on ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current');
+    });
+  };
+
+  const items = () => [...menu.querySelectorAll('.nav_menu-link, .nav_menu-jobs')];
+  const setOpen = (v, instant) => {
+    if (!menu || v === open) return;
+    open = v;
+    toggle.setAttribute('aria-expanded', v ? 'true' : 'false');
+    menu.setAttribute('aria-hidden', v ? 'false' : 'true');
+    document.documentElement.classList.toggle('is-menu-open', v);
+    if (window.lenis) v ? window.lenis.stop() : window.lenis.start();
+    if (tl) tl.kill();
+    const d = instant || calm() ? 0 : 1;
+    const [a, b, c] = lines;
+    const gap = b && a ? b.offsetTop - a.offsetTop : 5;
+    tl = gsap.timeline();
+    if (v) {
+      tl.to(a, { y: gap, autoAlpha: 0, duration: 0.3 * d, ease: 'power2.inOut' }, 0)
+        .to(c, { y: -gap, autoAlpha: 0, duration: 0.3 * d, ease: 'power2.inOut' }, 0)
+        .to(b, { scaleX: 27 / 22, duration: 0.35 * d, ease: 'power3.out' }, 0.1 * d)
+        .fromTo(menu, { autoAlpha: 0, y: -10, scale: 0.97 }, { autoAlpha: 1, y: 0, scale: 1, duration: FX.open * d, ease: 'power3.out' }, 0)
+        .fromTo(items(), { autoAlpha: 0, y: FX.rise }, { autoAlpha: 1, y: 0, duration: FX.open * d, ease: 'power3.out', stagger: FX.stagger * d }, 0.08 * d);
+    } else {
+      tl.to(menu, { autoAlpha: 0, y: -6, scale: 0.98, duration: FX.close * d, ease: 'power2.in' }, 0)
+        .to(b, { scaleX: 1, duration: 0.3 * d, ease: 'power2.inOut' }, 0)
+        .to([a, c], { y: 0, autoAlpha: 1, duration: 0.3 * d, ease: 'power2.out' }, 0.1 * d);
+    }
+  };
+
+  const wire = () => {
+    toggle = document.querySelector('[data-nav-toggle]');
+    menu = document.querySelector('[data-nav-menu]');
+    if (!toggle || !menu || !window.gsap) return false;
+    lines = [...toggle.querySelectorAll('.nav_toggle-line')];
+    gsap.set(menu, { autoAlpha: 0, transformOrigin: '50% 0%' });
+    toggle.addEventListener('click', () => setOpen(!open));
+    toggle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(!open); } });
+    menu.addEventListener('click', (e) => { if (e.target.closest('a')) setOpen(false); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && open) { setOpen(false); toggle.focus(); } });
+    matchMedia('(max-width: 479px)').addEventListener('change', (e) => { if (!e.matches) setOpen(false, true); });
+    if (window.swup) window.swup.hooks.on('visit:start', () => setOpen(false));
+    return true;
+  };
+
+  const init = () => {
+    if (!wired) wired = wire();
+    markCurrent();
+  };
+  App.inits.push(init);
+  if (document.readyState !== 'loading') init();
+})();
