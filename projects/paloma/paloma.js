@@ -1211,13 +1211,15 @@
     window.addEventListener('click', (e) => {
       if (!open) return;
       // Tap outside the panel (and not on the toggle): close, and swallow the tap so nothing underneath fires
-      if (!menu.contains(e.target) && !toggle.contains(e.target)) {
+      // Exception: the nav logo always goes home (menu closes first, like a menu link)
+      const logo = e.target.closest && e.target.closest('.nav_logo');
+      if (!logo && !menu.contains(e.target) && !toggle.contains(e.target)) {
         e.preventDefault(); e.stopImmediatePropagation();
         setOpen(false);
         return;
       }
-      const link = e.target.closest && e.target.closest('a');
-      if (!link || !menu.contains(link)) return;
+      const link = logo || (e.target.closest && e.target.closest('a'));
+      if (!link || (!logo && !menu.contains(link))) return;
       const href = link.getAttribute('href') || '';
       if (e.metaKey || e.ctrlKey || e.shiftKey || link.target === '_blank') return;
       e.preventDefault(); e.stopImmediatePropagation();
