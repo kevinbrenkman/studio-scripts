@@ -1100,7 +1100,7 @@
   const FX = { open: 0.5, reverse: 1.25, stagger: 0.05, rise: 18 }; // reverse: closing speed vs opening
   const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const clean = (p) => (p || '').replace(/\/$/, '') || '/';
-  let wired = false, open = false, tl = null, fade = null, toggle, menu, lines;
+  let wired = false, open = false, tl = null, fade = null, itemTw = null, toggle, menu, lines;
 
   const markCurrent = () => {
     if (!menu) return;
@@ -1147,9 +1147,12 @@
         .to(menu, { clipPath: FULL, duration: FX.open * 1.3, ease: 'expo.inOut' }, 0)
         .to(a, { y: gap, autoAlpha: 0, duration: 0.3, ease: 'power2.inOut' }, 0)
         .to(c, { y: -gap, autoAlpha: 0, duration: 0.3, ease: 'power2.inOut' }, 0)
-        .to(b, { scaleX: 27 / 22, duration: 0.35, ease: 'power3.out' }, 0.1)
-        .to(items(), { autoAlpha: 1, y: 0, duration: FX.open, ease: 'power3.out', stagger: FX.stagger }, FX.open * 0.6);
-      if (fast) tl.progress(1);
+        .to(b, { scaleX: 27 / 22, duration: 0.35, ease: 'power3.out' }, 0.1);
+      // Links: their own tween (not in the timeline), so closing can fade them out right away while the panel
+      // shrinks, instead of the reversed timeline first waiting for them
+      if (itemTw) itemTw.kill();
+      itemTw = gsap.to(items(), { autoAlpha: 1, y: 0, duration: FX.open, ease: 'power3.out', stagger: FX.stagger, delay: fast ? 0 : FX.open * 0.6 });
+      if (fast) { tl.progress(1); itemTw.progress(1); }
       return Promise.resolve();
     }
     return new Promise((done) => {
@@ -1161,6 +1164,8 @@
           done();
         } });
       };
+      if (itemTw) itemTw.kill();
+      itemTw = gsap.to(items(), { autoAlpha: 0, duration: fast ? 0 : 0.15, ease: 'power1.in', overwrite: true });
       if (!tl || fast) { if (tl) tl.progress(0).pause(); finish(); return; }
       tl.timeScale(FX.reverse).eventCallback('onReverseComplete', finish).reverse();
     });
