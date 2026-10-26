@@ -21,7 +21,7 @@
  *    without the stagger.
  *  - SocialSlider 1.5.0: Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
- *  - MobileMenu 1.0.0: phone menu (below 480px): glass toggle opens the glass panel, lines morph into one bar, current page in serif.
+ *  - MobileMenu 1.1.0: phone menu (below 480px): the glass toggle grows into the glass panel (clip from its corner), lines morph into one bar, current page in serif.
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
@@ -1114,6 +1114,14 @@
   };
 
   const items = () => [...menu.querySelectorAll('.nav_menu-link, .nav_menu-jobs')];
+  // Clip the panel down to the toggle's box (same corner radius), so opening grows the toggle into the panel
+  const R = 7;
+  const toggleClip = () => {
+    const p = menu.getBoundingClientRect(), t = toggle.getBoundingClientRect();
+    const v = [t.top - p.top, p.right - t.right, p.bottom - t.bottom, t.left - p.left].map((n) => Math.max(0, n).toFixed(1) + 'px');
+    return 'inset(' + v.join(' ') + ' round ' + R + 'px)';
+  };
+  const FULL = 'inset(0px 0px 0px 0px round ' + R + 'px)';
   const setOpen = (v, instant) => {
     if (!menu || v === open) return;
     open = v;
@@ -1127,15 +1135,21 @@
     const gap = b && a ? b.offsetTop - a.offsetTop : 5;
     tl = gsap.timeline();
     if (v) {
-      tl.to(a, { y: gap, autoAlpha: 0, duration: 0.3 * d, ease: 'power2.inOut' }, 0)
+      toggle.classList.add('is-open'); // its own glass hides: the panel is the glass now
+      gsap.set(menu, { autoAlpha: 1, clipPath: toggleClip() });
+      gsap.set(items(), { autoAlpha: 0, y: FX.rise });
+      tl.to(menu, { clipPath: FULL, duration: FX.open * 1.3 * d, ease: 'expo.inOut' }, 0)
+        .to(a, { y: gap, autoAlpha: 0, duration: 0.3 * d, ease: 'power2.inOut' }, 0)
         .to(c, { y: -gap, autoAlpha: 0, duration: 0.3 * d, ease: 'power2.inOut' }, 0)
         .to(b, { scaleX: 27 / 22, duration: 0.35 * d, ease: 'power3.out' }, 0.1 * d)
-        .fromTo(menu, { autoAlpha: 0, y: -10, scale: 0.97 }, { autoAlpha: 1, y: 0, scale: 1, duration: FX.open * d, ease: 'power3.out' }, 0)
-        .fromTo(items(), { autoAlpha: 0, y: FX.rise }, { autoAlpha: 1, y: 0, duration: FX.open * d, ease: 'power3.out', stagger: FX.stagger * d }, 0.08 * d);
+        .to(items(), { autoAlpha: 1, y: 0, duration: FX.open * d, ease: 'power3.out', stagger: FX.stagger * d }, FX.open * 0.6 * d);
     } else {
-      tl.to(menu, { autoAlpha: 0, y: -6, scale: 0.98, duration: FX.close * d, ease: 'power2.in' }, 0)
+      tl.to(items(), { autoAlpha: 0, duration: 0.15 * d, ease: 'power1.in' }, 0)
+        .to(menu, { clipPath: toggleClip(), duration: FX.close * 1.4 * d, ease: 'expo.inOut' }, 0.05 * d)
+        .add(() => toggle.classList.remove('is-open'), (0.05 + FX.close * 1.25) * d)
+        .set(menu, { autoAlpha: 0 })
         .to(b, { scaleX: 1, duration: 0.3 * d, ease: 'power2.inOut' }, 0)
-        .to([a, c], { y: 0, autoAlpha: 1, duration: 0.3 * d, ease: 'power2.out' }, 0.1 * d);
+        .to([a, c], { y: 0, autoAlpha: 1, duration: 0.3 * d, ease: 'power2.out' }, 0.15 * d);
     }
   };
 
@@ -1144,7 +1158,7 @@
     menu = document.querySelector('[data-nav-menu]');
     if (!toggle || !menu || !window.gsap) return false;
     lines = [...toggle.querySelectorAll('.nav_toggle-line')];
-    gsap.set(menu, { autoAlpha: 0, transformOrigin: '50% 0%' });
+    gsap.set(menu, { autoAlpha: 0 });
     toggle.addEventListener('click', () => setOpen(!open));
     toggle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(!open); } });
     menu.addEventListener('click', (e) => { if (e.target.closest('a')) setOpen(false); });
