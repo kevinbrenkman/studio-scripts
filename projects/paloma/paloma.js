@@ -1127,7 +1127,7 @@
   // Close: FULL -> band (shrinks vertically only) -> toggle (shrinks both ways), the exact mirror
   // From a link the band sits around that link, so the page you're going to stays in the middle while it collapses.
   const R = 7;
-  const inset = (v) => 'inset(' + v.map((n) => Math.max(0, n).toFixed(1) + 'px').join(' ') + ' round ' + R + 'px)';
+  const inset = (v) => 'inset(' + v.map((n) => Math.round(Math.max(0, n)) + 'px') // whole px: GSAP won't interpolate '21.0px'-style strings.join(' ') + ' round ' + R + 'px)';
   const toggleClip = () => {
     const p = menu.getBoundingClientRect(), t = toggle.getBoundingClientRect();
     return inset([t.top - p.top, p.right - t.right, p.bottom - t.bottom, t.left - p.left]);
