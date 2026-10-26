@@ -1097,9 +1097,9 @@
 // which swaps in the long serif label (CSS in the Navigation embed).
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
-  // reverse: closing speed vs opening (1 = same). pickFade: other links fade out after a link tap. pickHold: how long
+  // reverse: closing speed vs opening (1 = same). pickFade / pickDim: other links dim after a link tap (time / opacity). pickHold: how long
   // the tapped page name stays alone in the open panel before it shrinks back.
-  const FX = { open: 0.5, reverse: 0.9, stagger: 0.05, rise: 18, pickFade: 0.45, pickHold: 0.55 };
+  const FX = { open: 0.5, reverse: 0.9, stagger: 0.05, rise: 18, pickFade: 0.45, pickHold: 0.55, pickDim: 0.5 };
   const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const clean = (p) => (p || '').replace(/\/$/, '') || '/';
   let wired = false, open = false, tl = null, fade = null, itemTw = null, hold = null, picked = null, toggle, menu, lines;
@@ -1184,7 +1184,8 @@
       // Closed from a link: the other links fade out completely, the page we're going to stays alone in the panel
       // for a moment, then the panel shrinks back into the button and wipes it away. Navigation waits for all of it.
       menu.classList.add('is-leaving'); keep.classList.add('is-picked');
-      itemTw = gsap.to(all.filter((el) => el !== keep), { autoAlpha: 0, duration: FX.pickFade, ease: 'power2.out', overwrite: true });
+      // Other links dim to FX.pickDim (labels via CSS below, the jobs line here), then the panel wipes them away
+      itemTw = gsap.to(all.filter((el) => el !== keep && !el.classList.contains('nav_menu-link')), { opacity: FX.pickDim, duration: FX.pickFade, ease: 'power2.out', overwrite: true });
       hold = gsap.delayedCall(FX.pickHold, reverse);
     });
   };
@@ -1198,9 +1199,9 @@
     // Press feedback: while a link is held, the other links dim (labels, since GSAP owns the links' inline opacity)
     if (!document.getElementById('paloma-menu-press-css')) {
       const st = document.createElement('style'); st.id = 'paloma-menu-press-css';
-      st.textContent = '.nav_menu-label{transition:opacity .2s ease}'
+      st.textContent = '.nav_menu-label{transition:opacity ' + FX.pickFade + 's ease}'
         + '.nav_menu-links:has(.nav_menu-link:active) .nav_menu-link:not(:active) .nav_menu-label,'
-        + '[data-nav-menu].is-leaving .nav_menu-link:not(.is-picked) .nav_menu-label{opacity:.35}';
+        + '[data-nav-menu].is-leaving .nav_menu-link:not(.is-picked) .nav_menu-label{opacity:' + FX.pickDim + '}';
       document.head.appendChild(st);
     }
     toggle.addEventListener('click', () => setOpen(!open));
