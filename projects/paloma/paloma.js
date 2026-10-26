@@ -833,7 +833,7 @@
     // Video 1px bigger on every side (the box clips it): no background line at the edge from sub-pixel rounding
     '[data-case-media]{overflow:hidden}[data-case-media]>video.case-media_video{top:-1px!important;left:-1px!important;right:auto!important;bottom:auto!important;width:calc(100% + 2px)!important;height:calc(100% + 2px)!important}' +
     // Full Video Player: thumbnail and video 2px bigger on every side, so the player's background never shows at the edge
-    '.bunny-player>.bunny-player__placeholder,.bunny-player .bunny-player__video{top:-2px!important;left:-2px!important;width:calc(100% + 4px)!important;height:calc(100% + 4px)!important;max-width:none}';
+    '.bunny-player .bunny-player__placeholder,.bunny-player .bunny-player__video{top:-2px!important;left:-2px!important;width:calc(100% + 4px)!important;height:calc(100% + 4px)!important;max-width:none}';
   document.head.appendChild(st);
 })();
 
