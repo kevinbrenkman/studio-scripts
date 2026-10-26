@@ -1099,7 +1099,9 @@
   window.App = window.App || { inits: [], destroys: [] };
   // reverse: closing speed vs opening (1 = same). pickFade: other links fade out after a link tap. pickHold: how long
   // the tapped page name stays alone in the open panel before it shrinks back.
-  const FX = { open: 0.5, reverse: 0.9, stagger: 0.05, rise: 18, pickFade: 0.45, pickHold: 0.55 };
+  // step1 / step2: the two shape steps of the panel (toggle <-> strip, strip <-> full). bandPad: space above and
+  // below the link inside the strip.
+  const FX = { open: 0.5, reverse: 0.9, stagger: 0.05, rise: 18, pickFade: 0.35, pickHold: 0.3, step1: 0.32, step2: 0.55, bandPad: 14 };
   const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const clean = (p) => (p || '').replace(/\/$/, '') || '/';
   let wired = false, open = false, tl = null, fade = null, itemTw = null, hold = null, picked = null, toggle, menu, lines;
@@ -1119,16 +1121,41 @@
   };
 
   const items = () => [...menu.querySelectorAll('.nav_menu-link, .nav_menu-jobs')];
-  // Clip the panel down to the toggle's box (same corner radius), so opening grows the toggle into the panel
+  // Panel shape = a clip-path inset with the toggle's corner radius. Three shapes:
+  //   toggle: the button's own box     band: a full-width strip (one link high)     FULL: the whole panel
+  // Open:  toggle -> band (grows sideways + a bit down) -> FULL (grows down)
+  // Close: FULL -> band (shrinks vertically only) -> toggle (shrinks both ways), the exact mirror
+  // From a link the band sits around that link, so the page you're going to stays in the middle while it collapses.
   const R = 7;
+  const inset = (v) => 'inset(' + v.map((n) => Math.max(0, n).toFixed(1) + 'px').join(' ') + ' round ' + R + 'px)';
   const toggleClip = () => {
     const p = menu.getBoundingClientRect(), t = toggle.getBoundingClientRect();
-    const v = [t.top - p.top, p.right - t.right, p.bottom - t.bottom, t.left - p.left].map((n) => Math.max(0, n).toFixed(1) + 'px');
-    return 'inset(' + v.join(' ') + ' round ' + R + 'px)';
+    return inset([t.top - p.top, p.right - t.right, p.bottom - t.bottom, t.left - p.left]);
   };
-  const FULL = 'inset(0px 0px 0px 0px round ' + R + 'px)';
-  // One timeline for both directions: closing plays the opening in reverse (a bit quicker), so it is exactly as
-  // smooth as the opening. Returns a promise that resolves once the menu is fully closed (links wait for it).
+  const bandH = () => { const l = menu.querySelector('.nav_menu-link'); return (l ? l.offsetHeight : 64) + FX.bandPad * 2; };
+  // Strip starting at the toggle's top edge (opening / button close)
+  const topBand = () => {
+    const p = menu.getBoundingClientRect(), t = toggle.getBoundingClientRect(), top = t.top - p.top;
+    return inset([top, 0, p.height - top - Math.max(bandH(), t.height), 0]);
+  };
+  // Strip centred on a link (closing from that link)
+  const linkBand = (el) => {
+    const p = menu.getBoundingClientRect(), l = el.getBoundingClientRect(), h = bandH();
+    const mid = l.top + l.height / 2 - p.top;
+    return inset([mid - h / 2, 0, p.height - mid - h / 2, 0]);
+  };
+  const FULL = inset([0, 0, 0, 0]);
+  // Toggle icon: lines to a single bar (open) and back (close)
+  const iconTo = (t, isOpen, at) => {
+    const [a, b, c] = lines;
+    const gap = b && a ? b.offsetTop - a.offsetTop : 5;
+    t.to(a, { y: isOpen ? gap : 0, autoAlpha: isOpen ? 0 : 1, duration: 0.3, ease: 'power2.inOut' }, at)
+     .to(c, { y: isOpen ? -gap : 0, autoAlpha: isOpen ? 0 : 1, duration: 0.3, ease: 'power2.inOut' }, at)
+     .to(b, { scaleX: isOpen ? 27 / 22 : 1, duration: 0.35, ease: 'power3.out' }, at + 0.1);
+    return t;
+  };
+  // Opening timeline; the button close plays it in reverse. Returns a promise that resolves once the menu is fully
+  // closed (links wait for it before navigating).
   const setOpen = (v, instant) => {
     if (!menu || v === open) return Promise.resolve();
     open = v;
@@ -1143,20 +1170,16 @@
       if (hold) hold.kill();
       menu.classList.remove('is-leaving');
       menu.querySelectorAll('.is-picked').forEach((el) => el.classList.remove('is-picked'));
-      const [a, b, c] = lines;
-      const gap = b && a ? b.offsetTop - a.offsetTop : 5;
       toggle.classList.add('is-open'); // its own glass hides: the panel is the glass now
       gsap.set(menu, { autoAlpha: 1, clipPath: toggleClip() });
       gsap.set(items(), { autoAlpha: 0, y: FX.rise });
       tl = gsap.timeline()
-        .to(menu, { clipPath: FULL, duration: FX.open * 1.3, ease: 'expo.inOut' }, 0)
-        .to(a, { y: gap, autoAlpha: 0, duration: 0.3, ease: 'power2.inOut' }, 0)
-        .to(c, { y: -gap, autoAlpha: 0, duration: 0.3, ease: 'power2.inOut' }, 0)
-        .to(b, { scaleX: 27 / 22, duration: 0.35, ease: 'power3.out' }, 0.1);
-      // Links: their own tween (not in the timeline), so closing can fade them out right away while the panel
-      // shrinks, instead of the reversed timeline first waiting for them
+        .to(menu, { clipPath: topBand(), duration: FX.step1, ease: 'power2.in' }, 0)
+        .to(menu, { clipPath: FULL, duration: FX.step2, ease: 'expo.out' }, FX.step1);
+      iconTo(tl, true, 0);
+      // Links: their own tween (not in the timeline), so closing can fade them out right away
       if (itemTw) itemTw.kill();
-      itemTw = gsap.to(items(), { autoAlpha: 1, y: 0, duration: FX.open, ease: 'power3.out', stagger: FX.stagger, delay: fast ? 0 : FX.open * 0.6 });
+      itemTw = gsap.to(items(), { autoAlpha: 1, y: 0, duration: FX.open, ease: 'power3.out', stagger: FX.stagger, delay: fast ? 0 : FX.step1 + 0.05 });
       if (fast) { tl.progress(1); itemTw.progress(1); }
       return Promise.resolve();
     }
@@ -1174,18 +1197,22 @@
       if (itemTw) itemTw.kill();
       if (hold) hold.kill();
       const all = items(), keep = picked && all.includes(picked) ? picked : null; picked = null;
-      const reverse = () => tl.timeScale(FX.reverse).eventCallback('onReverseComplete', finish).reverse();
       if (!tl || fast) { gsap.set(all, { autoAlpha: 0 }); if (tl) tl.progress(0).pause(); finish(); return; }
       if (!keep) {
-        // Closed with the button / Escape: links fade, panel shrinks back into the button straight away
+        // Closed with the button / Escape: links fade, the opening plays in reverse
         itemTw = gsap.to(all, { autoAlpha: 0, duration: 0.2, ease: 'power1.in', overwrite: true });
-        return reverse();
+        tl.timeScale(FX.reverse).eventCallback('onReverseComplete', finish).reverse();
+        return;
       }
-      // Closed from a link: the other links fade out completely, the page we're going to stays alone in the panel
-      // for a moment, then the panel shrinks back into the button and wipes it away. Navigation waits for all of it.
+      // Closed from a link: the others fade out, the panel collapses vertically onto the tapped link (it stays in
+      // the middle), then the strip shrinks into the button. Navigation waits for all of it.
       menu.classList.add('is-leaving'); keep.classList.add('is-picked');
+      tl.kill();
       itemTw = gsap.to(all.filter((el) => el !== keep), { autoAlpha: 0, duration: FX.pickFade, ease: 'power2.out', overwrite: true });
-      hold = gsap.delayedCall(FX.pickHold, reverse);
+      hold = gsap.timeline({ onComplete: finish })
+        .to(menu, { clipPath: linkBand(keep), duration: FX.step2 * 0.8, ease: 'power3.inOut' }, FX.pickHold)
+        .to(menu, { clipPath: toggleClip(), duration: FX.step1 * 1.3, ease: 'power3.in' }, '>-0.05');
+      iconTo(hold, false, hold.duration() - 0.35);
     });
   };
 
