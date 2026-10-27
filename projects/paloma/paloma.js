@@ -707,7 +707,7 @@
   // (a tag inside a project card still opens the project, it just doesn't announce itself as its own button)
   if (!document.getElementById('paloma-tags-css')) {
     const st = document.createElement('style'); st.id = 'paloma-tags-css';
-    st.textContent = '.case-header_tag-list .nav_button{display:inline-flex;align-items:center;height:1.75rem;padding-top:0;padding-bottom:0;cursor:default}';
+    st.textContent = '.case-header_tag-list .nav_button{display:inline-flex;align-items:center;height:2em;padding-top:0;padding-bottom:0;cursor:default}';
     document.head.appendChild(st);
   }
   const docs = App._docs = App._docs || new Map();
