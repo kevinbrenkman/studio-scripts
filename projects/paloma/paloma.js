@@ -816,6 +816,7 @@
   const mute = (card) => { const v = videoOf(card); if (v) v.muted = true; setUi(card, false); release(card); uncenter(card); };
 
   const start = (card) => {
+    if (!card._wait) center(card); // right away, also while the video is still attaching
     const v = videoOf(card);
     if (!v) { // HLS still attaching: wait for CaseMedia to add the video, then start
       if (card._wait) return;
@@ -827,7 +828,7 @@
     if (!card._heard) { card._heard = true; v.currentTime = 0; } // first play starts at the beginning
     if (v._held) { v._held = false; gsap.killTweensOf(v); v.playbackRate = 1; }
     v.muted = false; v.loop = true;
-    play(v); setUi(card, true); hold(card); center(card);
+    play(v); setUi(card, true); hold(card);
   };
   // Pause = sound off: the video keeps looping muted, like the other cards
   const stop = (card) => { const v = videoOf(card); if (v) { v.muted = true; if (v.paused) play(v); } setUi(card, false); release(card); uncenter(card); };
