@@ -1244,6 +1244,64 @@
 // iOS Safari only applies :active (Webflow Pressed state) to links when a touchstart listener exists
 document.addEventListener('touchstart', () => {}, { passive: true });
 
+/* ---------- HlsBoost ---------- */
+// Sharper video from the first second. Bunny playlists list 360p first, and native HLS (Safari, recent Chrome) starts
+// on that and steps up, so the first seconds are blurry. With hls.js (loaded first in the site footer) we pick the
+// start quality ourselves: every player and CaseMedia loop goes through hls.js, starts at 720p or better and never
+// drops below FX.minBitrate. Then, once the page has loaded, the first seconds of the videos near the top are
+// fetched into the browser cache, so they start quicker when they come into view.
+// Browsers without hls.js support (iOS before 17.1) keep native playback.
+(() => {
+  const H = window.Hls;
+  if (!H || !H.isSupported || !H.isSupported()) return;
+  const FX = {
+    minBitrate: 2500000,                                            // never below this (720p on Bunny is ~3.8 Mbps peak)
+    estimate: () => (window.innerWidth >= 1200 ? 12000000 : 6000000), // assumed bandwidth at start: 1080p desktop, 720p phone
+    prefetchViewports: 2,                                           // prefetch videos within this many screens from the top
+    prefetchSegments: 2,                                            // segments per video (~2 to 4 s each)
+    prefetchMax: 6,                                                 // at most this many videos per page
+  };
+  Object.assign(H.DefaultConfig, { abrEwmaDefaultEstimate: FX.estimate(), minAutoBitrate: FX.minBitrate, capLevelToPlayerSize: false, testBandwidth: false });
+  // The players check canPlayType for native HLS first; answering "no" sends them to hls.js
+  const orig = HTMLMediaElement.prototype.canPlayType;
+  HTMLMediaElement.prototype.canPlayType = function (t) { return /mpegurl/i.test(t || '') ? '' : orig.call(this, t); };
+
+  // Prefetch: same choice as hls.js (highest rendition the start estimate allows, not below minBitrate)
+  const slow = () => { const c = navigator.connection; return !!(c && (c.saveData || /(^|-)2g|3g/.test(c.effectiveType || ''))); };
+  const done = new Set();
+  const abs = (u, base) => new URL(u, base).href;
+  const pick = (master, base) => {
+    const lines = master.split(/\r?\n/), out = [];
+    lines.forEach((l, i) => { const m = /BANDWIDTH=(\d+)/.exec(l); if (m && lines[i + 1]) out.push({ bw: +m[1], url: abs(lines[i + 1].trim(), base) }); });
+    const cap = FX.estimate() * 0.95, ok = out.filter((v) => v.bw >= FX.minBitrate && v.bw <= cap).sort((a, b) => b.bw - a.bw);
+    return (ok[0] || out.sort((a, b) => a.bw - b.bw).find((v) => v.bw >= FX.minBitrate) || out.pop() || {}).url;
+  };
+  const warm = async (src) => {
+    if (done.has(src)) return; done.add(src);
+    try {
+      const master = await (await fetch(src)).text();
+      const variant = /#EXT-X-STREAM-INF/.test(master) ? pick(master, src) : src;
+      if (!variant) return;
+      const list = variant === src ? master : await (await fetch(variant)).text();
+      const segs = list.split(/\r?\n/).filter((l) => l && l[0] !== '#').slice(0, FX.prefetchSegments);
+      for (const sg of segs) await fetch(abs(sg, variant));
+    } catch (_) {}
+  };
+  const run = () => {
+    if (slow()) return;
+    const limit = window.innerHeight * FX.prefetchViewports;
+    const srcs = [...document.querySelectorAll('#swup [data-case-media], #swup [data-player-src]')]
+      .filter((el) => el.getBoundingClientRect().top < limit)
+      .map((el) => (el.getAttribute('data-case-media') || el.getAttribute('data-player-src') || '').trim())
+      .filter((u) => /\.m3u8(\?|$)/i.test(u)).slice(0, FX.prefetchMax);
+    srcs.reduce((p, u) => p.then(() => warm(u)), Promise.resolve()); // one after the other, never competing with the page
+  };
+  const later = () => (window.requestIdleCallback ? requestIdleCallback(run, { timeout: 3000 }) : setTimeout(run, 1500));
+  window.App = window.App || { inits: [], destroys: [] };
+  if (document.readyState === 'complete') later(); else window.addEventListener('load', later, { once: true });
+  App.inits.push(() => { if (document.readyState === 'complete') setTimeout(later, 1200); }); // after a Swup page change
+})();
+
 /* ---------- SocialPoster ---------- */
 // Social Card thumbnail: the Thumbnail URL prop ([data-poster], e.g. a Bunny thumbnail.jpg link) wins; otherwise the
 // Thumbnail image; if that's empty too, a Bunny Video URL gives its own thumbnail (same folder, thumbnail.jpg).
@@ -1263,8 +1321,8 @@ document.addEventListener('touchstart', () => {}, { passive: true });
 })();
 
 /* ---------- NotReady (staging only) ---------- */
-// On webflow.io only: links that go nowhere yet (href="#", or an internal page that returns 404, e.g. a draft case)
-// get a not-allowed cursor and do nothing when clicked, so the client can tell which pages aren't ready.
+// On webflow.io only: navigation links that go nowhere yet (href="#", or a page that returns 404) get a
+// not-allowed cursor and do nothing when clicked, so the client can tell which pages aren't ready.
 // Never runs on the custom domain.
 (() => {
   if (!/\.webflow\.io$/.test(location.hostname)) return;
@@ -1280,7 +1338,8 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     return cache.get(path);
   };
   const skip = (a) => a.closest('.nav_logo, [data-nav-toggle]') || a.target === '_blank';
-  const init = (scope = document) => (scope || document).querySelectorAll('a[href]').forEach((a) => {
+  // Navigation only (desktop buttons + mobile menu); the rest of the site is left alone
+  const init = () => document.querySelectorAll('.navigation a[href], [data-nav-menu] a[href]').forEach((a) => {
     if (skip(a)) return;
     const h = a.getAttribute('href').trim();
     if (h === '#' || h === '') return a.setAttribute('data-not-ready', '');
