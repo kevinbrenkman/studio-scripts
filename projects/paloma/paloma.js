@@ -31,6 +31,8 @@
  *  - MediaPoster 1.2.0 (also the Full Video Player: thumbnail + video 2px bigger per side, video hidden until first play): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
  *    same slider:ready event, so SliderMotion (trackpad, auto scroll) and SliderFX (reveal, parallax) run on it too.
  *    Own module because CaseSlider removes slides that link to the current page (the play button is href="#").
+ *  - CardRim 1.0.0: Social Card playing with sound gets the glass button rim round the video edge; drifts round,
+ *    turns to the cursor on hover. Markup and CSS in the Social Card component (.social-card_rim).
  *  - SocialCard 1.3.0 (pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
@@ -829,6 +831,72 @@
     document.querySelectorAll(CARD).forEach((c) => { if (c._wait) { c._wait.disconnect(); c._wait = null; } mute(c); });
     if (io) { io.disconnect(); io = null; }
   });
+  if (document.readyState !== 'loading') init(document);
+})();
+
+/* ---------- CardRim ---------- */
+// Social Card playing with sound: the glass rim of the buttons runs round the video edge. Markup in the Designer:
+// .social-card_rim [data-card-rim] inside .social-card_media, with the two nav_button-stroke-gradient highlights
+// (data-rim 0 and 180, same as the glass buttons). Shown by CSS while .is-sound; this only moves the highlights.
+// It drifts round slowly on its own (also on phones, so the playing card keeps shining) and turns towards the
+// cursor while you hover the card.
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const RIM = {
+    drift: 30,        // degrees a second when not following the cursor (one lap in 12s)
+    follow: 0.12,     // how quickly it turns to the cursor (share of the gap per frame at 60fps)
+    margin: 40,       // px around the card that still counts as hovering
+    rest: -135,       // start angle: top left, like the buttons at rest
+  };
+  const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const CAN_HOVER = matchMedia('(hover: hover) and (pointer: fine)').matches;
+  const live = new Set();
+  let px = null, py = null, on = false;
+  const edge = (w, h, deg) => { // point on the box edge in that direction, from the centre
+    const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    const k = Math.min(Math.abs(c) > 1e-6 ? (w / 2) / Math.abs(c) : Infinity, Math.abs(s) > 1e-6 ? (h / 2) / Math.abs(s) : Infinity);
+    return { x: w / 2 + c * k, y: h / 2 + s * k };
+  };
+  const gap = (d) => ((d % 360) + 540) % 360 - 180; // shortest turn
+  const move = (e) => { px = e.clientX; py = e.clientY; };
+  const tick = (time, dt) => {
+    const d = Math.min(dt, 50) / 1000;
+    live.forEach((r) => {
+      if (!r.el.isConnected) { live.delete(r); return; }
+      if (!r.card.classList.contains('is-sound') && !r.card.classList.contains('is-glow-out')) return;
+      const w = r.el.offsetWidth, h = r.el.offsetHeight;
+      let hover = false;
+      if (CAN_HOVER && px !== null) {
+        const b = r.el.getBoundingClientRect(), m = RIM.margin;
+        if (px > b.left - m && px < b.right + m && py > b.top - m && py < b.bottom + m) {
+          hover = true;
+          const to = Math.atan2(py - (b.top + b.height / 2), px - (b.left + b.width / 2)) * 180 / Math.PI;
+          r.a += gap(to - r.a) * (1 - Math.pow(1 - RIM.follow, d * 60));
+        }
+      }
+      if (!hover && !RM) r.a += RIM.drift * d;
+      r.hl.forEach((g) => { const p = edge(w, h, r.a + g.off); g.x(p.x); g.y(p.y); });
+    });
+    if (!live.size) stop();
+  };
+  const start = () => { if (on || !window.gsap) return; on = true; gsap.ticker.add(tick); if (CAN_HOVER) window.addEventListener('pointermove', move, { passive: true }); };
+  const stop = () => { if (!on) return; on = false; gsap.ticker.remove(tick); window.removeEventListener('pointermove', move); };
+  const setup = (el) => {
+    if (el._cr || !window.gsap) return;
+    const card = el.closest('[data-social-card]');
+    if (!card) return;
+    el._cr = true;
+    const hl = [...el.querySelectorAll('[data-rim]')].map((g) => {
+      gsap.set(g, { left: 0, top: 0, xPercent: -50, yPercent: -50 });
+      return { off: parseFloat(g.dataset.rim) || 0, x: gsap.quickSetter(g, 'x', 'px'), y: gsap.quickSetter(g, 'y', 'px') };
+    });
+    const r = { el, card, hl, a: RIM.rest };
+    hl.forEach((g) => { const p = edge(el.offsetWidth, el.offsetHeight, r.a + g.off); g.x(p.x); g.y(p.y); });
+    live.add(r);
+  };
+  const init = (scope = document) => { (scope || document).querySelectorAll('[data-card-rim]').forEach(setup); if (live.size) start(); };
+  App.inits.push(init);
+  App.destroys.push(() => { live.forEach((r) => { delete r.el._cr; }); live.clear(); stop(); });
   if (document.readyState !== 'loading') init(document);
 })();
 
