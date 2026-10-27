@@ -1397,9 +1397,9 @@ document.addEventListener('touchstart', () => {}, { passive: true });
 })();
 
 /* ---------- NotReady (staging only) ---------- */
-// On webflow.io only: navigation links that go nowhere yet (href="#", or a page that returns 404) get a
-// not-allowed cursor and do nothing when clicked, so the client can tell which pages aren't ready.
-// Never runs on the custom domain.
+// On webflow.io only: links that go nowhere yet (href="#", or a page that returns 404) get a not-allowed cursor and
+// do nothing when clicked, so the client can tell which pages aren't ready. Covers the navigation and the project
+// cards (homepage, overview, sliders, also slider clones). Never runs on the custom domain.
 (() => {
   if (!/\.webflow\.io$/.test(location.hostname)) return;
   window.App = window.App || { inits: [], destroys: [] };
@@ -1408,25 +1408,34 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     st.textContent = '[data-not-ready],[data-not-ready] *{cursor:not-allowed!important}';
     document.head.appendChild(st);
   }
+  const NAV = '.navigation a[href], [data-nav-menu] a[href]';
+  const CARDS = '.project-card a[href], a.project-card[href], a.project-card_link[href]';
   const cache = new Map(); // path -> Promise<boolean ok>
+  const bad = new Set();   // paths known to 404
   const check = (path) => {
     if (!cache.has(path)) cache.set(path, fetch(path, { method: 'HEAD' }).then((r) => r.ok).catch(() => true));
     return cache.get(path);
   };
+  const pathOf = (a) => { try { const u = new URL(a.href); return u.origin === location.origin ? u.pathname : null; } catch (_) { return null; } };
   const skip = (a) => a.closest('.nav_logo, [data-nav-toggle]') || a.target === '_blank';
-  // Navigation only (desktop buttons + mobile menu); the rest of the site is left alone
-  const init = () => document.querySelectorAll('.navigation a[href], [data-nav-menu] a[href]').forEach((a) => {
+  const markPath = (path) => document.querySelectorAll(NAV + ',' + CARDS).forEach((a) => { if (pathOf(a) === path) a.setAttribute('data-not-ready', ''); });
+  const scan = () => document.querySelectorAll(NAV + ',' + CARDS).forEach((a) => {
     if (skip(a)) return;
     const h = a.getAttribute('href').trim();
     if (h === '#' || h === '') return a.setAttribute('data-not-ready', '');
-    let u; try { u = new URL(a.href); } catch (_) { return; }
-    if (u.origin !== location.origin || u.hash && u.pathname === location.pathname) return;
-    check(u.pathname).then((ok) => { if (!ok) a.setAttribute('data-not-ready', ''); });
+    const path = pathOf(a);
+    if (!path || (a.hash && path === location.pathname)) return;
+    if (bad.has(path)) return a.setAttribute('data-not-ready', '');
+    check(path).then((ok) => { if (!ok) { bad.add(path); markPath(path); } });
   });
+  // Sliders clone their cards after init: scan again a moment later
+  const init = () => { scan(); setTimeout(scan, 1500); };
   // Capture phase, before Swup and the menu: a not-ready link does nothing (in the menu it just closes the menu)
   window.addEventListener('click', (e) => {
-    const a = e.target.closest && e.target.closest('[data-not-ready]');
+    const a = e.target.closest && e.target.closest('a[href]');
     if (!a) return;
+    const path = pathOf(a);
+    if (!a.hasAttribute('data-not-ready') && !(path && bad.has(path) && a.matches(NAV + ',' + CARDS))) return;
     e.preventDefault();
     if (!a.closest('[data-nav-menu]')) e.stopImmediatePropagation();
   }, true);
