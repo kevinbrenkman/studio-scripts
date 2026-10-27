@@ -21,7 +21,7 @@
  *    without the stagger.
  *  - SocialSlider 1.5.0: Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
- *  - MobileMenu 1.3.0 (closing = the opening played in reverse; links wait for it): phone menu (below 480px): the glass toggle grows into the glass panel (clip from its corner), lines morph into one bar, current page in serif.
+ *  - MobileMenu 1.3.0 (closing = the opening played in reverse; links wait for it): menu (tablet and phone, below 992px): the glass toggle grows into the glass panel (clip from its corner), lines morph into one bar, current page in serif.
  *  - CardLoaded 1.1.0: project cards + case media / players: media box switches to the page background once its image loaded (no 1px line).
  *  - LogoOnMedia 1.1.0: nav logo gets data-on-media over images/videos (filter lift in the Navigation embed); keeps the logo loop playing.
  *  - LogoHover 1.0.0: hovering the nav logo brakes the spin to a stop facing forward (loop start/end), leaving spins it back up.
@@ -1166,7 +1166,7 @@
 
 
 /* ---------- MobileMenu ---------- */
-// Phone menu (Navigation component, below 480px): the glass toggle [data-nav-toggle] opens the glass panel
+// Menu (Navigation component, tablet and phone, below 992px): the glass toggle [data-nav-toggle] opens the glass panel
 // [data-nav-menu]. Lines: the outer two slide into the middle one, which stretches into a single bar (close icon).
 // Closes on a link, the toggle, Escape, a page change and when the screen gets wider than a phone.
 // Current page: .is-current on the matching .nav_menu-link (href, or data-nav-match="/projects" for the sections under it),
@@ -1304,7 +1304,7 @@
       setOpen(false).then(() => { if (go) window.swup ? window.swup.navigate(go) : (location.href = go); });
     }, true);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && open) { setOpen(false); toggle.focus(); } });
-    matchMedia('(max-width: 479px)').addEventListener('change', (e) => { if (!e.matches) setOpen(false, true); });
+    matchMedia('(max-width: 991px)').addEventListener('change', (e) => { if (!e.matches) setOpen(false, true); });
     if (window.swup) window.swup.hooks.on('visit:start', () => setOpen(false));
     return true;
   };
