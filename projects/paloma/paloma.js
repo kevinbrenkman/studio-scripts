@@ -33,7 +33,7 @@
  *    Own module because CaseSlider removes slides that link to the current page (the play button is href="#").
  *  - CardRim 1.0.0: Social Card playing with sound gets the glass button rim round the video edge; drifts round,
  *    turns to the cursor on hover. Markup and CSS in the Social Card component (.social-card_rim).
- *  - SocialCard 1.3.0 (pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
+ *  - SocialCard 1.4.0 (a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
@@ -809,11 +809,19 @@
   // Pause = sound off: the video keeps looping muted, like the other cards
   const stop = (card) => { const v = videoOf(card); if (v) { v.muted = true; if (v.paused) play(v); } setUi(card, false); release(card); };
 
+  // Play button, and a click on the video itself (same toggle). A drag in the slider is not a click: ignored when
+  // the pointer moved more than DRAG px between press and release.
+  const DRAG = 6;
+  let down = null;
+  document.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY }; }, { passive: true });
   document.addEventListener('click', (e) => {
-    const b = e.target.closest && e.target.closest('[data-social-play]');
-    if (!b) return;
+    if (!e.target.closest) return;
+    const b = e.target.closest('[data-social-play]');
+    const m = !b && e.target.closest(CARD + ' .social-card_media');
+    if (!b && !m) return;
+    if (m && down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > DRAG) return;
     e.preventDefault();
-    const card = b.closest(CARD);
+    const card = (b || m).closest(CARD);
     if (card) card.classList.contains('is-sound') ? stop(card) : start(card);
   });
 
