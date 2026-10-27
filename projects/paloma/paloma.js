@@ -1224,7 +1224,7 @@
       if (e.metaKey || e.ctrlKey || e.shiftKey || link.target === '_blank') return;
       e.preventDefault(); e.stopImmediatePropagation();
       picked = link;
-      const go = !href || href[0] === '#' || clean(new URL(link.href, location.origin).pathname) === clean(location.pathname) ? null : link.href;
+      const go = link.hasAttribute('data-not-ready') || !href || href[0] === '#' || clean(new URL(link.href, location.origin).pathname) === clean(location.pathname) ? null : link.href;
       setOpen(false).then(() => { if (go) window.swup ? window.swup.navigate(go) : (location.href = go); });
     }, true);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && open) { setOpen(false); toggle.focus(); } });
@@ -1243,6 +1243,61 @@
 
 // iOS Safari only applies :active (Webflow Pressed state) to links when a touchstart listener exists
 document.addEventListener('touchstart', () => {}, { passive: true });
+
+/* ---------- SocialPoster ---------- */
+// Social Card thumbnail: the Thumbnail URL prop ([data-poster], e.g. a Bunny thumbnail.jpg link) wins; otherwise the
+// Thumbnail image; if that's empty too, a Bunny Video URL gives its own thumbnail (same folder, thumbnail.jpg).
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const empty = (img) => { const s = img.getAttribute('src') || ''; return !s || /placeholder/i.test(s); };
+  const bunnyThumb = (u) => (/b-cdn\.net\/.+\/(playlist\.m3u8|play_\d+p\.mp4)/.test(u || '') ? u.replace(/[^/]+$/, 'thumbnail.jpg') : '');
+  const set = (img, url) => { img.removeAttribute('srcset'); img.removeAttribute('sizes'); img.src = url; };
+  const init = (scope = document) => (scope || document).querySelectorAll('.social-card_media').forEach((m) => {
+    const img = m.querySelector('img'); if (!img) return;
+    const own = (m.getAttribute('data-poster') || '').trim();
+    if (own) return set(img, own);
+    if (empty(img)) { const t = bunnyThumb(m.getAttribute('data-case-media')); if (t) set(img, t); }
+  });
+  App.inits.push(init);
+  if (document.readyState !== 'loading') init(document);
+})();
+
+/* ---------- NotReady (staging only) ---------- */
+// On webflow.io only: links that go nowhere yet (href="#", or an internal page that returns 404, e.g. a draft case)
+// get a not-allowed cursor and do nothing when clicked, so the client can tell which pages aren't ready.
+// Never runs on the custom domain.
+(() => {
+  if (!/\.webflow\.io$/.test(location.hostname)) return;
+  window.App = window.App || { inits: [], destroys: [] };
+  if (!document.getElementById('paloma-notready-css')) {
+    const st = document.createElement('style'); st.id = 'paloma-notready-css';
+    st.textContent = '[data-not-ready],[data-not-ready] *{cursor:not-allowed!important}';
+    document.head.appendChild(st);
+  }
+  const cache = new Map(); // path -> Promise<boolean ok>
+  const check = (path) => {
+    if (!cache.has(path)) cache.set(path, fetch(path, { method: 'HEAD' }).then((r) => r.ok).catch(() => true));
+    return cache.get(path);
+  };
+  const skip = (a) => a.closest('.nav_logo, [data-nav-toggle]') || a.target === '_blank';
+  const init = (scope = document) => (scope || document).querySelectorAll('a[href]').forEach((a) => {
+    if (skip(a)) return;
+    const h = a.getAttribute('href').trim();
+    if (h === '#' || h === '') return a.setAttribute('data-not-ready', '');
+    let u; try { u = new URL(a.href); } catch (_) { return; }
+    if (u.origin !== location.origin || u.hash && u.pathname === location.pathname) return;
+    check(u.pathname).then((ok) => { if (!ok) a.setAttribute('data-not-ready', ''); });
+  });
+  // Capture phase, before Swup and the menu: a not-ready link does nothing (in the menu it just closes the menu)
+  window.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('[data-not-ready]');
+    if (!a) return;
+    e.preventDefault();
+    if (!a.closest('[data-nav-menu]')) e.stopImmediatePropagation();
+  }, true);
+  App.inits.push(init);
+  if (document.readyState !== 'loading') init(document);
+})();
 
 /* ---------- CardLoaded ---------- */
 // Project cards: the media box is filled with the theme text colour while the image loads. Once the image is in,
