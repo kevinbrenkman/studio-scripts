@@ -33,7 +33,7 @@
  *    Own module because CaseSlider removes slides that link to the current page (the play button is href="#").
  *  - CardRim 1.0.0: Social Card playing with sound gets the glass button rim round the video edge; drifts round,
  *    turns to the cursor on hover. Markup and CSS in the Social Card component (.social-card_rim).
- *  - SocialCard 1.4.0 (a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
+ *  - SocialCard 1.5.0 (on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
@@ -790,7 +790,30 @@
       gsap.to(v, { playbackRate: 1, duration: 1.2, ease: 'power2.out' });
     });
   };
-  const mute = (card) => { const v = videoOf(card); if (v) v.muted = true; setUi(card, false); release(card); };
+  // Tablet and phone: the card that starts playing glides to the middle of the screen, so it is never half off-screen.
+  // Auto scroll (SliderMotion) is paused meanwhile: it pauses on pointerenter, which is what it gets here.
+  const CENTER = { maxWidth: 767, duration: 0.7, ease: 'power3.inOut' };
+  const center = (card) => {
+    if (!window.gsap || !matchMedia('(max-width: ' + CENTER.maxWidth + 'px)').matches) return;
+    const root = card.closest('[data-social-slider]'), sp = root && root._sp, slide = card.closest('.splide__slide');
+    if (!sp || !slide) return;
+    const track = root.querySelector('.splide__track');
+    if (track && !root._held) { root._held = true; track.dispatchEvent(new Event('pointerenter')); }
+    const r = slide.getBoundingClientRect(), delta = innerWidth / 2 - (r.left + r.width / 2);
+    if (Math.abs(delta) < 2) return;
+    const Move = sp.Components.Move, o = { p: Move.getPosition() };
+    gsap.killTweensOf(root._center || {});
+    root._center = o;
+    gsap.to(o, { p: o.p + delta, duration: CENTER.duration, ease: CENTER.ease, onUpdate: () => Move.translate(o.p) });
+  };
+  const uncenter = (card) => {
+    const root = card.closest('[data-social-slider]');
+    if (!root || !root._held || root.querySelector(CARD + '.is-sound')) return;
+    root._held = false;
+    const track = root.querySelector('.splide__track');
+    if (track) track.dispatchEvent(new Event('pointerleave'));
+  };
+  const mute = (card) => { const v = videoOf(card); if (v) v.muted = true; setUi(card, false); release(card); uncenter(card); };
 
   const start = (card) => {
     const v = videoOf(card);
@@ -804,10 +827,10 @@
     if (!card._heard) { card._heard = true; v.currentTime = 0; } // first play starts at the beginning
     if (v._held) { v._held = false; gsap.killTweensOf(v); v.playbackRate = 1; }
     v.muted = false; v.loop = true;
-    play(v); setUi(card, true); hold(card);
+    play(v); setUi(card, true); hold(card); center(card);
   };
   // Pause = sound off: the video keeps looping muted, like the other cards
-  const stop = (card) => { const v = videoOf(card); if (v) { v.muted = true; if (v.paused) play(v); } setUi(card, false); release(card); };
+  const stop = (card) => { const v = videoOf(card); if (v) { v.muted = true; if (v.paused) play(v); } setUi(card, false); release(card); uncenter(card); };
 
   // Play button, and a click on the video itself (same toggle). A drag in the slider is not a click: ignored when
   // the pointer moved more than DRAG px between press and release.
