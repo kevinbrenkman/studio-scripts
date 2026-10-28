@@ -1159,34 +1159,6 @@ if (!document.getElementById('paloma-splide-sr')) {
   if (document.readyState !== 'loading') init(document);
 })();
 
-/* ---------- SliderDebug (?debug-slider only) ---------- */
-// Prints the real measurements of every Case Study Slider on screen, for checking on a phone. Off unless the URL
-// has ?debug-slider. Tap the panel to refresh it.
-(() => {
-  if (!/debug-slider/.test(location.search)) return;
-  const show = () => {
-    let box = document.getElementById('paloma-sdbg');
-    if (!box) { box = document.createElement('pre'); box.id = 'paloma-sdbg'; box.style.cssText = 'position:fixed;left:4px;right:4px;bottom:4px;z-index:99999;margin:0;padding:6px;background:#fff;color:#000;font:10px/1.3 monospace;white-space:pre-wrap;max-height:45vh;overflow:auto'; box.onclick = show; document.body.appendChild(box); }
-    const r = (el) => { if (!el) return '-'; const b = el.getBoundingClientRect(); return Math.round(b.left) + '..' + Math.round(b.right) + ' w' + Math.round(b.width); };
-    const cs = (el, k) => (el ? getComputedStyle(el)[k] : '-');
-    const de = document.documentElement;
-    const out = ['vw ' + innerWidth + ' doc ' + de.clientWidth + ' scrollW ' + de.scrollWidth + ' scrollX ' + scrollX + ' vv ' + (window.visualViewport ? Math.round(visualViewport.width) + '@' + Math.round(visualViewport.offsetLeft) : '-') + ' dpr ' + devicePixelRatio,
-      'pm ' + getComputedStyle(document.body).getPropertyValue('--_responsive---page-margin') + ' TOUCH ' + App.TOUCH];
-    document.querySelectorAll('[data-social-slider]').forEach((root, i) => {
-      const sp = root._sp, tr = root.querySelector('.splide__track'), li = root.querySelector('.splide__list');
-      const sl = [...root.querySelectorAll('.splide__slide')];
-      out.push('#' + i + ' root ' + r(root) + ' pad ' + cs(root, 'paddingLeft') + '/' + cs(root, 'paddingRight') + ' ml ' + cs(root, 'marginLeft'));
-      out.push('  track ' + r(tr) + ' pad ' + cs(tr, 'paddingLeft') + '/' + cs(tr, 'paddingRight') + ' ov ' + cs(tr, 'overflow'));
-      out.push('  list ' + r(li) + ' ' + (li && li.style.transform) + ' pad ' + cs(li, 'paddingLeft') + ' ml ' + cs(li, 'marginLeft'));
-      out.push('  slide0 ' + r(sl[0]) + ' ml ' + cs(sl[0], 'marginLeft') + ' mr ' + cs(sl[0], 'marginRight') + ' | last ' + r(sl[sl.length - 1]));
-      if (sp) out.push('  idx ' + sp.index + '/' + sp.length + ' focus ' + sp.options.focus + ' pos ' + Math.round(sp.Components.Move.getPosition()) + ' lim ' + Math.round(sp.Components.Move.getLimit(false)) + '/' + Math.round(sp.Components.Move.getLimit(true)));
-    });
-    box.textContent = out.join('\n');
-  };
-  window.addEventListener('load', () => setTimeout(show, 2500));
-  document.addEventListener('slider:ready', () => setTimeout(show, 2500));
-})();
-
 /* ---------- SliderDrag ---------- */
 // Every slider (homepage, More Cases, Case Study Slider): a horizontal trackpad swipe drags the slider with your
 // fingers, you can go back mid-swipe, and when you let go it settles on the nearest card. While swiping sideways
