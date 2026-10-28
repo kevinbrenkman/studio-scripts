@@ -19,7 +19,7 @@
  *    Script keeps: press scale on all arrow links, the Apply text arrow hover, links left on # visual only. Services: the hover card image is zoomed and follows the cursor.
  *  - CaseTags 1.9.0: tags 28px tall (design), default cursor; slider cards get their tags straight away. Moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
  *    without the stagger.
- *  - SocialSlider 1.7.0 (page margin straight from the CSS variable, phone layout via Splide breakpoints; Splide's "…" announcer hidden on every slider). 1.6.1 (re-measures after load so the last card keeps its right margin) 1.6.0 (phone: first card left, last right, the rest centred; touch: sliding away pauses the playing card): Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
+ *  - SocialSlider 1.8.0 (infinite again from 768px up; phone unchanged). 1.7.0 (page margin straight from the CSS variable, phone layout via Splide breakpoints; Splide's "…" announcer hidden on every slider). 1.6.1 (re-measures after load so the last card keeps its right margin) 1.6.0 (phone: first card left, last right, the rest centred; touch: sliding away pauses the playing card): Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
  *  - MobileMenu 1.3.0 (closing = the opening played in reverse; links wait for it): menu (tablet and phone, below 992px): the glass toggle grows into the glass panel (clip from its corner), lines morph into one bar, current page in serif.
  *  - CardLoaded 1.2.0 (also social and media cards; CSS :has, no load event): project cards + case media / players: media box switches to the page background once its image loaded (no 1px line).
@@ -1067,18 +1067,20 @@ if (!document.getElementById('paloma-splide-sr')) {
         const at = [...el.attributes].find((x) => VAR.test(x.name)); if (at) variant = at.value;
       }
       const auto = /fast/.test(variant) ? 4 : /slow/.test(variant) ? 2 : 0;
-      // Infinite (loop) only when it auto scrolls: a loop clones every card, and every clone is another video
-      // player. Tablet and phone: the cards sit centred (start on the second card when there are 3 or more).
+      // Loop clones every card (desktop only, see below). Phone: first card on the left margin, last on the right.
       // Desktop: left aligned on the page margin (Variables > Responsive > Page Margin).
       // Padding is the CSS variable itself (not a value read once at start), so it always follows the breakpoint.
       // Phone layout through Splide's breakpoints, so it can't get stuck on the layout of the moment it started.
       const pm = 'var(--_responsive---page-margin, 1.25rem)';
+      // Infinite on desktop (and whenever it auto scrolls). Phone and tablet portrait stay a normal slider: no clones,
+      // so no extra video players there, and the first / last card sit on the page margin.
+      const loop = auto > 0 || matchMedia('(min-width: 768px)').matches;
       // Phone: the cards between first and last sit centred; the first stays on the left page margin and the last
       // on the right one (trimSpace), so there is no empty space before the first or after the last.
       const sp = new Splide(root, {
-        type: auto ? 'loop' : 'slide', autoWidth: true, gap: '1.5625rem', arrows: false, pagination: false, speed: 1000,
+        type: loop ? 'loop' : 'slide', autoWidth: true, gap: '1.5625rem', arrows: false, pagination: false, speed: 1000,
         focus: 0, trimSpace: true,
-        padding: { left: pm, right: auto ? 0 : pm },
+        padding: { left: pm, right: loop ? 0 : pm },
         breakpoints: { 767: { focus: 'center' } },
       });
       // Touch: sliding to another card pauses the one that plays
