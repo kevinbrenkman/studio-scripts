@@ -33,7 +33,7 @@
  *    Own module because CaseSlider removes slides that link to the current page (the play button is href="#").
  *  - CardRim 1.0.0: Social Card playing with sound gets the glass button rim round the video edge; drifts round,
  *    turns to the cursor on hover. Markup and CSS in the Social Card component (.social-card_rim).
- *  - SocialCard 1.5.0 (on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
+ *  - SocialCard 1.6.0 (first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
@@ -760,6 +760,12 @@
   window.App = window.App || { inits: [], destroys: [] };
   const CARD = '[data-social-card]';
   let io = null;
+  if (!document.getElementById('paloma-social-css')) {
+    const st = document.createElement('style'); st.id = 'paloma-social-css';
+    st.textContent = '@keyframes paloma-pulse{0%,100%{opacity:1}50%{opacity:.45}}' +
+      '[data-social-card].is-loading [data-social-play]{animation:paloma-pulse .9s ease-in-out infinite}';
+    document.head.appendChild(st);
+  }
   const videoOf = (card) => card.querySelector('video');
   const setUi = (card, on) => {
     if (!on && card.classList.contains('is-sound')) { // glow fades out (CSS is-glow-out, 0.5s)
@@ -825,7 +831,18 @@
       return;
     }
     document.querySelectorAll(CARD + '.is-sound').forEach((c) => c !== card && mute(c));
-    if (!card._heard) { card._heard = true; v.currentTime = 0; } // first play starts at the beginning
+    // First play starts at the beginning, but only when that part is already buffered: a seek to a part that
+    // still has to load made the first tap feel like nothing happened. Otherwise the sound comes on where it is.
+    if (!card._heard) {
+      card._heard = true;
+      const b = v.buffered; let ok = false;
+      for (let i = 0; i < b.length; i++) if (b.start(i) <= 0.1 && b.end(i) > 1.5) ok = true;
+      if (ok) v.currentTime = 0;
+    }
+    // Feedback while the sound version is still loading: the play button pulses (CSS below) until it plays
+    card.classList.add('is-loading');
+    const ready = () => card.classList.remove('is-loading');
+    if (!v.paused && v.readyState >= 3) setTimeout(ready, 0); else { v.addEventListener('playing', ready, { once: true }); v.addEventListener('canplay', ready, { once: true }); setTimeout(ready, 8000); }
     if (v._held) { v._held = false; gsap.killTweensOf(v); v.playbackRate = 1; }
     v.muted = false; v.loop = true;
     play(v); setUi(card, true); hold(card);
@@ -1345,42 +1362,65 @@
 document.addEventListener('touchstart', () => {}, { passive: true });
 
 /* ---------- HlsBoost ---------- */
-// Sharper video from the first second. Bunny playlists list 360p first, and native HLS (Safari, recent Chrome) starts
-// on that and steps up, so the first seconds are blurry. With hls.js (loaded first in the site footer) we pick the
-// start quality ourselves: every player and CaseMedia loop goes through hls.js, starts at 720p or better and never
-// drops below FX.minBitrate. Then, once the page has loaded, the first seconds of the videos near the top are
-// fetched into the browser cache, so they start quicker when they come into view.
+// Video quality that fits the player. Bunny playlists list 360p first and native HLS starts there (blurry), so every
+// player and CaseMedia loop goes through hls.js and we pick the start quality ourselves.
+// 1.1.0: the quality follows the size of the video on screen (capLevelToPlayerSize, at most 2x pixel density), so a
+// 220px social card on a phone gets about 480p instead of 1080p, while a full-width player still gets 1080p.
+// On phones the muted loops buffer less ahead. Prefetch picks the same quality the player will pick, per video.
 // Browsers without hls.js support (iOS before 17.1) keep native playback.
 (() => {
   const H = window.Hls;
   if (!H || !H.isSupported || !H.isSupported()) return;
+  const PHONE = window.innerWidth < 768;
   const FX = {
-    minBitrate: 2500000,                                            // never below this (720p on Bunny is ~3.8 Mbps peak)
-    estimate: () => (window.innerWidth >= 1200 ? 12000000 : 6000000), // assumed bandwidth at start: 1080p desktop, 720p phone
-    prefetchViewports: 2,                                           // prefetch videos within this many screens from the top
-    prefetchSegments: 2,                                            // segments per video (~2 to 4 s each)
-    prefetchMax: 6,                                                 // at most this many videos per page
+    minBitrate: 1000000,                                            // never below this (about 480p on Bunny)
+    maxDpr: 2,                                                      // pixel density counted when matching quality to size
+    estimate: () => (window.innerWidth >= 1200 ? 12000000 : 6000000), // assumed bandwidth at start
+    loopBuffer: PHONE ? 6 : 10,                                     // seconds a muted loop buffers ahead
+    prefetchViewports: PHONE ? 1 : 2,                               // prefetch videos within this many screens from the top
+    prefetchSegments: PHONE ? 1 : 2,                                // segments per video (~2 to 4 s each)
+    prefetchMax: PHONE ? 3 : 6,                                     // at most this many videos per page
   };
-  Object.assign(H.DefaultConfig, { abrEwmaDefaultEstimate: FX.estimate(), minAutoBitrate: FX.minBitrate, capLevelToPlayerSize: false, testBandwidth: false });
+  Object.assign(H.DefaultConfig, {
+    abrEwmaDefaultEstimate: FX.estimate(), minAutoBitrate: FX.minBitrate, testBandwidth: false,
+    capLevelToPlayerSize: true, maxDevicePixelRatio: FX.maxDpr,
+  });
+  // Muted loops (CaseMedia asks for a short buffer): cap it further on phones
+  class PalomaHls extends H {
+    constructor(c = {}) {
+      const loop = c.maxBufferLength && c.maxBufferLength <= 10;
+      super(loop ? Object.assign({}, c, { maxBufferLength: Math.min(c.maxBufferLength, FX.loopBuffer), maxMaxBufferLength: FX.loopBuffer * 2 }) : c);
+    }
+  }
+  window.Hls = PalomaHls;
   // The players check canPlayType for native HLS first; answering "no" sends them to hls.js
   const orig = HTMLMediaElement.prototype.canPlayType;
   HTMLMediaElement.prototype.canPlayType = function (t) { return /mpegurl/i.test(t || '') ? '' : orig.call(this, t); };
 
-  // Prefetch: same choice as hls.js (highest rendition the start estimate allows, not below minBitrate)
+  // Prefetch: the same quality hls.js will pick for that element (smallest rendition covering its size, within the
+  // start estimate and above minBitrate)
   const slow = () => { const c = navigator.connection; return !!(c && (c.saveData || /(^|-)2g|3g/.test(c.effectiveType || ''))); };
   const done = new Set();
   const abs = (u, base) => new URL(u, base).href;
-  const pick = (master, base) => {
+  const pick = (master, base, el) => {
     const lines = master.split(/\r?\n/), out = [];
-    lines.forEach((l, i) => { const m = /BANDWIDTH=(\d+)/.exec(l); if (m && lines[i + 1]) out.push({ bw: +m[1], url: abs(lines[i + 1].trim(), base) }); });
-    const cap = FX.estimate() * 0.95, ok = out.filter((v) => v.bw >= FX.minBitrate && v.bw <= cap).sort((a, b) => b.bw - a.bw);
-    return (ok[0] || out.sort((a, b) => a.bw - b.bw).find((v) => v.bw >= FX.minBitrate) || out.pop() || {}).url;
+    lines.forEach((l, i) => {
+      const bw = /BANDWIDTH=(\d+)/.exec(l), res = /RESOLUTION=(\d+)x(\d+)/.exec(l);
+      if (bw && lines[i + 1]) out.push({ bw: +bw[1], w: res ? +res[1] : 0, h: res ? +res[2] : 0, url: abs(lines[i + 1].trim(), base) });
+    });
+    if (!out.length) return '';
+    out.sort((a, b) => a.bw - b.bw);
+    const r = el.getBoundingClientRect(), d = Math.min(window.devicePixelRatio || 1, FX.maxDpr);
+    const cw = r.width * d, ch = r.height * d, cap = FX.estimate() * 0.95;
+    const fit = out.find((v) => v.w >= cw || v.h >= ch) || out[out.length - 1];
+    const ok = out.filter((v) => v.bw >= FX.minBitrate && v.bw <= cap && v.bw <= fit.bw);
+    return (ok.pop() || out.find((v) => v.bw >= FX.minBitrate) || fit).url;
   };
-  const warm = async (src) => {
+  const warm = async (src, el) => {
     if (done.has(src)) return; done.add(src);
     try {
       const master = await (await fetch(src)).text();
-      const variant = /#EXT-X-STREAM-INF/.test(master) ? pick(master, src) : src;
+      const variant = /#EXT-X-STREAM-INF/.test(master) ? pick(master, src, el) : src;
       if (!variant) return;
       const list = variant === src ? master : await (await fetch(variant)).text();
       const segs = list.split(/\r?\n/).filter((l) => l && l[0] !== '#').slice(0, FX.prefetchSegments);
@@ -1390,11 +1430,11 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   const run = () => {
     if (slow()) return;
     const limit = window.innerHeight * FX.prefetchViewports;
-    const srcs = [...document.querySelectorAll('#swup [data-case-media], #swup [data-player-src]')]
-      .filter((el) => el.getBoundingClientRect().top < limit)
-      .map((el) => (el.getAttribute('data-case-media') || el.getAttribute('data-player-src') || '').trim())
-      .filter((u) => /\.m3u8(\?|$)/i.test(u)).slice(0, FX.prefetchMax);
-    srcs.reduce((p, u) => p.then(() => warm(u)), Promise.resolve()); // one after the other, never competing with the page
+    const els = [...document.querySelectorAll('#swup [data-case-media], #swup [data-player-src]')]
+      .filter((el) => { const r = el.getBoundingClientRect(); return r.top < limit && r.right > 0 && r.left < window.innerWidth && !el.closest('.splide__slide--clone'); })
+      .filter((el) => /\.m3u8(\?|$)/i.test((el.getAttribute('data-case-media') || el.getAttribute('data-player-src') || '').trim()))
+      .slice(0, FX.prefetchMax);
+    els.reduce((p, el) => p.then(() => warm((el.getAttribute('data-case-media') || el.getAttribute('data-player-src')).trim(), el)), Promise.resolve());
   };
   const later = () => (window.requestIdleCallback ? requestIdleCallback(run, { timeout: 3000 }) : setTimeout(run, 1500));
   window.App = window.App || { inits: [], destroys: [] };
