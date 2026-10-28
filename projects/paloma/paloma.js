@@ -19,7 +19,7 @@
  *    Script keeps: press scale on all arrow links, the Apply text arrow hover, links left on # visual only. Services: the hover card image is zoomed and follows the cursor.
  *  - CaseTags 1.9.0: tags 28px tall (design), default cursor; slider cards get their tags straight away. Moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
  *    without the stagger.
- *  - SocialSlider 1.5.0: Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
+ *  - SocialSlider 1.6.0 (phone: first card left, last right, the rest centred; touch: sliding away pauses the playing card): Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
  *  - MobileMenu 1.3.0 (closing = the opening played in reverse; links wait for it): menu (tablet and phone, below 992px): the glass toggle grows into the glass panel (clip from its corner), lines morph into one bar, current page in serif.
  *  - CardLoaded 1.1.0: project cards + case media / players: media box switches to the page background once its image loaded (no 1px line).
@@ -33,10 +33,31 @@
  *    Own module because CaseSlider removes slides that link to the current page (the play button is href="#").
  *  - CardRim 1.0.0: Social Card playing with sound gets the glass button rim round the video edge; drifts round,
  *    turns to the cursor on hover. Markup and CSS in the Social Card component (.social-card_rim).
- *  - SocialCard 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
+ *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
+ *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  App.TOUCH = matchMedia('(hover: none), (pointer: coarse)').matches;
+})();
+
+/* ---------- TouchNoHover ---------- */
+// Touch: a tap fires mouse hover events too, so the Webflow "Arrow link hover" interaction played on every tap and
+// stuck. On touch, hover events never reach the arrow links (stopped on the way down, before Webflow sees them).
+(() => {
+  const SEL = '.arrow-link, .case-slider_heading, .case-header_more, .jobs_apply';
+  let touchAt = 0;
+  window.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') touchAt = Date.now(); }, { capture: true, passive: true });
+  const block = (e) => {
+    const t = e.pointerType ? e.pointerType !== 'mouse' : (App.TOUCH || Date.now() - touchAt < 1000);
+    if (t && e.target.closest && e.target.closest(SEL)) e.stopImmediatePropagation();
+  };
+  ['pointerover', 'pointerenter', 'pointerout', 'pointerleave', 'mouseover', 'mouseenter', 'mouseout', 'mouseleave']
+    .forEach((n) => window.addEventListener(n, block, { capture: true }));
+})();
+
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
 
@@ -250,7 +271,8 @@
       if (!d || !el.isConnected) return;
       const list = [...d.querySelectorAll('[data-case-tags] [data-tag]')].map((t) => t.textContent.trim()).filter(Boolean);
       if (!list.length) return;
-      el.innerHTML = '<div class="case-header_tag-list">' + list.map(tagHtml).join('') + '</div>';
+      const host = el.querySelector('.case-header_tag-list'); // a list placed in the Designer keeps its own styles
+      if (host) host.innerHTML = list.map(tagHtml).join(''); else el.innerHTML = '<div class="case-header_tag-list">' + list.map(tagHtml).join('') + '</div>';
       App.inits.forEach((fn) => { if (fn !== init) try { fn(el); } catch (_) {} }); // glass button script picks the tags up
     });
   };
@@ -732,7 +754,10 @@
     const list = d ? [...d.querySelectorAll('[data-case-tags] [data-tag]')].map((t) => t.textContent.trim()).filter(Boolean) : [];
     if (!list.length || !el.isConnected) return;
     if (el.getAttribute('data-tags-format') === 'text') { el.textContent = list.join(', '); return; }
-    el.innerHTML = '<div class="case-header_tag-list">' + list.map(tag).join('') + '</div>';
+    // A .case-header_tag-list placed inside the tags element in the Designer is filled as is (style it there:
+    // gap, wrap, alignment); without one the list is created
+    const host = el.querySelector('.case-header_tag-list');
+    if (host) host.innerHTML = list.map(tag).join(''); else el.innerHTML = '<div class="case-header_tag-list">' + list.map(tag).join('') + '</div>';
     App.inits.forEach((fn) => { if (fn !== init) try { fn(el); } catch (_) {} }); // glass buttons pick the tags up
   });
   let io = null;
@@ -767,6 +792,24 @@
     document.head.appendChild(st);
   }
   const videoOf = (card) => card.querySelector('video');
+  // Touch (phone, tablet): no muted loops. The card shows its thumbnail and only gets a video when you tap play,
+  // one at a time; pause really pauses, sliding or scrolling away pauses it too. Desktop keeps the muted loops.
+  const TOUCH = App.TOUCH;
+  const lazyAttach = (card) => {
+    const box = card.querySelector('[data-case-media]');
+    const url = box && (box.getAttribute('data-case-media') || '').trim();
+    if (!url) return null;
+    const v = document.createElement('video');
+    v.loop = v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'auto';
+    v.className = 'case-media_video'; v.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1';
+    v.addEventListener('playing', () => v.classList.add('is-revealed'), { once: true });
+    const m3 = /\.m3u8(\?|$)/i.test(url);
+    if (m3 && !v.canPlayType('application/vnd.apple.mpegurl') && window.Hls && Hls.isSupported()) {
+      const h = new Hls({ maxBufferLength: 20 }); h.loadSource(url); h.attachMedia(v); box._lazyHls = h;
+    } else v.src = url;
+    box.insertBefore(v, box.querySelector('.social-card_rim'));
+    return v;
+  };
   const setUi = (card, on) => {
     if (!on && card.classList.contains('is-sound')) { // glow fades out (CSS is-glow-out, 0.5s)
       card.classList.add('is-glow-out'); clearTimeout(card._go); card._go = setTimeout(() => card.classList.remove('is-glow-out'), 500);
@@ -819,11 +862,11 @@
     const track = root.querySelector('.splide__track');
     if (track) track.dispatchEvent(new Event('pointerleave'));
   };
-  const mute = (card) => { const v = videoOf(card); if (v) v.muted = true; setUi(card, false); release(card); uncenter(card); };
+  const mute = (card) => { const v = videoOf(card); if (v) { v.muted = true; if (TOUCH) v.pause(); } setUi(card, false); release(card); uncenter(card); };
 
   const start = (card) => {
     if (!card._wait) center(card); // right away, also while the video is still attaching
-    const v = videoOf(card);
+    const v = videoOf(card) || (TOUCH ? lazyAttach(card) : null);
     if (!v) { // HLS still attaching: wait for CaseMedia to add the video, then start
       if (card._wait) return;
       card._wait = new MutationObserver(() => { if (videoOf(card)) { card._wait.disconnect(); card._wait = null; start(card); } });
@@ -848,7 +891,9 @@
     play(v); setUi(card, true); hold(card);
   };
   // Pause = sound off: the video keeps looping muted, like the other cards
-  const stop = (card) => { const v = videoOf(card); if (v) { v.muted = true; if (v.paused) play(v); } setUi(card, false); release(card); uncenter(card); };
+  // Touch: pause is a real pause (and muted, so no sound can carry on)
+  const stop = (card) => { const v = videoOf(card); if (v) { v.muted = true; if (TOUCH) v.pause(); else if (v.paused) play(v); } setUi(card, false); release(card); uncenter(card); };
+  App.socialStop = (card) => { if (card.classList.contains('is-sound')) stop(card); };
 
   // Play button, and a click on the video itself (same toggle). A drag in the slider is not a click: ignored when
   // the pointer moved more than DRAG px between press and release.
@@ -870,13 +915,26 @@
     const cards = (scope || document).querySelectorAll(CARD);
     if (!cards.length) return;
     if (!io) io = new IntersectionObserver((es) => es.forEach((en) => {
-      if (en.isIntersecting) { const v = videoOf(en.target); if (v && v.paused && !v._held && !en.target.classList.contains('is-sound')) play(v); }
+      if (en.isIntersecting) { const v = !TOUCH && videoOf(en.target); if (v && v.paused && !v._held && !en.target.classList.contains('is-sound')) play(v); }
       else if (en.target.classList.contains('is-sound')) mute(en.target);
     }));
     cards.forEach((c) => io.observe(c));
   };
+  // Touch: keep CaseMedia off the social cards (it would start a muted loop in each). Runs before CaseMedia's init.
+  const lazy = (scope = document) => {
+    if (!TOUCH) return;
+    (scope || document).querySelectorAll(CARD + ' [data-case-media]').forEach((box) => {
+      if (box._lazy) return;
+      if (box._cm && !box.querySelector('video')) try { box._cm(); } catch (_) {} // CaseMedia got there first
+      box._lazy = 1;
+      box._cm = () => { const h = box._lazyHls; if (h) try { h.destroy(); } catch (_) {} const v = box.querySelector('video'); if (v) { v.pause(); v.removeAttribute('src'); v.load(); v.remove(); } delete box._lazyHls; };
+    });
+  };
+  App.inits.unshift(lazy);
+  if (document.readyState !== 'loading') lazy(document);
   App.inits.push(init);
   App.destroys.push(() => {
+    document.querySelectorAll(CARD + ' [data-case-media]').forEach((b) => { if (b._lazy && b._cm) b._cm(); });
     document.querySelectorAll(CARD).forEach((c) => { if (c._wait) { c._wait.disconnect(); c._wait = null; } mute(c); });
     if (io) { io.disconnect(); io = null; }
   });
@@ -1007,11 +1065,19 @@
       // Desktop: left aligned on the page margin (Variables > Responsive > Page Margin).
       const MOBILE = matchMedia('(max-width: 767px)').matches;
       const pm = getComputedStyle(root).getPropertyValue('--_responsive---page-margin').trim() || '1.25rem';
+      // Phone: the cards between first and last sit centred; the first stays on the left page margin and the last
+      // on the right one (trimSpace), so there is no empty space before the first or after the last.
       const sp = new Splide(root, {
         type: auto ? 'loop' : 'slide', autoWidth: true, gap: '1.5625rem', arrows: false, pagination: false, speed: 1000,
-        focus: MOBILE ? 'center' : 0, trimSpace: !MOBILE,
-        start: MOBILE && slides.length >= 3 ? 1 : 0,
-        padding: MOBILE ? 0 : { left: pm, right: auto ? 0 : pm },
+        focus: MOBILE ? 'center' : 0, trimSpace: true,
+        padding: { left: pm, right: auto ? 0 : pm },
+      });
+      // Touch: sliding to another card pauses the one that plays
+      if (App.TOUCH) sp.on('move', (dest) => {
+        root.querySelectorAll('[data-social-card].is-sound').forEach((c) => {
+          const S = sp.Components.Slides.get().find((x) => x.slide === c.closest('.splide__slide'));
+          if (S && (S.isClone ? S.slideIndex : S.index) !== dest && App.socialStop) App.socialStop(c);
+        });
       });
       sp.on('mounted', () => {
         // Loop clones copy the DOM: drop videos CaseMedia already attached, the inits below give them their own
@@ -1409,8 +1475,10 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   }
   window.Hls = PalomaHls;
   // The players check canPlayType for native HLS first; answering "no" sends them to hls.js
+  // Not on iPhone / iPad: there several hls.js players at once froze the picture while the sound went on.
+  const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const orig = HTMLMediaElement.prototype.canPlayType;
-  HTMLMediaElement.prototype.canPlayType = function (t) { return /mpegurl/i.test(t || '') ? '' : orig.call(this, t); };
+  if (!IOS) HTMLMediaElement.prototype.canPlayType = function (t) { return /mpegurl/i.test(t || '') ? '' : orig.call(this, t); };
 
   // Prefetch: the same quality hls.js will pick for that element (smallest rendition covering its size, within the
   // start estimate and above minBitrate)
@@ -1446,6 +1514,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     if (slow()) return;
     const limit = window.innerHeight * FX.prefetchViewports;
     const els = [...document.querySelectorAll('#swup [data-case-media], #swup [data-player-src]')]
+      .filter((el) => !(App.TOUCH && el.closest('[data-social-card]')))
       .filter((el) => { const r = el.getBoundingClientRect(); return r.top < limit && r.right > 0 && r.left < window.innerWidth && !el.closest('.splide__slide--clone'); })
       .filter((el) => /\.m3u8(\?|$)/i.test((el.getAttribute('data-case-media') || el.getAttribute('data-player-src') || '').trim()))
       .slice(0, FX.prefetchMax);
