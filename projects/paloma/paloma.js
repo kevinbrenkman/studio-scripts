@@ -271,7 +271,7 @@
       if (!d || !el.isConnected) return;
       const list = [...d.querySelectorAll('[data-case-tags] [data-tag]')].map((t) => t.textContent.trim()).filter(Boolean);
       if (!list.length) return;
-      const host = el.querySelector('.case-header_tag-list'); // a list placed in the Designer keeps its own styles
+      const host = el.querySelector('.case-header_tag-list'); if (host) host.removeAttribute('data-tag-placeholder'); // Designer sample list (hidden live) becomes the real one // a list placed in the Designer keeps its own styles
       if (host) host.innerHTML = list.map(tagHtml).join(''); else el.innerHTML = '<div class="case-header_tag-list">' + list.map(tagHtml).join('') + '</div>';
       App.inits.forEach((fn) => { if (fn !== init) try { fn(el); } catch (_) {} }); // glass button script picks the tags up
     });
@@ -756,7 +756,7 @@
     if (el.getAttribute('data-tags-format') === 'text') { el.textContent = list.join(', '); return; }
     // A .case-header_tag-list placed inside the tags element in the Designer is filled as is (style it there:
     // gap, wrap, alignment); without one the list is created
-    const host = el.querySelector('.case-header_tag-list');
+    const host = el.querySelector('.case-header_tag-list'); if (host) host.removeAttribute('data-tag-placeholder'); // Designer sample list (hidden live) becomes the real one
     if (host) host.innerHTML = list.map(tag).join(''); else el.innerHTML = '<div class="case-header_tag-list">' + list.map(tag).join('') + '</div>';
     App.inits.forEach((fn) => { if (fn !== init) try { fn(el); } catch (_) {} }); // glass buttons pick the tags up
   });
