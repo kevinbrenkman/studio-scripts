@@ -19,10 +19,10 @@
  *    Script keeps: press scale on all arrow links, the Apply text arrow hover, links left on # visual only. Services: the hover card image is zoomed and follows the cursor.
  *  - CaseTags 1.9.0: tags 28px tall (design), default cursor; slider cards get their tags straight away. Moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
  *    without the stagger.
- *  - SocialSlider 1.6.0 (phone: first card left, last right, the rest centred; touch: sliding away pauses the playing card): Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
+ *  - SocialSlider 1.6.1 (re-measures after load so the last card keeps its right margin) 1.6.0 (phone: first card left, last right, the rest centred; touch: sliding away pauses the playing card): Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
  *  - MobileMenu 1.3.0 (closing = the opening played in reverse; links wait for it): menu (tablet and phone, below 992px): the glass toggle grows into the glass panel (clip from its corner), lines morph into one bar, current page in serif.
- *  - CardLoaded 1.1.0: project cards + case media / players: media box switches to the page background once its image loaded (no 1px line).
+ *  - CardLoaded 1.2.0 (also social and media cards; CSS :has, no load event): project cards + case media / players: media box switches to the page background once its image loaded (no 1px line).
  *  - LogoOnMedia 1.1.0: nav logo gets data-on-media over images/videos (filter lift in the Navigation embed); keeps the logo loop playing.
  *  - LogoHover 1.0.0: hovering the nav logo brakes the spin to a stop facing forward (loop start/end), leaving spins it back up.
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
@@ -1087,6 +1087,12 @@
       });
       sp.mount();
       root._sp = sp; live.add(root);
+      // Card widths can change after mount (fonts, images, the column calc): measure again, so the last card keeps
+      // its page margin on the right instead of ending against the screen edge
+      const remeasure = () => { if (root.isConnected) try { sp.refresh(); } catch (_) {} };
+      if (document.readyState !== 'complete') window.addEventListener('load', remeasure, { once: true });
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(remeasure);
+      setTimeout(remeasure, 1500);
       const go = (e) => {
         const b = e.target.closest && e.target.closest('[data-social-prev], [data-social-next]');
         if (!b || !root.contains(b)) return;
@@ -1599,7 +1605,11 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   window.App = window.App || { inits: [], destroys: [] };
   if (!document.getElementById('paloma-cardloaded-css')) {
     const st = document.createElement('style'); st.id = 'paloma-cardloaded-css';
-    st.textContent = '.project-card_media.is-loaded,.case-media_item.is-loaded,.bunny-player.is-loaded{background-color:var(--_theme---background)}';
+    // 1.2.0: any media box holding a thumbnail or video gets the page background straight away (CSS, no load event
+    // to miss: the load listener never fired for lazy images that were already in, so the pink stayed)
+    st.textContent = '.project-card_media.is-loaded,.case-media_item.is-loaded,.bunny-player.is-loaded,' +
+      ':is(.project-card_media,.case-media_item,.social-card_media,.media-card_media,.bunny-player):has(img[src]:not([src=""]),video)' +
+      '{background-color:var(--_theme---background)!important}';
     document.head.appendChild(st);
   }
   const mark = (m) => {
