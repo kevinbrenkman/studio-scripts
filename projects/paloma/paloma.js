@@ -33,7 +33,7 @@
  *    Own module because CaseSlider removes slides that link to the current page (the play button is href="#").
  *  - CardRim 1.0.0: Social Card playing with sound gets the glass button rim round the video edge; drifts round,
  *    turns to the cursor on hover. Markup and CSS in the Social Card component (.social-card_rim).
- *  - SocialCard 1.6.0 (first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
+ *  - SocialCard 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
@@ -783,15 +783,19 @@
   const hold = (card) => {
     if (!window.gsap) return;
     others(card).forEach((v) => {
-      if (v._held) return; v._held = true; gsap.killTweensOf(v);
+      if (v._held || v.paused) return; v._held = true; gsap.killTweensOf(v); // only the ones that are playing
       gsap.to(v, { playbackRate: 0.1, duration: 1.6, delay: 0.8, ease: 'power2.in', onComplete: () => { v.pause(); v.playbackRate = 1; } });
     });
   };
   const release = (card) => {
     const sl = card.closest('[data-social-slider]');
     if (!sl || !window.gsap || sl.querySelector('[data-social-card].is-sound')) return;
+    // Only the videos on screen start again; the rest stay paused until they scroll or slide into view (CaseMedia).
+    // Restarting every video in the slider at once made the page stall when you paused.
     sl.querySelectorAll('video').forEach((v) => {
-      if (!v._held) return; v._held = false; gsap.killTweensOf(v);
+      if (!v._held) return; v._held = false; gsap.killTweensOf(v); v.playbackRate = 1;
+      const r = v.getBoundingClientRect();
+      if (!(r.right > 0 && r.left < innerWidth && r.bottom > 0 && r.top < innerHeight)) return;
       if (v.paused) { v.playbackRate = 0.1; play(v); }
       gsap.to(v, { playbackRate: 1, duration: 1.2, ease: 'power2.out' });
     });
@@ -800,17 +804,13 @@
   // Auto scroll (SliderMotion) is paused meanwhile: it pauses on pointerenter, which is what it gets here.
   const CENTER = { maxWidth: 767, duration: 0.7, ease: 'power3.inOut' };
   const center = (card) => {
-    if (!window.gsap || !matchMedia('(max-width: ' + CENTER.maxWidth + 'px)').matches) return;
+    if (!matchMedia('(max-width: ' + CENTER.maxWidth + 'px)').matches) return;
     const root = card.closest('[data-social-slider]'), sp = root && root._sp, slide = card.closest('.splide__slide');
     if (!sp || !slide) return;
     const track = root.querySelector('.splide__track');
     if (track && !root._held) { root._held = true; track.dispatchEvent(new Event('pointerenter')); }
-    const r = slide.getBoundingClientRect(), delta = innerWidth / 2 - (r.left + r.width / 2);
-    if (Math.abs(delta) < 2) return;
-    const Move = sp.Components.Move, o = { p: Move.getPosition() };
-    gsap.killTweensOf(root._center || {});
-    root._center = o;
-    gsap.to(o, { p: o.p + delta, duration: CENTER.duration, ease: CENTER.ease, onUpdate: () => Move.translate(o.p) });
+    const S = sp.Components.Slides.get().find((x) => x.slide === slide);
+    if (S) sp.go(S.isClone ? S.slideIndex : S.index); // focus is 'center' on tablet and phone
   };
   const uncenter = (card) => {
     const root = card.closest('[data-social-slider]');
@@ -994,10 +994,24 @@
       if (!root.isConnected || !window.Splide) return;
       root.classList.add('splide'); track.classList.add('splide__track'); list.classList.add('splide__list');
       slides.forEach((s) => s.classList.add('splide__slide'));
+      // Auto scroll comes from the component variant (Off / Slow / Fast); SliderMotion reads data-autoscroll
+      // Fast = 4 (80px a second, same as the homepage slider), Slow = 2 (40px a second)
+      const VAR = /^data-wf--.*slider.*--variant$/; // only this slider's own variant, not e.g. Page Theme
+      let variant = '';
+      for (let el = root; el && el !== document.body && !variant; el = el.parentElement) {
+        const at = [...el.attributes].find((x) => VAR.test(x.name)); if (at) variant = at.value;
+      }
+      const auto = /fast/.test(variant) ? 4 : /slow/.test(variant) ? 2 : 0;
+      // Infinite (loop) only when it auto scrolls: a loop clones every card, and every clone is another video
+      // player. Tablet and phone: the cards sit centred (start on the second card when there are 3 or more).
+      // Desktop: left aligned on the page margin (Variables > Responsive > Page Margin).
+      const MOBILE = matchMedia('(max-width: 767px)').matches;
+      const pm = getComputedStyle(root).getPropertyValue('--_responsive---page-margin').trim() || '1.25rem';
       const sp = new Splide(root, {
-        type: 'loop', autoWidth: true, gap: '1.5625rem', focus: 0, arrows: false, pagination: false, speed: 1000,
-        // left padding = Variables > Responsive > Page Margin (read from the page, so the Phone/Mobile mode applies)
-        padding: { left: getComputedStyle(root).getPropertyValue('--_responsive---page-margin').trim() || '1.25rem', right: 0 },
+        type: auto ? 'loop' : 'slide', autoWidth: true, gap: '1.5625rem', arrows: false, pagination: false, speed: 1000,
+        focus: MOBILE ? 'center' : 0, trimSpace: !MOBILE,
+        start: MOBILE && slides.length >= 3 ? 1 : 0,
+        padding: MOBILE ? 0 : { left: pm, right: auto ? 0 : pm },
       });
       sp.on('mounted', () => {
         // Loop clones copy the DOM: drop videos CaseMedia already attached, the inits below give them their own
@@ -1051,14 +1065,7 @@
         root.removeEventListener('click', go); root.removeEventListener('pointerdown', down);
         ['pointerup', 'pointercancel'].forEach((t) => document.removeEventListener(t, up));
       };
-      // Auto scroll comes from the component variant (Off / Slow / Fast); SliderMotion reads data-autoscroll
-      // Fast = 4 (80px a second, same as the homepage slider), Slow = 2 (40px a second)
-      const VAR = /^data-wf--.*slider.*--variant$/; // only this slider's own variant, not e.g. Page Theme
-      let variant = '';
-      for (let el = root; el && el !== document.body && !variant; el = el.parentElement) {
-        const at = [...el.attributes].find((x) => VAR.test(x.name)); if (at) variant = at.value;
-      }
-      root.setAttribute('data-autoscroll', /fast/.test(variant) ? '4' : /slow/.test(variant) ? '2' : '0');
+      root.setAttribute('data-autoscroll', String(auto));
       root.dispatchEvent(new CustomEvent('slider:ready', { bubbles: true }));
     });
   };
@@ -1364,7 +1371,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
 /* ---------- HlsBoost ---------- */
 // Video quality that fits the player. Bunny playlists list 360p first and native HLS starts there (blurry), so every
 // player and CaseMedia loop goes through hls.js and we pick the start quality ourselves.
-// 1.1.0: the quality follows the size of the video on screen (capLevelToPlayerSize, at most 2x pixel density), so a
+// 1.2.0: a paused video stops downloading. 1.1.0: the quality follows the size of the video on screen (capLevelToPlayerSize, at most 2x pixel density), so a
 // 220px social card on a phone gets about 480p instead of 1080p, while a full-width player still gets 1080p.
 // On phones the muted loops buffer less ahead. Prefetch picks the same quality the player will pick, per video.
 // Browsers without hls.js support (iOS before 17.1) keep native playback.
@@ -1390,6 +1397,14 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     constructor(c = {}) {
       const loop = c.maxBufferLength && c.maxBufferLength <= 10;
       super(loop ? Object.assign({}, c, { maxBufferLength: Math.min(c.maxBufferLength, FX.loopBuffer), maxMaxBufferLength: FX.loopBuffer * 2 }) : c);
+    }
+    // A paused video stops downloading (scrolled away, slid away, paused by hand); it picks up again on play
+    attachMedia(m) {
+      super.attachMedia(m);
+      m._hls = this;
+      if (m._pl) return; m._pl = 1;
+      m.addEventListener('pause', () => { const h = m._hls; if (!h || m.seeking) return; try { h.stopLoad(); m._stopped = 1; } catch (_) {} });
+      m.addEventListener('play', () => { const h = m._hls; if (!h || !m._stopped) return; m._stopped = 0; try { if (h.levels && h.levels.length) h.startLoad(m.currentTime); } catch (_) {} });
     }
   }
   window.Hls = PalomaHls;
