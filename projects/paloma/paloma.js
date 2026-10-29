@@ -13,6 +13,7 @@
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
  *  - SliderFX 1.7.0 (Case Study Slider: parallax + swipe fix, no stagger; never empty when scrolling back up; parallax matches the grid: zoom 1.2, shift 8) (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
  *    Depth: images are scaled up in their frame and move sideways with the card's position (horizontal parallax). Hooks into CaseSlider's slider:ready event.
+ *  - TapStack 1.0.0: About on touch devices, each tap drops the next Image Trail image where you tapped (max 4 stacked).
  *  - GridFX 1.4.0: projects grid (home + Selected projects): cards reveal on scroll and spread apart (max 20px) towards the top and
  *    bottom of the screen. Grid, case media and the video player thumbnail: images get a vertical parallax.
  *  - ArrowLinks 1.4.1 (static check only on real links; the slider heading wrapper is a div): hover motion moved to the native Webflow interaction "Arrow link hover" (tweak on the canvas).
@@ -1730,4 +1731,59 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   };
   App.inits.push(() => { if (!wired) wired = wire(); });
   if (document.readyState !== 'loading') wired = wire();
+})();
+
+/* TapStack 1.0.0: touch devices on pages with an Image Trail ([data-trail], About). The desktop trail follows the mouse,
+   which a phone doesn't have, so here every tap drops the next trail image where you tapped, stacking on the last ones.
+   MAX images stay; older ones shrink away. Scrolling more than CLEAR px from the last tap clears the stack.
+   Taps on links, buttons, the nav and the footer are ignored. Uses the same images as the desktop trail. */
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const MAX = 4, CLEAR = 300, TILT = 6, MOVE = 12; // MOVE: px a finger may move and still count as a tap
+  const SKIP = '.navigation, .nav_menu, .footer, a, button, [data-trail-off]';
+  const live = new Set();
+  const init = (scope = document) => {
+    if (!window.gsap || matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+    const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    (scope || document).querySelectorAll('[data-trail]').forEach((root) => {
+      if (root._tap) return;
+      const items = [...root.querySelectorAll('[data-trail-item]')];
+      if (!items.length) return;
+      gsap.set(items, { position: 'absolute', top: 0, left: 0, xPercent: -50, yPercent: -50, display: 'none' });
+      gsap.set(root, { display: 'block' });
+      let i = 0, z = 0, stack = [], start = null, tapY = 0;
+      const sy = () => (window.lenis ? window.lenis.scroll : scrollY);
+      const hide = (el) => { gsap.killTweensOf(el); gsap.to(el, { scale: 0.6, opacity: 0, duration: 0.35, ease: 'power2.in', onComplete: () => gsap.set(el, { display: 'none' }) }); };
+      const drop = (x, y) => {
+        const el = items[i]; i = (i + 1) % items.length;
+        stack = stack.filter((s) => s !== el);
+        gsap.killTweensOf(el);
+        gsap.set(el, { display: 'block', zIndex: ++z, x, y, rotation: gsap.utils.random(-TILT, TILT), scale: calm ? 1 : 0.7, opacity: 0 });
+        gsap.to(el, { scale: 1, opacity: 1, duration: calm ? 0.2 : 0.45, ease: 'back.out(1.4)' });
+        stack.push(el);
+        while (stack.length > MAX) hide(stack.shift());
+        tapY = sy();
+      };
+      const down = (e) => { start = e.isPrimary ? { x: e.clientX, y: e.clientY, t: e.target } : null; };
+      const up = (e) => {
+        if (!start) return;
+        const moved = Math.hypot(e.clientX - start.x, e.clientY - start.y) > MOVE;
+        const skip = start.t.closest && start.t.closest(SKIP);
+        start = null;
+        if (!moved && !skip) drop(e.clientX, e.clientY);
+      };
+      const scroll = () => { if (stack.length && Math.abs(sy() - tapY) > CLEAR) { stack.forEach(hide); stack = []; } };
+      const ac = new AbortController(), opt = { signal: ac.signal, passive: true };
+      addEventListener('pointerdown', down, opt);
+      addEventListener('pointerup', up, opt);
+      addEventListener('pointercancel', () => { start = null; }, opt);
+      addEventListener('scroll', scroll, opt);
+      root._tap = () => { ac.abort(); gsap.killTweensOf(items); gsap.set(items, { display: 'none' }); delete root._tap; };
+      live.add(root);
+    });
+  };
+  const destroy = () => { live.forEach((r) => r._tap && r._tap()); live.clear(); };
+  App.inits.push(init);
+  App.destroys.push(destroy);
+  if (document.readyState !== 'loading') init(document);
 })();
