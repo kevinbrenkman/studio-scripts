@@ -29,6 +29,7 @@
  *  - LogoOnMedia 1.1.0: nav logo gets data-on-media over images/videos (filter lift in the Navigation embed); keeps the logo loop playing.
  *  - LogoHover 1.0.0: hovering the nav logo brakes the spin to a stop facing forward (loop start/end), leaving spins it back up.
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
+ *  - SceneScroll 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
  *  - MediaPoster 1.2.0 (also the Full Video Player: thumbnail + video 2px bigger per side, video hidden until first play): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
@@ -1271,6 +1272,44 @@ if (!document.getElementById('paloma-splide-sr')) {
   };
   App.inits.push((scope = document) => (scope || document).querySelectorAll('[data-object]').forEach(setup));
   App.destroys.push(() => { live.forEach((el) => el._obj && el._obj()); live.clear(); });
+})();
+
+/* ---------- SceneScroll ---------- */
+// Scene component (Lost objects): a Unicorn Studio scene as a fixed background. The square canvas
+// (.scene_canvas, size set on the class) moves up from its top edge to its bottom edge over the full page scroll.
+// Loads the Unicorn SDK itself, so it also works after a Swup page change (inline embed scripts don't run then).
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const SDK = 'https://cdn.jsdelivr.net/gh/hiunicornstudio/unicornstudio.js@v2.4.3/dist/unicornStudio.umd.js';
+  let sdk = null, tweens = [];
+  const load = () => sdk || (sdk = new Promise((res, rej) => {
+    if (window.UnicornStudio && window.UnicornStudio.init) return res(window.UnicornStudio);
+    const s = document.createElement('script');
+    s.src = SDK; s.async = true;
+    s.onload = () => res(window.UnicornStudio);
+    s.onerror = () => { sdk = null; rej(); };
+    document.head.appendChild(s);
+  }));
+  const init = (scope = document) => {
+    const scenes = (scope || document).querySelectorAll('[data-scene]');
+    if (!scenes.length) return;
+    load().then((US) => US && US.init && US.init()).catch(() => {});
+    if (!window.gsap || !window.ScrollTrigger || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    scenes.forEach((scene) => {
+      const canvas = scene.querySelector('[data-scene-canvas]');
+      if (!canvas) return;
+      tweens.push(gsap.fromTo(canvas, { y: 0 }, {
+        y: () => Math.min(0, innerHeight - canvas.offsetHeight), ease: 'none', force3D: true,
+        scrollTrigger: { start: 0, end: 'max', scrub: true, invalidateOnRefresh: true },
+      }));
+    });
+  };
+  App.inits.push(init);
+  App.destroys.push(() => {
+    tweens.forEach((t) => { if (t.scrollTrigger) t.scrollTrigger.kill(); t.kill(); });
+    tweens = [];
+    if (window.UnicornStudio && typeof window.UnicornStudio.destroy === 'function') window.UnicornStudio.destroy();
+  });
 })();
 
 /* ---------- MailMagnet ---------- */
