@@ -1730,7 +1730,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     // to miss: the load listener never fired for lazy images that were already in, so the pink stayed)
     st.textContent = '.project-card_media.is-loaded,.case-media_item.is-loaded,.bunny-player.is-loaded,' +
       ':is(.project-card_media,.case-media_item,.social-card_media,.media-card_media,.bunny-player):has(img[src]:not([src=""]),video)' +
-      '{background-color:var(--_theme---background)!important}';
+      '{background-color:var(--_do-not-edit---background)!important}';
     document.head.appendChild(st);
   }
   const mark = (m) => {
