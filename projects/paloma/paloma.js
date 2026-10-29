@@ -29,7 +29,7 @@
  *  - LogoOnMedia 1.1.0: nav logo gets data-on-media over images/videos (filter lift in the Navigation embed); keeps the logo loop playing.
  *  - LogoHover 1.0.0: hovering the nav logo brakes the spin to a stop facing forward (loop start/end), leaving spins it back up.
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
- *  - SceneScroll 1.1.0 (poster still under the canvas, canvas fades in when the scene is ready). 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
+ *  - SceneScroll 1.2.0 (scene lives outside #swup: clouds fade out and in with the theme, never a plain background in between). 1.1.0 (poster still under the canvas, canvas fades in when the scene is ready). 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
  *  - MediaPoster 1.2.0 (also the Full Video Player: thumbnail + video 2px bigger per side, video hidden until first play): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
@@ -1277,11 +1277,16 @@ if (!document.getElementById('paloma-splide-sr')) {
 /* ---------- SceneScroll ---------- */
 // Scene component (Lost objects): a Unicorn Studio scene as a fixed background. The square canvas
 // (.scene_canvas, size set on the class) moves up from its top edge to its bottom edge over the full page scroll.
+// Page changes: the scene is moved out of #swup (to the top of body), so the content fade doesn't take the clouds
+// with it. Leaving: the clouds fade out together with the theme colours. Arriving: they fade in (Poster first,
+// the live canvas fades in over it once ready). Same scene on the next page: it just keeps running.
 // Loads the Unicorn SDK itself, so it also works after a Swup page change (inline embed scripts don't run then).
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
   const SDK = 'https://cdn.jsdelivr.net/gh/hiunicornstudio/unicornstudio.js@v2.4.3/dist/unicornStudio.umd.js';
-  let sdk = null, tweens = [];
+  const FADE = { in: 0.8, out: 0.6 };
+  let sdk = null, tween = null, live = null, leaving = Promise.resolve();
+  const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const load = () => sdk || (sdk = new Promise((res, rej) => {
     if (window.UnicornStudio && window.UnicornStudio.init) return res(window.UnicornStudio);
     const s = document.createElement('script');
@@ -1290,37 +1295,61 @@ if (!document.getElementById('paloma-splide-sr')) {
     s.onerror = () => { sdk = null; rej(); };
     document.head.appendChild(s);
   }));
-  const init = (scope = document) => {
-    const scenes = (scope || document).querySelectorAll('[data-scene]');
-    if (!scenes.length) return;
-    // Poster (Scene > Poster prop) shows straight away; the live canvas sits above it and fades in once the scene is ready
-    if (!document.getElementById('paloma-scene-css')) {
-      const st = document.createElement('style'); st.id = 'paloma-scene-css';
-      st.textContent = '[data-scene-canvas]>canvas{position:relative;z-index:1;opacity:0;transition:opacity .8s ease}'
-        + '[data-scene].is-ready [data-scene-canvas]>canvas{opacity:1}'
-        + '[data-scene].is-shown [data-scene-poster]{visibility:hidden}';
-      document.head.appendChild(st);
-    }
-    const ready = () => requestAnimationFrame(() => requestAnimationFrame(() => scenes.forEach((s) => {
-      s.classList.add('is-ready');
-      setTimeout(() => s.classList.add('is-shown'), 900);
-    })));
-    load().then((US) => US && US.init && US.init()).then(ready, ready).catch(() => {});
-    if (!window.gsap || !window.ScrollTrigger || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    scenes.forEach((scene) => {
-      const canvas = scene.querySelector('[data-scene-canvas]');
-      if (!canvas) return;
-      tweens.push(gsap.fromTo(canvas, { y: 0 }, {
-        y: () => Math.min(0, innerHeight - canvas.offsetHeight), ease: 'none', force3D: true,
-        scrollTrigger: { start: 0, end: 'max', scrub: true, invalidateOnRefresh: true },
-      }));
+  const css = () => {
+    if (document.getElementById('paloma-scene-css')) return;
+    const st = document.createElement('style'); st.id = 'paloma-scene-css';
+    st.textContent = '[data-scene-canvas]>canvas{position:relative;z-index:1;opacity:0;transition:opacity .8s ease}'
+      + '[data-scene].is-ready [data-scene-canvas]>canvas{opacity:1}'
+      + '[data-scene].is-shown [data-scene-poster]{visibility:hidden}';
+    document.head.appendChild(st);
+  };
+  const project = (el) => { const c = el && el.querySelector('[data-us-project]'); return c ? c.getAttribute('data-us-project') : ''; };
+  const stopParallax = () => { if (tween) { if (tween.scrollTrigger) tween.scrollTrigger.kill(); tween.kill(); tween = null; } };
+  const parallax = () => {
+    stopParallax();
+    if (!live || !window.gsap || !window.ScrollTrigger || calm()) return;
+    const canvas = live.querySelector('[data-scene-canvas]');
+    if (!canvas) return;
+    tween = gsap.fromTo(canvas, { y: 0 }, {
+      y: () => Math.min(0, innerHeight - canvas.offsetHeight), ease: 'none', force3D: true,
+      scrollTrigger: { start: 0, end: 'max', scrub: true, invalidateOnRefresh: true },
     });
   };
+  const init = (scope = document) => {
+    const found = (scope || document).querySelector('[data-scene]:not([data-portal])');
+    if (!found) return;
+    css();
+    // Same scene as the page we came from: keep the running one, drop the copy in the new content
+    if (live && project(live) === project(found)) { found.remove(); parallax(); return; }
+    found.setAttribute('data-portal', '');
+    document.body.insertBefore(found, document.body.firstChild);
+    live = found;
+    if (window.gsap) gsap.fromTo(found, { autoAlpha: 0 }, { autoAlpha: 1, duration: calm() ? 0 : FADE.in, ease: 'power2.out' });
+    parallax();
+    const el = found;
+    const ready = () => {
+      const mark = () => { el.classList.add('is-ready'); setTimeout(() => el.classList.add('is-shown'), 900); };
+      requestAnimationFrame(() => requestAnimationFrame(mark));
+    };
+    // Wait for a scene that is still fading out (its destroy would otherwise also take this one)
+    leaving.then(load).then((US) => US && US.init && US.init()).then(ready, ready).catch(() => {});
+  };
   App.inits.push(init);
+  // Runs once the old content has faded out, right before the swap (theme colours crossfade from here)
   App.destroys.push(() => {
-    tweens.forEach((t) => { if (t.scrollTrigger) t.scrollTrigger.kill(); t.kill(); });
-    tweens = [];
-    if (window.UnicornStudio && typeof window.UnicornStudio.destroy === 'function') window.UnicornStudio.destroy();
+    if (!live) return;
+    const v = window.swup && window.swup.visit, html = v && v.to && v.to.html;
+    const next = html ? ((html.match(/data-us-project="([^"]+)"/) || [])[1] || '') : '';
+    if (next && next === project(live)) return; // stays; init() drops the incoming copy
+    stopParallax();
+    const old = live; live = null;
+    leaving = new Promise((done) => {
+      const end = () => {
+        if (window.UnicornStudio && typeof window.UnicornStudio.destroy === 'function') window.UnicornStudio.destroy();
+        old.remove(); done();
+      };
+      window.gsap ? gsap.to(old, { autoAlpha: 0, duration: calm() ? 0 : FADE.out, ease: 'power2.inOut', onComplete: end }) : end();
+    });
   });
 })();
 
