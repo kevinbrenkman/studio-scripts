@@ -30,7 +30,7 @@
  *  - LogoHover 1.0.0: hovering the nav logo brakes the spin to a stop facing forward (loop start/end), leaving spins it back up.
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
  *  - SceneScroll 1.4.0 (no position: fixed, so iOS 26 Safari shows the clouds under its toolbars; scroll-driven CSS where supported). 1.3.0 (parallax on the GSAP ticker: keeps running after Swup page changes). 1.2.0 (scene lives outside #swup: clouds fade out and in with the theme, never a plain background in between). 1.1.0 (poster still under the canvas, canvas fades in when the scene is ready). 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
- *  - CookieDock 1.1.0: below 992px the cookie banner starts under the menu button; the first menu open moves it to the bottom for good. No motion on load or scroll.
+ *  - CookieDock 1.2.0 (gap = the banner's edge margin; "#" consent links no longer scroll to top). 1.1.0: below 992px the cookie banner starts under the menu button; the first menu open moves it to the bottom for good. No motion on load or scroll.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
  *  - MediaPoster 1.2.0 (also the Full Video Player: thumbnail + video 2px bigger per side, video hidden until first play): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
@@ -1463,7 +1463,8 @@ if (!document.getElementById('paloma-splide-sr')) {
 // keep it at the bottom too). Never opened the menu: it stays at the top. No movement on load or while scrolling.
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
-  const GAP = 8; // px between the menu button and the banner
+  // Gap between the menu button and the banner = the banner's own edge margin (its `right`, a variable in Webflow)
+  const gapOf = (el) => parseFloat(getComputedStyle(el).right) || 12;
   const EASE = 'cubic-bezier(.65,0,.35,1)';
   let wired = false;
   const wire = () => {
@@ -1476,7 +1477,7 @@ if (!document.getElementById('paloma-splide-sr')) {
     const place = () => { // only on width changes: Safari's toolbars change the height while scrolling
       if (innerWidth === lastW) return; lastW = innerWidth;
       const t = toggle.getBoundingClientRect();
-      if (t.height) root.style.setProperty('--cc-top', Math.round(t.bottom + GAP) + 'px');
+      if (t.height) root.style.setProperty('--cc-top', Math.round(t.bottom + gapOf(banner)) + 'px');
     };
     banner.setAttribute('data-dock', 'top'); root.classList.add('cc-dock-top');
     place(); addEventListener('resize', place);
@@ -1497,6 +1498,16 @@ if (!document.getElementById('paloma-splide-sr')) {
   };
   App.inits.push(() => { if (!wired) wired = wire(); });
   if (document.readyState !== 'loading') wired = wire();
+  // Finsweet's buttons are links to "#": Swup treated them as an anchor visit and scrolled to the top.
+  // data-no-swup makes Swup skip them; preventDefault stops the browser's own jump to "#".
+  const noSwup = () => document.querySelectorAll('.fs-cc-banner2_component, .fs-cc-prefs2_component')
+    .forEach((el) => el.setAttribute('data-no-swup', ''));
+  App.inits.push(noSwup);
+  if (document.readyState !== 'loading') noSwup(); else document.addEventListener('DOMContentLoaded', noSwup);
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('a[fs-cc][href="#"], [fs-cc] a[href="#"]');
+    if (a) e.preventDefault();
+  }, true);
 })();
 
 /* ---------- MailMagnet ---------- */
