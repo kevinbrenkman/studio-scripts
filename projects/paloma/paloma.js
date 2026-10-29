@@ -1041,7 +1041,8 @@
   };
   const init = (scope = document) => { (scope || document).querySelectorAll('[data-card-rim]').forEach(setup); if (live.size) start(); };
   App.inits.push(init);
-  App.destroys.push(() => { live.forEach((r) => { delete r.el._cr; }); live.clear(); stop(); });
+  // Page change: drop the social cards, keep always-on rims outside the page content (cookie banner)
+  App.destroys.push(() => { live.forEach((r) => { if (!r.always) { delete r.el._cr; live.delete(r); } }); if (!live.size) stop(); });
   if (document.readyState !== 'loading') init(document);
 })();
 
