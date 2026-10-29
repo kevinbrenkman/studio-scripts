@@ -13,6 +13,7 @@
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
  *  - SliderFX 1.9.0 (parallax reads the slider position from its transform, never from layout; the list gets its own GPU layer) (phone: project sliders centre the slide; parallax measured once, no layout reads per frame) (Case Study Slider: parallax + swipe fix, no stagger; never empty when scrolling back up; parallax matches the grid: zoom 1.2, shift 8) (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
  *    Depth: images are scaled up in their frame and move sideways with the card's position (horizontal parallax). Hooks into CaseSlider's slider:ready event.
+ *  - ObjectFX 1.0.0: Lost objects page. Objects float (bob + sway, out of step); hover masks the Objects Background layer with the object image itself (silhouette) and shows title + subtitle.
  *  - TrailStop 1.0.0: the desktop Image Trail stops and fades out as soon as a link to another page is clicked.
  *  - TapStack 1.3.0: About on touch devices, each tap drops a pile of 5 Image Trail images (different one on top each time, 70% size) on the page, kept on screen; they fade out after 2.5s.
  *  - GridFX 1.4.0: projects grid (home + Selected projects): cards reveal on scroll and spread apart (max 20px) towards the top and
@@ -1233,6 +1234,43 @@ if (!document.getElementById('paloma-splide-sr')) {
     live.add(root);
   });
   App.destroys.push(() => { live.forEach((r) => r._drag && r._drag()); live.clear(); });
+})();
+
+/* ---------- ObjectFX ---------- */
+// Lost objects page ([data-object], Object component). Each object floats: a slow bob + sway, every object
+// out of step with the others. Hover: the object turns into its own silhouette. The hover layer is masked with
+// the object's own image (a cut-out PNG/WebP), filled with Variables > Objects Background, text in Objects Text.
+// .is-masked is only added once the mask is set, so there is never a rectangle on hover.
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const FLOAT = { y: 10, rot: 1.6, min: 3.2, max: 5.2 }; // px up/down, degrees sway, seconds per swing
+  const live = new Set();
+  const setup = (el) => {
+    if (el._obj) return;
+    const img = el.querySelector('.object_img');
+    const layer = el.querySelector('.object_hover');
+    const box = el.querySelector('.object_float') || el;
+    const mask = () => {
+      const src = img && (img.currentSrc || img.src);
+      if (!layer || !src) return;
+      const url = 'url("' + src.replace(/"/g, '%22') + '")';
+      layer.style.webkitMaskImage = url; layer.style.maskImage = url;
+      el.classList.add('is-masked');
+    };
+    if (img) { if (img.complete && img.naturalWidth) mask(); else img.addEventListener('load', mask, { once: true }); }
+    let tw = [];
+    if (window.gsap && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const r = gsap.utils.random, d = r(FLOAT.min, FLOAT.max);
+      tw = [
+        gsap.fromTo(box, { y: -FLOAT.y }, { y: FLOAT.y, duration: d, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: -r(0, d) }),
+        gsap.fromTo(box, { rotation: -FLOAT.rot }, { rotation: FLOAT.rot, duration: d * 1.37, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: -r(0, d) })
+      ];
+    }
+    el._obj = () => { tw.forEach((t) => t.kill()); if (window.gsap) gsap.set(box, { clearProps: 'transform' }); delete el._obj; };
+    live.add(el);
+  };
+  App.inits.push((scope = document) => (scope || document).querySelectorAll('[data-object]').forEach(setup));
+  App.destroys.push(() => { live.forEach((el) => el._obj && el._obj()); live.clear(); });
 })();
 
 /* ---------- MailMagnet ---------- */
