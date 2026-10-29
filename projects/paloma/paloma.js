@@ -11,9 +11,9 @@
  *  - Jobs 1.2.0 (open/close uses the ReadMore motion): Careers page (CMS > Jobs). Tags load from the Jobs template page (CMS > Job Types), like CaseTags;
  *    rows with a Description open and close, empty Apply link falls back to hello@wearepaloma.be.
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
- *  - SliderFX 1.7.0 (Case Study Slider: parallax + swipe fix, no stagger; never empty when scrolling back up; parallax matches the grid: zoom 1.2, shift 8) (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
+ *  - SliderFX 1.8.0 (phone: project sliders centre the slide; parallax measured once, no layout reads per frame) (Case Study Slider: parallax + swipe fix, no stagger; never empty when scrolling back up; parallax matches the grid: zoom 1.2, shift 8) (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
  *    Depth: images are scaled up in their frame and move sideways with the card's position (horizontal parallax). Hooks into CaseSlider's slider:ready event.
- *  - TapStack 1.0.0: About on touch devices, each tap drops the next Image Trail image where you tapped (max 4 stacked).
+ *  - TapStack 1.1.0: About on touch devices, each tap drops a pile of 5 Image Trail images where you tapped; they fade out after 2.5s.
  *  - GridFX 1.4.0: projects grid (home + Selected projects): cards reveal on scroll and spread apart (max 20px) towards the top and
  *    bottom of the screen. Grid, case media and the video player thumbnail: images get a vertical parallax.
  *  - ArrowLinks 1.4.1 (static check only on real links; the slider heading wrapper is a div): hover motion moved to the native Webflow interaction "Arrow link hover" (tweak on the canvas).
@@ -390,6 +390,12 @@
     const slides = () => [...root.querySelectorAll('.splide__slide')];
     const cards = () => slides().map((s) => s.querySelector('.project-card') || s.firstElementChild).filter(Boolean);
 
+    /* Phone: project sliders (More Cases) centre the active slide, so a swipe always lands a card in the middle. */
+    if (innerWidth < 768 && root.querySelector('.project-card') && !root.hasAttribute('data-social-slider')) {
+      root.classList.add('is-centered');
+      sp.options = { focus: 'center', padding: 0 };
+    }
+
     /* Reveal: cards in view stagger up from the left, every time the slider scrolls back into view */
     let io = null;
     // Case Study Slider: no stagger (too much on case pages); the whole slider fades in with Section reveal
@@ -434,20 +440,34 @@
         return setX.get(img);
       };
       let inView = true, last = null, frames = 0;
-      const vio = new IntersectionObserver((e) => { inView = e[0].isIntersecting; if (inView) last = null; });
+      const vio = new IntersectionObserver((e) => { inView = e[0].isIntersecting; if (inView) { last = null; map = null; } });
       vio.observe(root);
+      // Positions are measured once (and again after a resize or refresh), then each frame only does maths:
+      // reading getBoundingClientRect every frame forced a layout right after Splide moved the list, which stuttered on phones.
+      const list = root.querySelector('.splide__list');
+      const SEL = '.project-card_media img, .social-card_media > img, .social-card_media > video, .media-card_media > img, .media-card_media > video';
+      let map = null, base = 0;
+      const build = () => {
+        const L = list ? list.getBoundingClientRect().left : 0;
+        base = L - Move.getPosition();
+        map = cards().map((c) => { const r = c.getBoundingClientRect(); return { off: r.left - L, w: r.width, imgs: [...c.querySelectorAll(SEL)] }; });
+      };
+      sp.on('resized refresh updated', () => { map = null; last = null; });
+      root.addEventListener('pointerenter', () => { map = null; }, { passive: true }); // HoverFlip adds images on hover
       tick = () => {
         if (!inView) return;
         const pos = Move.getPosition();
-        if (pos === last && ++frames % 30) return; // idle: re-check twice a second (HoverFlip adds images on hover)
+        if (pos === last && ++frames % 30) return;
+        if (pos === last) map = null; // idle re-check twice a second: pick up late or added images
         last = pos;
+        if (!map) build();
         const w = innerWidth;
-        cards().forEach((c) => {
-          const r = c.getBoundingClientRect();
-          if (r.right < -w * 0.25 || r.left > w * 1.25) return;
-          const p = Math.max(-1.25, Math.min(1.25, ((r.left + r.width / 2) / w) * 2 - 1)); // -1 left edge, 1 right edge
+        map.forEach((m) => {
+          const left = base + m.off + pos;
+          if (left + m.w < -w * 0.25 || left > w * 1.25) return;
+          const p = Math.max(-1.25, Math.min(1.25, ((left + m.w / 2) / w) * 2 - 1)); // -1 left edge, 1 right edge
           const x = -p * FX.shift; // image lags behind the card: moves against the travel direction
-          c.querySelectorAll('.project-card_media img, .social-card_media > img, .social-card_media > video, .media-card_media > img, .media-card_media > video').forEach((img) => setter(img)(x));
+          m.imgs.forEach((img) => setter(img)(x));
         });
       };
       g.ticker.add(tick);
@@ -1733,13 +1753,12 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   if (document.readyState !== 'loading') wired = wire();
 })();
 
-/* TapStack 1.0.0: touch devices on pages with an Image Trail ([data-trail], About). The desktop trail follows the mouse,
-   which a phone doesn't have, so here every tap drops the next trail image where you tapped, stacking on the last ones.
-   MAX images stay; older ones shrink away. Scrolling more than CLEAR px from the last tap clears the stack.
-   Taps on links, buttons, the nav and the footer are ignored. Uses the same images as the desktop trail. */
+/* TapStack 1.1.0: touch devices on pages with an Image Trail ([data-trail], About). The desktop trail follows the mouse,
+   which a phone doesn't have, so each tap drops a little pile of BURST trail images where you tapped, one on top of the
+   other, and the pile fades out after HOLD seconds. Taps on links, buttons, the nav and the footer are ignored. */
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
-  const MAX = 4, CLEAR = 300, TILT = 6, MOVE = 12; // MOVE: px a finger may move and still count as a tap
+  const BURST = 5, HOLD = 2.5, STEP = 0.07, SPREAD = 28, TILT = 8, MOVE = 12; // SPREAD: px the pile scatters; MOVE: px a finger may move and still count as a tap
   const SKIP = '.navigation, .nav_menu, .footer, a, button, [data-trail-off]';
   const live = new Set();
   const init = (scope = document) => {
@@ -1751,18 +1770,19 @@ document.addEventListener('touchstart', () => {}, { passive: true });
       if (!items.length) return;
       gsap.set(items, { position: 'absolute', top: 0, left: 0, xPercent: -50, yPercent: -50, display: 'none' });
       gsap.set(root, { display: 'block' });
-      let i = 0, z = 0, stack = [], start = null, tapY = 0;
-      const sy = () => (window.lenis ? window.lenis.scroll : scrollY);
-      const hide = (el) => { gsap.killTweensOf(el); gsap.to(el, { scale: 0.6, opacity: 0, duration: 0.35, ease: 'power2.in', onComplete: () => gsap.set(el, { display: 'none' }) }); };
+      let i = 0, z = 0, start = null;
+      const r = gsap.utils.random;
       const drop = (x, y) => {
-        const el = items[i]; i = (i + 1) % items.length;
-        stack = stack.filter((s) => s !== el);
-        gsap.killTweensOf(el);
-        gsap.set(el, { display: 'block', zIndex: ++z, x, y, rotation: gsap.utils.random(-TILT, TILT), scale: calm ? 1 : 0.7, opacity: 0 });
-        gsap.to(el, { scale: 1, opacity: 1, duration: calm ? 0.2 : 0.45, ease: 'back.out(1.4)' });
-        stack.push(el);
-        while (stack.length > MAX) hide(stack.shift());
-        tapY = sy();
+        const n = Math.min(BURST, items.length);
+        for (let k = 0; k < n; k++) {
+          const el = items[i]; i = (i + 1) % items.length;
+          gsap.killTweensOf(el);
+          gsap.set(el, { display: 'block', zIndex: ++z, x: x + r(-SPREAD, SPREAD), y: y + r(-SPREAD, SPREAD), rotation: r(-TILT, TILT), scale: calm ? 1 : 0.7, opacity: 0 });
+          gsap.timeline({ delay: k * STEP })
+            .to(el, { scale: 1, opacity: 1, duration: calm ? 0.2 : 0.4, ease: 'back.out(1.4)' })
+            .to(el, { opacity: 0, scale: calm ? 1 : 0.92, duration: 0.6, ease: 'power2.in' }, HOLD)
+            .set(el, { display: 'none' });
+        }
       };
       const down = (e) => { start = e.isPrimary ? { x: e.clientX, y: e.clientY, t: e.target } : null; };
       const up = (e) => {
@@ -1772,12 +1792,10 @@ document.addEventListener('touchstart', () => {}, { passive: true });
         start = null;
         if (!moved && !skip) drop(e.clientX, e.clientY);
       };
-      const scroll = () => { if (stack.length && Math.abs(sy() - tapY) > CLEAR) { stack.forEach(hide); stack = []; } };
       const ac = new AbortController(), opt = { signal: ac.signal, passive: true };
       addEventListener('pointerdown', down, opt);
       addEventListener('pointerup', up, opt);
       addEventListener('pointercancel', () => { start = null; }, opt);
-      addEventListener('scroll', scroll, opt);
       root._tap = () => { ac.abort(); gsap.killTweensOf(items); gsap.set(items, { display: 'none' }); delete root._tap; };
       live.add(root);
     });
