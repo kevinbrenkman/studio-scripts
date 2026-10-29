@@ -25,12 +25,12 @@
  *  - SocialSlider 1.8.0 (infinite again from 768px up; phone unchanged). 1.7.0 (page margin straight from the CSS variable, phone layout via Splide breakpoints; Splide's "…" announcer hidden on every slider). 1.6.1 (re-measures after load so the last card keeps its right margin) 1.6.0 (phone: first card left, last right, the rest centred; touch: sliding away pauses the playing card): Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
  *  - MobileMenu 1.4.0 (menu links built from the desktop buttons: one source for links and texts). 1.3.0 (closing = the opening played in reverse; links wait for it): menu (tablet and phone, below 992px): the glass toggle grows into the glass panel (clip from its corner), lines morph into one bar, current page in serif.
- *  - CardLoaded 1.2.0 (also social and media cards; CSS :has, no load event): project cards + case media / players: media box switches to the page background once its image loaded (no 1px line).
+ *  - CardLoaded 1.3.0 (player UI waits for its thumbnail; no-thumbnail players count as loaded). 1.2.0 (also social and media cards; CSS :has, no load event): project cards + case media / players: media box switches to the page background once its image loaded (no 1px line).
  *  - LogoOnMedia 1.1.0: nav logo gets data-on-media over images/videos (filter lift in the Navigation embed); keeps the logo loop playing.
  *  - LogoHover 1.0.0: hovering the nav logo brakes the spin to a stop facing forward (loop start/end), leaving spins it back up.
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
- *  - SceneScroll 1.4.0 (no position: fixed, so iOS 26 Safari shows the clouds under its toolbars; scroll-driven CSS where supported). 1.3.0 (parallax on the GSAP ticker: keeps running after Swup page changes). 1.2.0 (scene lives outside #swup: clouds fade out and in with the theme, never a plain background in between). 1.1.0 (poster still under the canvas, canvas fades in when the scene is ready). 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
- *  - CookieDock 1.2.1 (gap = the banner's edge margin; "#" consent links no longer scroll to top). 1.1.0: below 992px the cookie banner starts under the menu button; the first menu open moves it to the bottom for good. No motion on load or scroll.
+ *  - SceneScroll 1.5.0 (clouds leave on click, data-leaving drops the sky body colour at once). 1.4.0 (no position: fixed, so iOS 26 Safari shows the clouds under its toolbars; scroll-driven CSS where supported). 1.3.0 (parallax on the GSAP ticker: keeps running after Swup page changes). 1.2.0 (scene lives outside #swup: clouds fade out and in with the theme, never a plain background in between). 1.1.0 (poster still under the canvas, canvas fades in when the scene is ready). 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
+ *  - CookieDock 1.3.0 (--cc-prefs-top: preferences open on the banner's spot). 1.2.1 (gap = the banner's edge margin; "#" consent links no longer scroll to top). 1.1.0: below 992px the cookie banner starts under the menu button; the first menu open moves it to the bottom for good. No motion on load or scroll.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
  *  - MediaPoster 1.2.0 (also the Full Video Player: thumbnail + video 2px bigger per side, video hidden until first play): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
@@ -1059,7 +1059,13 @@
     // Full Video Player: thumbnail and video 2px bigger on every side, so the player's background never shows at the edge
     '.bunny-player .bunny-player__placeholder,.bunny-player .bunny-player__video{top:-2px!important;left:-2px!important;width:calc(100% + 4px)!important;height:calc(100% + 4px)!important;max-width:none}' +
     // Video hidden until first play: on iPhone the (empty, black) native HLS video sat on top of the thumbnail
-    '[data-bunny-player-init]:not([data-player-activated="true"]) .bunny-player__video{opacity:0}';
+    '[data-bunny-player-init]:not([data-player-activated="true"]) .bunny-player__video{opacity:0}' +
+    // Player thumbnail + play button + controls stay hidden until the thumbnail has loaded (CardLoaded adds is-loaded),
+    // then fade in together: no buttons floating on an empty box
+    '@keyframes paloma-player-in{from{filter:opacity(0)}to{filter:opacity(1)}}' +
+    'html:not(.wf-design-mode) [data-bunny-player-init]:not(.is-loaded)>:is(.bunny-player__placeholder,.bunny-player__playpause,.bunny-player__interface){filter:opacity(0);pointer-events:none}' +
+    'html:not(.wf-design-mode) [data-bunny-player-init].is-loaded>:is(.bunny-player__placeholder,.bunny-player__playpause,.bunny-player__interface){animation:paloma-player-in .8s cubic-bezier(.25,.1,.25,1) both}' +
+    'html:not(.wf-design-mode) [data-bunny-player-init].is-loaded>:is(.bunny-player__playpause,.bunny-player__interface){animation-delay:.2s}';
   document.head.appendChild(st);
 })();
 
@@ -1348,7 +1354,7 @@ if (!document.getElementById('paloma-splide-sr')) {
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
   const SDK = 'https://cdn.jsdelivr.net/gh/hiunicornstudio/unicornstudio.js@v2.4.3/dist/unicornStudio.umd.js';
-  const FADE = { in: 0.8, out: 0.6 };
+  const FADE = { in: 0.8, out: 0.45 };
   let sdk = null, tween = null, live = null, leaving = Promise.resolve();
   const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const load = () => sdk || (sdk = new Promise((res, rej) => {
@@ -1438,14 +1444,14 @@ if (!document.getElementById('paloma-splide-sr')) {
     leaving.then(load).then((US) => US && US.init && US.init()).then(ready, ready).catch(() => {});
   };
   App.inits.push(init);
-  // Runs once the old content has faded out, right before the swap (theme colours crossfade from here)
-  App.destroys.push(() => {
+  // Leaving: starts with the click (visit:start), so the clouds fade out together with the old content and are gone
+  // before the theme colours crossfade. data-leaving switches off the Scene embed's body colour right away, so the
+  // theme crossfade aims at the next page's background, not at the sky (no blue flash on the next page).
+  const leave = () => {
     if (!live) return;
-    const v = window.swup && window.swup.visit, html = v && v.to && v.to.html;
-    const next = html ? ((html.match(/data-us-project="([^"]+)"/) || [])[1] || '') : '';
-    if (next && next === project(live)) return; // stays; init() drops the incoming copy
     stopParallax();
     const old = live; live = null;
+    old.setAttribute('data-leaving', '');
     leaving = new Promise((done) => {
       const end = () => {
         if (window.UnicornStudio && typeof window.UnicornStudio.destroy === 'function') window.UnicornStudio.destroy();
@@ -1453,6 +1459,25 @@ if (!document.getElementById('paloma-splide-sr')) {
       };
       window.gsap ? gsap.to(old, { autoAlpha: 0, duration: calm() ? 0 : FADE.out, ease: 'power2.inOut', onComplete: end }) : end();
     });
+  };
+  let hooked = false;
+  const hook = () => {
+    if (hooked || !window.swup || !window.swup.hooks) return;
+    hooked = true;
+    window.swup.hooks.on('visit:start', (visit) => {
+      const to = visit && visit.to && visit.to.url ? new URL(visit.to.url, location.origin).pathname : '';
+      if (live && to && to !== location.pathname) leave();
+    });
+  };
+  App.inits.push(hook);
+  if (document.readyState !== 'loading') hook(); else document.addEventListener('DOMContentLoaded', hook);
+  // Fallback right before the swap (a visit that started before the hook was in place)
+  App.destroys.push(() => {
+    if (!live) return;
+    const v = window.swup && window.swup.visit, html = v && v.to && v.to.html;
+    const next = html ? ((html.match(/data-us-project="([^"]+)"/) || [])[1] || '') : '';
+    if (next && next === project(live)) return; // stays; init() drops the incoming copy
+    leave();
   });
 })();
 
@@ -1479,7 +1504,11 @@ if (!document.getElementById('paloma-splide-sr')) {
     const place = () => { // only on width changes: Safari's toolbars change the height while scrolling
       if (innerWidth === lastW) return; lastW = innerWidth;
       const t = toggle.getBoundingClientRect();
-      if (t.height) root.style.setProperty('--cc-top', Math.round(t.bottom + offsetOf(banner)) + 'px');
+      if (!t.height) return;
+      root.style.setProperty('--cc-top', Math.round(t.bottom + offsetOf(banner)) + 'px');
+      // Where the banner's box actually starts (its margin-top included): the preferences card opens right there
+      const c = getComputedStyle(banner), n = (v) => parseFloat(v) || 0;
+      root.style.setProperty('--cc-prefs-top', Math.round(t.bottom + n(c.right) + n(c.marginRight)) + 'px');
     };
     banner.setAttribute('data-dock', 'top'); root.classList.add('cc-dock-top');
     place(); addEventListener('resize', place);
@@ -1962,9 +1991,12 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   }
   const mark = (m) => {
     if (m._cl) return; m._cl = true;
-    const img = m.querySelector('img'), vid = img ? null : m.querySelector('video');
+    const img = m.querySelector('img'), vid = (img && img.getAttribute('src')) || m.classList.contains('bunny-player') ? null : m.querySelector('video'); // a player's video only loads on play
     const done = () => m.classList.add('is-loaded');
-    if (img) { if (img.complete && img.naturalWidth) return done(); return img.addEventListener('load', done, { once: true }); }
+    if (img && img.getAttribute('src')) {
+      if (img.complete && img.naturalWidth) return done();
+      img.addEventListener('load', done, { once: true }); img.addEventListener('error', done, { once: true }); return;
+    }
     if (vid) { if (vid.readyState >= 2) return done(); return vid.addEventListener('loadeddata', done, { once: true }); }
     done();
   };
