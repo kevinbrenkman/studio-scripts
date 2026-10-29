@@ -24,7 +24,7 @@
  *    without the stagger.
  *  - SocialSlider 1.8.0 (infinite again from 768px up; phone unchanged). 1.7.0 (page margin straight from the CSS variable, phone layout via Splide breakpoints; Splide's "…" announcer hidden on every slider). 1.6.1 (re-measures after load so the last card keeps its right margin) 1.6.0 (phone: first card left, last right, the rest centred; touch: sliding away pauses the playing card): Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
- *  - MobileMenu 1.3.0 (closing = the opening played in reverse; links wait for it): menu (tablet and phone, below 992px): the glass toggle grows into the glass panel (clip from its corner), lines morph into one bar, current page in serif.
+ *  - MobileMenu 1.4.0 (menu links built from the desktop buttons: one source for links and texts). 1.3.0 (closing = the opening played in reverse; links wait for it): menu (tablet and phone, below 992px): the glass toggle grows into the glass panel (clip from its corner), lines morph into one bar, current page in serif.
  *  - CardLoaded 1.2.0 (also social and media cards; CSS :has, no load event): project cards + case media / players: media box switches to the page background once its image loaded (no 1px line).
  *  - LogoOnMedia 1.1.0: nav logo gets data-on-media over images/videos (filter lift in the Navigation embed); keeps the logo loop playing.
  *  - LogoHover 1.0.0: hovering the nav logo brakes the spin to a stop facing forward (loop start/end), leaving spins it back up.
@@ -1435,6 +1435,32 @@ if (!document.getElementById('paloma-splide-sr')) {
     });
   };
 
+  // Menu links are built from the desktop buttons (Small Button instances in the Navigation), so a link or text
+  // changed there is the same in the menu. The one .nav_menu-link in the Designer is only the template.
+  // Short label = Label; current page (serif) = Text before + Label + Text after, in sentence case ("Lost objects").
+  const sentence = (s) => { s = s.replace(/\s+/g, ' ').trim().toLowerCase(); return s.charAt(0).toUpperCase() + s.slice(1); };
+  const buildLinks = () => {
+    const wrap = menu.querySelector('.nav_menu-links');
+    const tpl = wrap && wrap.querySelector('.nav_menu-link');
+    const btns = [...document.querySelectorAll('.navigation a.nav_button.is-menu')];
+    if (!tpl || !btns.length) return;
+    const txt = (b, sel) => { const el = b.querySelector(sel); return el ? el.textContent.trim() : ''; };
+    const links = btns.map((b) => {
+      const a = tpl.cloneNode(true);
+      a.classList.remove('w--current', 'is-current'); a.removeAttribute('aria-current');
+      a.setAttribute('href', b.getAttribute('href') || '#');
+      ['data-nav-match', 'data-not-ready', 'target', 'rel'].forEach((n) => { b.hasAttribute(n) ? a.setAttribute(n, b.getAttribute(n)) : a.removeAttribute(n); });
+      const label = txt(b, '.nav_button-label');
+      const full = sentence([txt(b, '.nav_button-extra-text.is-before'), label, txt(b, '.nav_button-extra-text.is-after')].filter(Boolean).join(' '));
+      const [short, cur] = [a.querySelector('.nav_menu-label:not(.is-current)'), a.querySelector('.nav_menu-label.is-current')];
+      if (short) short.textContent = sentence(label);
+      if (cur) cur.textContent = full;
+      return a;
+    });
+    wrap.querySelectorAll('.nav_menu-link').forEach((el) => el.remove());
+    links.forEach((a) => wrap.appendChild(a));
+  };
+
   const items = () => [...menu.querySelectorAll('.nav_menu-link, .nav_menu-jobs')];
   // Clip the panel down to the toggle's box (same corner radius), so opening grows the toggle into the panel
   const R = 7;
@@ -1512,6 +1538,7 @@ if (!document.getElementById('paloma-splide-sr')) {
     menu = document.querySelector('[data-nav-menu]');
     if (!toggle || !menu || !window.gsap) return false;
     lines = [...toggle.querySelectorAll('.nav_toggle-line')];
+    buildLinks();
     gsap.set(menu, { autoAlpha: 0 });
     // Press feedback: while a link is held, the other links dim (labels, since GSAP owns the links' inline opacity)
     if (!document.getElementById('paloma-menu-press-css')) {
