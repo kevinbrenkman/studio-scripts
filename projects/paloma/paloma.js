@@ -29,7 +29,7 @@
  *  - LogoOnMedia 1.1.0: nav logo gets data-on-media over images/videos (filter lift in the Navigation embed); keeps the logo loop playing.
  *  - LogoHover 1.0.0: hovering the nav logo brakes the spin to a stop facing forward (loop start/end), leaving spins it back up.
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
- *  - SceneScroll 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
+ *  - SceneScroll 1.1.0 (poster still under the canvas, canvas fades in when the scene is ready). 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
  *  - MediaPoster 1.2.0 (also the Full Video Player: thumbnail + video 2px bigger per side, video hidden until first play): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
@@ -1293,7 +1293,19 @@ if (!document.getElementById('paloma-splide-sr')) {
   const init = (scope = document) => {
     const scenes = (scope || document).querySelectorAll('[data-scene]');
     if (!scenes.length) return;
-    load().then((US) => US && US.init && US.init()).catch(() => {});
+    // Poster (Scene > Poster prop) shows straight away; the live canvas sits above it and fades in once the scene is ready
+    if (!document.getElementById('paloma-scene-css')) {
+      const st = document.createElement('style'); st.id = 'paloma-scene-css';
+      st.textContent = '[data-scene-canvas]>canvas{position:relative;z-index:1;opacity:0;transition:opacity .8s ease}'
+        + '[data-scene].is-ready [data-scene-canvas]>canvas{opacity:1}'
+        + '[data-scene].is-shown [data-scene-poster]{visibility:hidden}';
+      document.head.appendChild(st);
+    }
+    const ready = () => requestAnimationFrame(() => requestAnimationFrame(() => scenes.forEach((s) => {
+      s.classList.add('is-ready');
+      setTimeout(() => s.classList.add('is-shown'), 900);
+    })));
+    load().then((US) => US && US.init && US.init()).then(ready, ready).catch(() => {});
     if (!window.gsap || !window.ScrollTrigger || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     scenes.forEach((scene) => {
       const canvas = scene.querySelector('[data-scene-canvas]');
