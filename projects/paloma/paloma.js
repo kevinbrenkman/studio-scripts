@@ -8,7 +8,7 @@
  *    thumbnail inside the spinning 3D emblem (Quy). WebGL: a grayscale matte video (white = emblem)
  *    is the alpha for the thumbnail. One H.264 file for every browser, because Safari drops the
  *    alpha of HEVC video when it is drawn to a canvas.
- *  - Jobs 1.2.0 (open/close uses the ReadMore motion): Careers page (CMS > Jobs). Tags load from the Jobs template page (CMS > Job Types), like CaseTags;
+ *  - Jobs 1.3.0 (no /careers fetch for the footer count; the Footer counts natively). 1.2.0 (open/close uses the ReadMore motion): Careers page (CMS > Jobs). Tags load from the Jobs template page (CMS > Job Types), like CaseTags;
  *    rows with a Description open and close, empty Apply link falls back to hello@wearepaloma.be.
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
  *  - SliderFX 1.9.0 (parallax reads the slider position from its transform, never from layout; the list gets its own GPU layer) (phone: project sliders centre the slide; parallax measured once, no layout reads per frame) (Case Study Slider: parallax + swipe fix, no stagger; never empty when scrolling back up; parallax matches the grid: zoom 1.2, shift 8) (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
@@ -356,7 +356,9 @@
   function init(scope = document) {
     scope = scope || document;
     scope.querySelectorAll('[data-jobs] [data-job]').forEach(setup);
-    const run = () => count(scope).then(fill);
+    // 1.3: the footer counts natively now (hidden Jobs list + CSS counter in the Footer), so no fetch unless an
+    // element still asks for it with data-jobs-count
+    const run = () => { if (document.querySelector('[data-jobs-count]')) count(scope).then(fill); };
     // Other pages: wait until the page is idle so the fetch never competes with the page itself
     if (scope.querySelector('[data-jobs]')) run();
     else (window.requestIdleCallback ? requestIdleCallback(run, { timeout: 3000 }) : setTimeout(run, 800));
