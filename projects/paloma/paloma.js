@@ -20,7 +20,7 @@
  *    bottom of the screen. Grid, case media and the video player thumbnail: images get a vertical parallax.
  *  - ArrowLinks 1.4.1 (static check only on real links; the slider heading wrapper is a div): hover motion moved to the native Webflow interaction "Arrow link hover" (tweak on the canvas).
  *    Script keeps: press scale on all arrow links, the Apply text arrow hover, links left on # visual only. Services: the hover card image is zoomed and follows the cursor.
- *  - CaseTags 1.9.0: tags 28px tall (design), default cursor; slider cards get their tags straight away. Moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
+ *  - CaseTags 1.10.0 (slider tags load when the slider comes near the screen, not on page load). 1.9.0: tags 28px tall (design), default cursor; slider cards get their tags straight away. Moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
  *    without the stagger.
  *  - SocialSlider 1.8.0 (infinite again from 768px up; phone unchanged). 1.7.0 (page margin straight from the CSS variable, phone layout via Splide breakpoints; Splide's "…" announcer hidden on every slider). 1.6.1 (re-measures after load so the last card keeps its right margin) 1.6.0 (phone: first card left, last right, the rest centred; touch: sliding away pauses the playing card): Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
@@ -798,20 +798,29 @@
     if (host) host.innerHTML = list.map(tag).join(''); else el.innerHTML = '<div class="case-header_tag-list">' + list.map(tag).join('') + '</div>';
     App.inits.forEach((fn) => { if (fn !== init) try { fn(el); } catch (_) {} }); // glass buttons pick the tags up
   });
-  let io = null;
+  let io = null, sio = null;
   function init(scope = document) {
     io = io || new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { io.unobserve(e.target); fill(e.target, e.target._slug); } }), { rootMargin: '400px 0px' });
+    sio = sio || new IntersectionObserver((es) => es.forEach((e) => {
+      if (!e.isIntersecting) return;
+      sio.unobserve(e.target);
+      (e.target._tagEls || []).forEach((t) => fill(t, t._slug));
+    }), { rootMargin: '600px 0px' });
     (scope || document).querySelectorAll('[data-tags-from]').forEach((el) => {
       if (el._tags) return; el._tags = true; el._slug = slugOf(el);
       if (!el._slug) return;
-      // In a slider the cards sit off-screen sideways (and clipped), so lazy loading would only fill them as they
-      // slide in: fill those right away. Grid cards further down the page stay lazy.
-      if (el.closest('.splide, .case-slider, [data-social-slider]')) fill(el, el._slug);
-      else io.observe(el);
+      // In a slider the cards sit off-screen sideways (and clipped), so they can't wait for themselves: the whole
+      // slider fills at once when the slider itself comes near the screen (1.1: was straight away on load, which
+      // fetched every project page on the homepage and case pages before anyone scrolled there)
+      const slider = el.closest('.splide, .case-slider, [data-social-slider]');
+      if (slider) {
+        (slider._tagEls = slider._tagEls || []).push(el);
+        if (!slider._tagObs) { slider._tagObs = true; sio.observe(slider); }
+      } else io.observe(el);
     });
   }
   App.inits.push(init);
-  App.destroys.push(() => { if (io) { io.disconnect(); io = null; } });
+  App.destroys.push(() => { if (io) { io.disconnect(); io = null; } if (sio) { sio.disconnect(); sio = null; } });
   if (document.readyState !== 'loading') init(document);
 })();
 
