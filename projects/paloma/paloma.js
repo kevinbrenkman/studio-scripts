@@ -13,6 +13,7 @@
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
  *  - SliderFX 1.8.1 (phone: project sliders centre the slide; parallax measured once, no layout reads per frame) (Case Study Slider: parallax + swipe fix, no stagger; never empty when scrolling back up; parallax matches the grid: zoom 1.2, shift 8) (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
  *    Depth: images are scaled up in their frame and move sideways with the card's position (horizontal parallax). Hooks into CaseSlider's slider:ready event.
+ *  - TrailStop 1.0.0: the desktop Image Trail stops and fades out as soon as a link to another page is clicked.
  *  - TapStack 1.3.0: About on touch devices, each tap drops a pile of 5 Image Trail images (different one on top each time, 70% size) on the page, kept on screen; they fade out after 2.5s.
  *  - GridFX 1.4.0: projects grid (home + Selected projects): cards reveal on scroll and spread apart (max 20px) towards the top and
  *    bottom of the screen. Grid, case media and the video player thumbnail: images get a vertical parallax.
@@ -1821,4 +1822,25 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   App.inits.push(init);
   App.destroys.push(destroy);
   if (document.readyState !== 'loading') init(document);
+})();
+
+/* TrailStop 1.0.0: the desktop Image Trail (About) stops the moment you click a link to another page (nav logo, menu,
+   any internal link) or go back, and its images fade away. Without this the trail kept drawing during the page
+   transition. The trail is set up fresh on the next page that has one. */
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const stop = () => document.querySelectorAll('[data-trail]').forEach((r) => {
+    if (r._trail) r._trail();
+    if (window.gsap) gsap.to(r, { autoAlpha: 0, duration: 0.2, overwrite: true });
+  });
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('a[href]');
+    if (!a || a.target === '_blank' || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    const u = new URL(a.href, location.href);
+    if (u.origin !== location.origin || (u.pathname === location.pathname && u.hash)) return;
+    stop();
+  }, true);
+  addEventListener('popstate', stop);
+  // Next page: show the layer again (the trail scripts hide or show its images themselves)
+  App.inits.push((s = document) => { if (window.gsap) (s || document).querySelectorAll('[data-trail]').forEach((r) => gsap.set(r, { clearProps: 'opacity,visibility' })); });
 })();
