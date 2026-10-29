@@ -29,7 +29,7 @@
  *  - LogoOnMedia 1.1.0: nav logo gets data-on-media over images/videos (filter lift in the Navigation embed); keeps the logo loop playing.
  *  - LogoHover 1.0.0: hovering the nav logo brakes the spin to a stop facing forward (loop start/end), leaving spins it back up.
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
- *  - SceneScroll 1.3.0 (parallax on the GSAP ticker: keeps running after Swup page changes). 1.2.0 (scene lives outside #swup: clouds fade out and in with the theme, never a plain background in between). 1.1.0 (poster still under the canvas, canvas fades in when the scene is ready). 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
+ *  - SceneScroll 1.4.0 (no position: fixed, so iOS 26 Safari shows the clouds under its toolbars; scroll-driven CSS where supported). 1.3.0 (parallax on the GSAP ticker: keeps running after Swup page changes). 1.2.0 (scene lives outside #swup: clouds fade out and in with the theme, never a plain background in between). 1.1.0 (poster still under the canvas, canvas fades in when the scene is ready). 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
  *  - MediaPoster 1.2.0 (also the Full Video Player: thumbnail + video 2px bigger per side, video hidden until first play): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
@@ -1359,32 +1359,57 @@ if (!document.getElementById('paloma-splide-sr')) {
     const st = document.createElement('style'); st.id = 'paloma-scene-css';
     st.textContent = '[data-scene-canvas]>canvas{position:relative;z-index:1;opacity:0;transition:opacity .8s ease}'
       + '[data-scene].is-ready [data-scene-canvas]>canvas{opacity:1}'
-      + '[data-scene].is-shown [data-scene-poster]{visibility:hidden}';
+      + '[data-scene].is-shown [data-scene-poster]{visibility:hidden}'
+      + 'body:has([data-scene][data-portal]){position:relative}'
+      + '[data-scene][data-portal]{position:absolute;top:0;left:0;right:0;bottom:auto;min-height:0}'
+      + '@keyframes paloma-scene{from{translate:0 0}to{translate:0 var(--scene-shift,0px)}}'
+      + '[data-scene-canvas].is-scroll-driven{animation:paloma-scene linear both;animation-timeline:scroll(root block)}';
     document.head.appendChild(st);
   };
   const project = (el) => { const c = el && el.querySelector('[data-us-project]'); return c ? c.getAttribute('data-us-project') : ''; };
-  // Parallax on the GSAP ticker, not ScrollTrigger: Webflow's interactions kill every ScrollTrigger when they
-  // reinit after a Swup page change, which stopped the clouds. Scroll = Lenis (or native); travel = canvas minus scene height.
-  let tick = null;
-  const stopParallax = () => { if (tick) { gsap.ticker.remove(tick); tick = null; } };
+  // Not position: fixed. iOS 26 Safari clips fixed elements at its toolbars and paints a flat tint there instead,
+  // so the scene is a page-tall absolute layer (body is its containing block) and the canvas is moved down with the
+  // scroll: on screen it travels from its top edge to its bottom edge over the full page scroll. Where the browser
+  // has scroll-driven animations (Safari 26, Chrome) that runs on the compositor, in CSS; elsewhere on the GSAP ticker.
+  // Scroll range and travel are measured in JS (resize, page height changes) and handed to CSS as --scene-shift.
+  let tick = null, ro = null, onResize = null;
+  const SDA = typeof CSS !== 'undefined' && CSS.supports && CSS.supports('animation-timeline: scroll()');
+  const lvh = () => {
+    const p = document.createElement('div');
+    p.style.cssText = 'position:absolute;top:0;height:100lvh;width:0;visibility:hidden;pointer-events:none';
+    document.body.appendChild(p); const h = p.offsetHeight || innerHeight; p.remove(); return h;
+  };
+  const stopParallax = () => {
+    if (tick) { gsap.ticker.remove(tick); tick = null; }
+    if (ro) { ro.disconnect(); ro = null; }
+    if (onResize) { removeEventListener('resize', onResize); onResize = null; }
+  };
   const parallax = () => {
     stopParallax();
-    if (!live || !window.gsap || calm()) return;
+    if (!live) return;
     const canvas = live.querySelector('[data-scene-canvas]');
-    if (!canvas) return;
-    const setY = gsap.quickSetter(canvas, 'y', 'px');
-    let lastY = null, n = 0, travel = 0, max = 1;
+    const wrap = document.querySelector('#swup');
+    if (!canvas || !wrap) return;
+    let shift = 0, max = 1;
     const measure = () => {
-      travel = Math.max(0, canvas.offsetHeight - live.offsetHeight);
-      max = Math.max(1, (window.lenis && window.lenis.limit) || (document.documentElement.scrollHeight - innerHeight));
+      const docH = Math.max(innerHeight, Math.ceil(wrap.getBoundingClientRect().bottom + (window.lenis ? window.lenis.scroll : window.scrollY)));
+      live.style.height = docH + 'px';
+      max = Math.max(1, docH - innerHeight);
+      const travel = Math.max(0, canvas.offsetHeight - lvh());
+      shift = calm() ? 0 : Math.max(0, max - travel); // document offset of the canvas at the end of the scroll
+      canvas.style.setProperty('--scene-shift', shift.toFixed(1) + 'px');
     };
     measure();
+    ro = new ResizeObserver(measure); ro.observe(wrap);
+    onResize = measure; addEventListener('resize', onResize);
+    if (SDA) { canvas.classList.add('is-scroll-driven'); return; }
+    if (!window.gsap) return;
+    let lastY = null;
     tick = () => {
       const sy = window.lenis ? window.lenis.scroll : window.scrollY;
-      if (++n % 30 === 0) measure(); // page height changes as images load
-      else if (sy === lastY) return;
+      if (sy === lastY) return;
       lastY = sy;
-      setY(-travel * Math.min(1, Math.max(0, sy / max)));
+      canvas.style.translate = '0 ' + (shift * Math.min(1, Math.max(0, sy / max))).toFixed(2) + 'px';
     };
     gsap.ticker.add(tick);
   };
