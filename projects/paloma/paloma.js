@@ -13,7 +13,7 @@
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
  *  - SliderFX 1.9.0 (parallax reads the slider position from its transform, never from layout; the list gets its own GPU layer) (phone: project sliders centre the slide; parallax measured once, no layout reads per frame) (Case Study Slider: parallax + swipe fix, no stagger; never empty when scrolling back up; parallax matches the grid: zoom 1.2, shift 8) (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
  *    Depth: images are scaled up in their frame and move sideways with the card's position (horizontal parallax). Hooks into CaseSlider's slider:ready event.
- *  - ObjectFX 1.0.0: Lost objects page. Objects float (bob + sway, out of step); hover masks the Objects Background layer with the object image itself (silhouette) and shows title + subtitle.
+ *  - ObjectFX 1.1.0 (scroll drift like GridFX but further, per-object depth; bigger float; tap shows the text on touch). 1.0.0: Lost objects page. Objects float (bob + sway, out of step); hover masks the Objects Background layer with the object image itself (silhouette) and shows title + subtitle.
  *  - TrailStop 1.0.0: the desktop Image Trail stops and fades out as soon as a link to another page is clicked.
  *  - TapStack 1.3.0: About on touch devices, each tap drops a pile of 5 Image Trail images (different one on top each time, 70% size) on the page, kept on screen; they fade out after 2.5s.
  *  - GridFX 1.4.0: projects grid (home + Selected projects): cards reveal on scroll and spread apart (max 20px) towards the top and
@@ -29,7 +29,7 @@
  *  - LogoOnMedia 1.1.0: nav logo gets data-on-media over images/videos (filter lift in the Navigation embed); keeps the logo loop playing.
  *  - LogoHover 1.0.0: hovering the nav logo brakes the spin to a stop facing forward (loop start/end), leaving spins it back up.
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
- *  - SceneScroll 1.2.0 (scene lives outside #swup: clouds fade out and in with the theme, never a plain background in between). 1.1.0 (poster still under the canvas, canvas fades in when the scene is ready). 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
+ *  - SceneScroll 1.3.0 (parallax on the GSAP ticker: keeps running after Swup page changes). 1.2.0 (scene lives outside #swup: clouds fade out and in with the theme, never a plain background in between). 1.1.0 (poster still under the canvas, canvas fades in when the scene is ready). 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
  *  - MediaPoster 1.2.0 (also the Full Video Player: thumbnail + video 2px bigger per side, video hidden until first play): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
@@ -1239,13 +1239,57 @@ if (!document.getElementById('paloma-splide-sr')) {
 
 /* ---------- ObjectFX ---------- */
 // Lost objects page ([data-object], Object component). Each object floats: a slow bob + sway, every object
-// out of step with the others. Hover: the object turns into its own silhouette. The hover layer is masked with
-// the object's own image (a cut-out PNG/WebP), filled with Variables > Objects Background, text in Objects Text.
-// .is-masked is only added once the mask is set, so there is never a rectangle on hover.
+// out of step with the others. Scroll: objects drift apart towards the top and bottom of the screen, like the
+// project grid (GridFX), but further and each at its own depth. Hover (desktop) or tap (touch): the object turns
+// into its own silhouette. The hover layer is masked with the object's own image (a cut-out PNG/WebP), filled
+// with Variables > Objects Background, text in Objects Text. .is-masked is only added once the mask is set.
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
-  const FLOAT = { y: 10, rot: 1.6, min: 3.2, max: 5.2 }; // px up/down, degrees sway, seconds per swing
+  const FLOAT = { y: 16, rot: 2.4, min: 3.2, max: 5.2 }; // px up/down, degrees sway, seconds per swing
+  const DRIFT = { px: 90, depthMin: 0.5, depthMax: 1.5, phone: 0.5 }; // scroll drift at the screen edges (px), per-object depth range
   const live = new Set();
+  const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const touch = () => matchMedia('(hover: none)').matches;
+  let tick = null, lastY = null, frames = 0, tapWired = false;
+
+  const css = () => {
+    if (document.getElementById('paloma-object-css')) return;
+    const st = document.createElement('style'); st.id = 'paloma-object-css';
+    // Tap state (touch): same look as hover
+    st.textContent = '[data-object].is-masked.is-open .object_hover{opacity:1}[data-object].is-masked.is-open .object_img{opacity:0}';
+    document.head.appendChild(st);
+  };
+  const close = (except) => live.forEach((el) => { if (el !== except) el.classList.remove('is-open'); });
+  const wireTap = () => {
+    if (tapWired) return; tapWired = true;
+    document.addEventListener('click', (e) => {
+      if (!touch()) return;
+      const el = e.target.closest && e.target.closest('[data-object]');
+      if (!el || !live.has(el)) { close(); return; }
+      close(el); el.classList.toggle('is-open');
+    });
+  };
+
+  const drift = () => {
+    if (tick || calm() || !window.gsap) return;
+    tick = () => {
+      if (!live.size) return;
+      const sy = window.lenis ? window.lenis.scroll : window.scrollY;
+      if (sy === lastY && ++frames % 30) return; // only when the page scrolled (plus a re-check twice a second)
+      lastY = sy;
+      const vh = innerHeight, mid = vh / 2, amt = DRIFT.px * (innerWidth < 768 ? DRIFT.phone : 1);
+      live.forEach((el) => {
+        const cur = el._dy || 0, r = el.getBoundingClientRect();
+        const top = r.top - cur, h = r.height;
+        if (top > vh * 1.5 || top + h < -vh * 0.5) return;
+        const n = Math.max(-1, Math.min(1, (top + h / 2 - mid) / mid)); // -1 top edge, 0 centre, 1 bottom edge
+        const y = n * Math.abs(n) * amt * el._depth;
+        el._dy = y; el.style.translate = '0 ' + y.toFixed(2) + 'px';
+      });
+    };
+    gsap.ticker.add(tick);
+  };
+
   const setup = (el) => {
     if (el._obj) return;
     const img = el.querySelector('.object_img');
@@ -1260,18 +1304,33 @@ if (!document.getElementById('paloma-splide-sr')) {
     };
     if (img) { if (img.complete && img.naturalWidth) mask(); else img.addEventListener('load', mask, { once: true }); }
     let tw = [];
-    if (window.gsap && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (window.gsap && !calm()) {
       const r = gsap.utils.random, d = r(FLOAT.min, FLOAT.max);
+      el._depth = r(DRIFT.depthMin, DRIFT.depthMax);
       tw = [
         gsap.fromTo(box, { y: -FLOAT.y }, { y: FLOAT.y, duration: d, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: -r(0, d) }),
         gsap.fromTo(box, { rotation: -FLOAT.rot }, { rotation: FLOAT.rot, duration: d * 1.37, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: -r(0, d) })
       ];
     }
-    el._obj = () => { tw.forEach((t) => t.kill()); if (window.gsap) gsap.set(box, { clearProps: 'transform' }); delete el._obj; };
+    el._obj = () => {
+      tw.forEach((t) => t.kill());
+      if (window.gsap) gsap.set(box, { clearProps: 'transform' });
+      el.style.translate = ''; el.classList.remove('is-open');
+      delete el._obj; delete el._dy;
+    };
     live.add(el);
   };
-  App.inits.push((scope = document) => (scope || document).querySelectorAll('[data-object]').forEach(setup));
-  App.destroys.push(() => { live.forEach((el) => el._obj && el._obj()); live.clear(); });
+  App.inits.push((scope = document) => {
+    const els = (scope || document).querySelectorAll('[data-object]');
+    if (!els.length) return;
+    css(); wireTap();
+    els.forEach(setup);
+    lastY = null; drift();
+  });
+  App.destroys.push(() => {
+    live.forEach((el) => el._obj && el._obj()); live.clear();
+    if (tick) { gsap.ticker.remove(tick); tick = null; }
+  });
 })();
 
 /* ---------- SceneScroll ---------- */
@@ -1304,16 +1363,30 @@ if (!document.getElementById('paloma-splide-sr')) {
     document.head.appendChild(st);
   };
   const project = (el) => { const c = el && el.querySelector('[data-us-project]'); return c ? c.getAttribute('data-us-project') : ''; };
-  const stopParallax = () => { if (tween) { if (tween.scrollTrigger) tween.scrollTrigger.kill(); tween.kill(); tween = null; } };
+  // Parallax on the GSAP ticker, not ScrollTrigger: Webflow's interactions kill every ScrollTrigger when they
+  // reinit after a Swup page change, which stopped the clouds. Scroll = Lenis (or native); travel = canvas minus scene height.
+  let tick = null;
+  const stopParallax = () => { if (tick) { gsap.ticker.remove(tick); tick = null; } };
   const parallax = () => {
     stopParallax();
-    if (!live || !window.gsap || !window.ScrollTrigger || calm()) return;
+    if (!live || !window.gsap || calm()) return;
     const canvas = live.querySelector('[data-scene-canvas]');
     if (!canvas) return;
-    tween = gsap.fromTo(canvas, { y: 0 }, {
-      y: () => Math.min(0, innerHeight - canvas.offsetHeight), ease: 'none', force3D: true,
-      scrollTrigger: { start: 0, end: 'max', scrub: true, invalidateOnRefresh: true },
-    });
+    const setY = gsap.quickSetter(canvas, 'y', 'px');
+    let lastY = null, n = 0, travel = 0, max = 1;
+    const measure = () => {
+      travel = Math.max(0, canvas.offsetHeight - live.offsetHeight);
+      max = Math.max(1, (window.lenis && window.lenis.limit) || (document.documentElement.scrollHeight - innerHeight));
+    };
+    measure();
+    tick = () => {
+      const sy = window.lenis ? window.lenis.scroll : window.scrollY;
+      if (++n % 30 === 0) measure(); // page height changes as images load
+      else if (sy === lastY) return;
+      lastY = sy;
+      setY(-travel * Math.min(1, Math.max(0, sy / max)));
+    };
+    gsap.ticker.add(tick);
   };
   const init = (scope = document) => {
     const found = (scope || document).querySelector('[data-scene]:not([data-portal])');
