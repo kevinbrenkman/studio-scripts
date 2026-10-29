@@ -30,7 +30,7 @@
  *  - LogoHover 1.0.0: hovering the nav logo brakes the spin to a stop facing forward (loop start/end), leaving spins it back up.
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
  *  - SceneScroll 1.4.0 (no position: fixed, so iOS 26 Safari shows the clouds under its toolbars; scroll-driven CSS where supported). 1.3.0 (parallax on the GSAP ticker: keeps running after Swup page changes). 1.2.0 (scene lives outside #swup: clouds fade out and in with the theme, never a plain background in between). 1.1.0 (poster still under the canvas, canvas fades in when the scene is ready). 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
- *  - CookieDock 1.2.0 (gap = the banner's edge margin; "#" consent links no longer scroll to top). 1.1.0: below 992px the cookie banner starts under the menu button; the first menu open moves it to the bottom for good. No motion on load or scroll.
+ *  - CookieDock 1.2.1 (gap = the banner's edge margin; "#" consent links no longer scroll to top). 1.1.0: below 992px the cookie banner starts under the menu button; the first menu open moves it to the bottom for good. No motion on load or scroll.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
  *  - MediaPoster 1.2.0 (also the Full Video Player: thumbnail + video 2px bigger per side, video hidden until first play): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
@@ -1463,8 +1463,10 @@ if (!document.getElementById('paloma-splide-sr')) {
 // keep it at the bottom too). Never opened the menu: it stays at the top. No movement on load or while scrolling.
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
-  // Gap between the menu button and the banner = the banner's own edge margin (its `right`, a variable in Webflow)
-  const gapOf = (el) => parseFloat(getComputedStyle(el).right) || 12;
+  // Gap between the menu button and the banner = the banner's own edge margin (right + margin-right, set in Webflow).
+  // Its margin-top is taken off, since `top` already sits above that margin.
+  const offsetOf = (el) => { const c = getComputedStyle(el), n = (v) => parseFloat(v) || 0;
+    return n(c.right) + n(c.marginRight) - n(c.marginTop); };
   const EASE = 'cubic-bezier(.65,0,.35,1)';
   let wired = false;
   const wire = () => {
@@ -1477,7 +1479,7 @@ if (!document.getElementById('paloma-splide-sr')) {
     const place = () => { // only on width changes: Safari's toolbars change the height while scrolling
       if (innerWidth === lastW) return; lastW = innerWidth;
       const t = toggle.getBoundingClientRect();
-      if (t.height) root.style.setProperty('--cc-top', Math.round(t.bottom + gapOf(banner)) + 'px');
+      if (t.height) root.style.setProperty('--cc-top', Math.round(t.bottom + offsetOf(banner)) + 'px');
     };
     banner.setAttribute('data-dock', 'top'); root.classList.add('cc-dock-top');
     place(); addEventListener('resize', place);
