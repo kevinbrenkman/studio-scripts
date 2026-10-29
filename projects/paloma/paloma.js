@@ -10,7 +10,7 @@
  *    alpha of HEVC video when it is drawn to a canvas.
  *  - Jobs 1.3.0 (no /careers fetch for the footer count; the Footer counts natively). 1.2.0 (open/close uses the ReadMore motion): Careers page (CMS > Jobs). Tags load from the Jobs template page (CMS > Job Types), like CaseTags;
  *    rows with a Description open and close, empty Apply link falls back to hello@wearepaloma.be.
- *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
+ *    Footer + menu vacancy number: native since 1.3.0 (hidden Jobs list + CSS counter); [data-jobs-count] still works as a fallback (fetches /careers once).
  *  - SliderFX 1.9.0 (parallax reads the slider position from its transform, never from layout; the list gets its own GPU layer) (phone: project sliders centre the slide; parallax measured once, no layout reads per frame) (Case Study Slider: parallax + swipe fix, no stagger; never empty when scrolling back up; parallax matches the grid: zoom 1.2, shift 8) (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
  *    Depth: images are scaled up in their frame and move sideways with the card's position (horizontal parallax). Hooks into CaseSlider's slider:ready event.
  *  - ObjectFX 1.1.0 (scroll drift like GridFX but further, per-object depth; bigger float; tap shows the text on touch). 1.0.0: Lost objects page. Objects float (bob + sway, out of step); hover masks the Objects Background layer with the object image itself (silhouette) and shows title + subtitle.
@@ -252,7 +252,7 @@
       '@media (max-width:767px){[data-jobs] [data-job] .case-header_tag-list{justify-content:flex-start}}' +
       '.jobs_item.is-static .jobs_row{cursor:default}.jobs_item.is-static .jobs_plus{visibility:hidden}' +
       '.jobs_row:focus-visible{outline:1px solid currentColor;outline-offset:4px}' +
-      '.footer_count{font-size:.6em;margin-left:.15em;line-height:0}.footer_count:empty{display:none}';
+      '.footer_count{font-size:.6em;margin-left:.15em;line-height:0}'; // the number itself comes from CSS now (Footer embed), so the sup is always empty: no :empty hide
     document.head.appendChild(st);
   }
 
