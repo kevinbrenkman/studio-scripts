@@ -13,7 +13,7 @@
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
  *  - SliderFX 1.7.0 (Case Study Slider: parallax + swipe fix, no stagger; never empty when scrolling back up; parallax matches the grid: zoom 1.2, shift 8) (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
  *    Depth: images are scaled up in their frame and move sideways with the card's position (horizontal parallax). Hooks into CaseSlider's slider:ready event.
- *  - GridFX 1.3.0: projects grid (home + Selected projects): cards reveal on scroll and spread apart (max 20px) towards the top and
+ *  - GridFX 1.4.0: projects grid (home + Selected projects): cards reveal on scroll and spread apart (max 20px) towards the top and
  *    bottom of the screen. Grid, case media and the video player thumbnail: images get a vertical parallax.
  *  - ArrowLinks 1.4.1 (static check only on real links; the slider heading wrapper is a div): hover motion moved to the native Webflow interaction "Arrow link hover" (tweak on the canvas).
  *    Script keeps: press scale on all arrow links, the Apply text arrow hover, links left on # visual only. Services: the hover card image is zoomed and follows the cursor.
@@ -551,13 +551,20 @@
         gsap.to(queue, { autoAlpha: 1, y: 0, duration: 1, ease: 'power3.out', stagger: 0.12, overwrite: 'auto' });
         queue = [];
       };
+      // Cards already on screen when the page opens (even partly) reveal right away, no scroll needed
+      const vh = innerHeight;
+      cards.forEach((c, i) => {
+        const r = c.getBoundingClientRect(), l = links[i];
+        if (r.top < vh && r.bottom > 0 && !revealed.has(l)) { revealed.add(l); queue.push(l); }
+      });
+      if (queue.length) flush();
       io = new IntersectionObserver((es) => es.forEach((e) => {
         if (!e.isIntersecting) return;
         const l = e.target.querySelector('.project-card_link') || e.target;
         if (revealed.has(l)) return; revealed.add(l); io.unobserve(e.target);
         queue.push(l); clearTimeout(t); t = setTimeout(flush, 30);
-      }), { rootMargin: '0px 0px -8% 0px' });
-      cards.forEach((c) => io.observe(c));
+      }), { rootMargin: '0px 0px -4% 0px' });
+      cards.forEach((c, i) => { if (!revealed.has(links[i])) io.observe(c); });
     }
 
     /* Spread + image parallax, driven by each element's untransformed position on screen */
