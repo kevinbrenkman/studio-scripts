@@ -31,6 +31,7 @@
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
  *  - SceneScroll 1.5.0 (clouds leave on click, data-leaving drops the sky body colour at once). 1.4.0 (no position: fixed, so iOS 26 Safari shows the clouds under its toolbars; scroll-driven CSS where supported). 1.3.0 (parallax on the GSAP ticker: keeps running after Swup page changes). 1.2.0 (scene lives outside #swup: clouds fade out and in with the theme, never a plain background in between). 1.1.0 (poster still under the canvas, canvas fades in when the scene is ready). 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
  *  - ThemePace 1.0.0: page change colour crossfade on body 1.5x faster, so new content never lands on a half-changed background.
+ *  - CookieExpand 1.0.0: Preferences open inside the cookie banner (it grows, text crossfades); choices replayed in Finsweet's own form.
  *  - CookieDock 1.3.0 (--cc-prefs-top: preferences open on the banner's spot). 1.2.1 (gap = the banner's edge margin; "#" consent links no longer scroll to top). 1.1.0: below 992px the cookie banner starts under the menu button; the first menu open moves it to the bottom for good. No motion on load or scroll.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
@@ -1556,6 +1557,80 @@ if (!document.getElementById('paloma-splide-sr')) {
     const a = e.target.closest && e.target.closest('a[fs-cc][href="#"], [fs-cc] a[href="#"]');
     if (a) e.preventDefault();
   }, true);
+})();
+
+/* ---------- CookieExpand ---------- */
+// Preferences open inside the cookie banner: the banner's text fades out, it grows to the height of the settings
+// and they fade in, on the same spot (no second card, no overlay). Finsweet's <form> itself is moved into the banner
+// (checkbox state stays). Finsweet only saves from inside its own preferences component, so Accept / Reject / Save
+// in the expanded banner: the banner fades out, the form goes back home and the click is replayed there.
+// Also moved back when the footer's Cookie Preferences link opens the normal card (after consent).
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const EASE = 'power3.inOut';
+  let wired = false;
+  const wire = () => {
+    const banner = document.querySelector('.fs-cc-banner2_component');
+    const form = document.querySelector('.fs-cc-prefs2_form');
+    const box = banner && banner.querySelector('.fs-cc-banner2_container');
+    if (!banner || !form || !box || !window.gsap) return false;
+    const home = form.parentElement, after = form.nextSibling;
+    if (!document.getElementById('paloma-ccx-css')) {
+      const st = document.createElement('style'); st.id = 'paloma-ccx-css';
+      st.textContent = '.fs-cc-banner2_component.is-prefs .fs-cc-prefs2_form{position:relative;width:auto;max-width:none;margin:0;background:none;backdrop-filter:none;-webkit-backdrop-filter:none;border-radius:0;animation:none;pointer-events:auto;isolation:auto}' +
+        '.fs-cc-banner2_component.is-prefs .fs-cc-prefs2_form>:is(.nav_button-stroke,.nav_button-glow,.fs-cc-prefs2_close){display:none}' +
+        '.fs-cc-banner2_component.is-prefs .fs-cc-prefs2_content{padding:0}' +
+        '.fs-cc-banner2_component.is-prefs .fs-cc-prefs2_form{width:100%;flex:1 1 100%}';
+      document.head.appendChild(st);
+    }
+    const inside = () => form.parentElement === banner;
+    const restore = () => {
+      if (!inside()) return;
+      gsap.killTweensOf([banner, box, form]);
+      home.insertBefore(form, after && after.parentElement === home ? after : null);
+      banner.classList.remove('is-prefs');
+      gsap.set([box, form], { clearProps: 'opacity,visibility' }); box.style.display = '';
+      gsap.set(banner, { clearProps: 'height' });
+    };
+    const expand = () => {
+      if (inside()) return;
+      const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const h0 = banner.offsetHeight;
+      gsap.to(box, { autoAlpha: 0, duration: calm ? 0 : 0.25, ease: 'power2.in', onComplete: () => {
+        box.style.display = 'none';
+        banner.appendChild(form);
+        banner.classList.add('is-prefs');
+        gsap.set(form, { autoAlpha: 0 });
+        const h1 = banner.offsetHeight;
+        gsap.fromTo(banner, { height: h0 }, { height: h1, duration: calm ? 0 : 0.6, ease: EASE, clearProps: 'height' });
+        gsap.to(form, { autoAlpha: 1, duration: calm ? 0 : 0.45, delay: calm ? 0 : 0.3, ease: 'power2.out' });
+      } });
+    };
+    const choose = (btn) => {
+      gsap.to(banner, { autoAlpha: 0, duration: 0.4, ease: 'power2.in', onComplete: () => {
+        restore();
+        btn.click(); // now inside Finsweet's component: it saves the choice
+        banner.style.display = 'none';
+        gsap.set(banner, { clearProps: 'opacity,visibility' });
+      } });
+    };
+    // Capture phase: runs before Finsweet's own handlers
+    document.addEventListener('click', (e) => {
+      const pick = inside() && e.target.closest && e.target.closest('.fs-cc-prefs2_form [fs-cc="allow"], .fs-cc-prefs2_form [fs-cc="deny"], .fs-cc-prefs2_form [fs-cc="submit"]');
+      if (pick && banner.contains(pick)) { e.preventDefault(); e.stopPropagation(); choose(pick); return; }
+      const btn = e.target.closest && e.target.closest('[fs-cc="open-preferences"]');
+      if (!btn) return;
+      if (banner.contains(btn) && getComputedStyle(banner).display !== 'none') {
+        e.preventDefault(); e.stopPropagation(); expand();
+      } else restore(); // footer link: Finsweet opens the normal card, which needs its form back
+    }, true);
+    // Banner closed by Finsweet (accept, reject or save): put the form back for later
+    new MutationObserver(() => { if (getComputedStyle(banner).display === 'none') restore(); })
+      .observe(banner, { attributes: true, attributeFilter: ['style', 'class'] });
+    return true;
+  };
+  App.inits.push(() => { if (!wired) wired = wire(); });
+  if (document.readyState !== 'loading') wired = wire();
 })();
 
 /* ---------- MailMagnet ---------- */
