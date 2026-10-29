@@ -31,7 +31,7 @@
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
  *  - SceneScroll 1.5.0 (clouds leave on click, data-leaving drops the sky body colour at once). 1.4.0 (no position: fixed, so iOS 26 Safari shows the clouds under its toolbars; scroll-driven CSS where supported). 1.3.0 (parallax on the GSAP ticker: keeps running after Swup page changes). 1.2.0 (scene lives outside #swup: clouds fade out and in with the theme, never a plain background in between). 1.1.0 (poster still under the canvas, canvas fades in when the scene is ready). 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
  *  - ThemePace 1.0.0: page change colour crossfade on body 1.5x faster, so new content never lands on a half-changed background.
- *  - CookieExpand 1.1.0 (footer Cookie Preferences expands the banner while it is up). 1.0.0: Preferences open inside the cookie banner (it grows, text crossfades); choices replayed in Finsweet's own form.
+ *  - CookieExpand 1.2.0 (checkboxes draw their ticked state inside the banner). 1.1.0 (footer Cookie Preferences expands the banner while it is up). 1.0.0: Preferences open inside the cookie banner (it grows, text crossfades); choices replayed in Finsweet's own form.
  *  - CookieDock 1.3.1 (all fs-cc links skip Swup, footer link included). 1.3.0 (--cc-prefs-top: preferences open on the banner's spot). 1.2.1 (gap = the banner's edge margin; "#" consent links no longer scroll to top). 1.1.0: below 992px the cookie banner starts under the menu button; the first menu open moves it to the bottom for good. No motion on load or scroll.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
@@ -1626,6 +1626,14 @@ if (!document.getElementById('paloma-splide-sr')) {
         e.preventDefault(); e.stopPropagation(); expand();
       } else restore(); // after consent: Finsweet opens the normal card, which needs its form back
     }, true);
+    // Webflow draws its custom checkbox (w--redirected-checked) only for forms inside a .w-form block, which the
+    // banner is not: keep the drawn box in sync with the real checkbox ourselves
+    banner.addEventListener('change', (e) => {
+      const input = e.target;
+      if (!input || input.type !== 'checkbox' || !inside()) return;
+      const box = input.closest('label') && input.closest('label').querySelector('.w-checkbox-input');
+      if (box) box.classList.toggle('w--redirected-checked', input.checked);
+    });
     // Banner closed by Finsweet (accept, reject or save): put the form back for later
     new MutationObserver(() => { if (getComputedStyle(banner).display === 'none') restore(); })
       .observe(banner, { attributes: true, attributeFilter: ['style', 'class'] });
