@@ -11,7 +11,7 @@
  *  - Jobs 1.2.0 (open/close uses the ReadMore motion): Careers page (CMS > Jobs). Tags load from the Jobs template page (CMS > Job Types), like CaseTags;
  *    rows with a Description open and close, empty Apply link falls back to hello@wearepaloma.be.
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
- *  - SliderFX 1.8.0 (phone: project sliders centre the slide; parallax measured once, no layout reads per frame) (Case Study Slider: parallax + swipe fix, no stagger; never empty when scrolling back up; parallax matches the grid: zoom 1.2, shift 8) (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
+ *  - SliderFX 1.8.1 (phone: project sliders centre the slide; parallax measured once, no layout reads per frame) (Case Study Slider: parallax + swipe fix, no stagger; never empty when scrolling back up; parallax matches the grid: zoom 1.2, shift 8) (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
  *    Depth: images are scaled up in their frame and move sideways with the card's position (horizontal parallax). Hooks into CaseSlider's slider:ready event.
  *  - TapStack 1.1.0: About on touch devices, each tap drops a pile of 5 Image Trail images where you tapped; they fade out after 2.5s.
  *  - GridFX 1.4.0: projects grid (home + Selected projects): cards reveal on scroll and spread apart (max 20px) towards the top and
@@ -391,7 +391,7 @@
     const cards = () => slides().map((s) => s.querySelector('.project-card') || s.firstElementChild).filter(Boolean);
 
     /* Phone: project sliders (More Cases) centre the active slide, so a swipe always lands a card in the middle. */
-    if (innerWidth < 768 && root.querySelector('.project-card') && !root.hasAttribute('data-social-slider')) {
+    if (innerWidth < 768 && root.querySelector('.project-card, .project-card_link') && !root.hasAttribute('data-social-slider')) {
       root.classList.add('is-centered');
       sp.options = { focus: 'center', padding: 0 };
     }
