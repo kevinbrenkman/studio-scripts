@@ -30,13 +30,13 @@
  *  - LogoHover 1.0.0: hovering the nav logo brakes the spin to a stop facing forward (loop start/end), leaving spins it back up.
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
  *  - SceneScroll 1.4.0 (no position: fixed, so iOS 26 Safari shows the clouds under its toolbars; scroll-driven CSS where supported). 1.3.0 (parallax on the GSAP ticker: keeps running after Swup page changes). 1.2.0 (scene lives outside #swup: clouds fade out and in with the theme, never a plain background in between). 1.1.0 (poster still under the canvas, canvas fades in when the scene is ready). 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
- *  - CookieDock 1.0.0: below 992px the cookie banner sits under the menu button; opening the menu slides it to the bottom.
+ *  - CookieDock 1.1.0: below 992px the cookie banner starts under the menu button; the first menu open moves it to the bottom for good. No motion on load or scroll.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
  *  - MediaPoster 1.2.0 (also the Full Video Player: thumbnail + video 2px bigger per side, video hidden until first play): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
  *    same slider:ready event, so SliderMotion (trackpad, auto scroll) and SliderFX (reveal, parallax) run on it too.
  *    Own module because CaseSlider removes slides that link to the current page (the play button is href="#").
- *  - CardRim 1.0.0: Social Card playing with sound gets the glass button rim round the video edge; drifts round,
+ *  - CardRim 1.1.0 (data-rim-always: the cookie banner rim drifts too). 1.0.0: Social Card playing with sound gets the glass button rim round the video edge; drifts round,
  *    turns to the cursor on hover. Markup and CSS in the Social Card component (.social-card_rim).
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
@@ -1006,7 +1006,8 @@
     const d = Math.min(dt, 50) / 1000;
     live.forEach((r) => {
       if (!r.el.isConnected) { live.delete(r); return; }
-      if (!r.card.classList.contains('is-sound') && !r.card.classList.contains('is-glow-out')) return;
+      if (!r.always && !r.card.classList.contains('is-sound') && !r.card.classList.contains('is-glow-out')) return;
+      if (r.always && !r.el.offsetWidth) return; // hidden (consent given)
       const w = r.el.offsetWidth, h = r.el.offsetHeight;
       let hover = false;
       if (CAN_HOVER && px !== null) {
@@ -1026,14 +1027,15 @@
   const stop = () => { if (!on) return; on = false; gsap.ticker.remove(tick); window.removeEventListener('pointermove', move); };
   const setup = (el) => {
     if (el._cr || !window.gsap) return;
-    const card = el.closest('[data-social-card]');
+    const always = el.hasAttribute('data-rim-always'); // e.g. the cookie banner: always drifting, draws the eye
+    const card = always ? el : el.closest('[data-social-card]');
     if (!card) return;
     el._cr = true;
     const hl = [...el.querySelectorAll('[data-rim]')].map((g) => {
       gsap.set(g, { left: 0, top: 0, xPercent: -50, yPercent: -50 });
       return { off: parseFloat(g.dataset.rim) || 0, x: gsap.quickSetter(g, 'x', 'px'), y: gsap.quickSetter(g, 'y', 'px') };
     });
-    const r = { el, card, hl, a: RIM.rest };
+    const r = { el, card, hl, a: RIM.rest, always };
     hl.forEach((g) => { const p = edge(el.offsetWidth, el.offsetHeight, r.a + g.off); g.x(p.x); g.y(p.y); });
     live.add(r);
   };
@@ -1453,35 +1455,42 @@ if (!document.getElementById('paloma-splide-sr')) {
 })();
 
 /* ---------- CookieDock ---------- */
-// Tablet and phone (below 992px): the cookie banner sits right under the menu button, same right edge. When the
-// menu opens, it slides down to its normal place at the bottom of the screen, so menu and banner fit together.
-// Measured here (button position, banner size), handed to CSS as --cc-dy; the slide itself is a CSS transition.
+// Tablet and phone (below 992px): on arrival the cookie banner sits right under the menu button (data-dock="top",
+// CSS in the Cookie Banner embed, position --cc-top measured here once). The first time the menu opens it slides to
+// the bottom, under the menu panel, and stays there for the rest of the visit (Swup keeps the banner, so other pages
+// keep it at the bottom too). Never opened the menu: it stays at the top. No movement on load or while scrolling.
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
   const GAP = 8; // px between the menu button and the banner
+  const EASE = 'cubic-bezier(.65,0,.35,1)';
   let wired = false;
   const wire = () => {
     const banner = document.querySelector('.fs-cc-banner2_component');
     const toggle = document.querySelector('[data-nav-toggle]');
     if (!banner || !toggle) return false;
+    const root = document.documentElement;
     const mq = matchMedia('(max-width: 991px)');
-    const measure = () => {
-      if (!mq.matches || getComputedStyle(banner).display === 'none') { banner.style.removeProperty('--cc-dy'); return; }
-      const prev = banner.style.translate; banner.style.translate = 'none'; // measure the resting (bottom) position
-      const b = banner.getBoundingClientRect(), t = toggle.getBoundingClientRect();
-      banner.style.translate = prev;
-      banner.style.setProperty('--cc-dy', Math.min(0, t.bottom + GAP - b.top).toFixed(1) + 'px');
+    let lastW = 0;
+    const place = () => { // only on width changes: Safari's toolbars change the height while scrolling
+      if (innerWidth === lastW) return; lastW = innerWidth;
+      const t = toggle.getBoundingClientRect();
+      if (t.height) root.style.setProperty('--cc-top', Math.round(t.bottom + GAP) + 'px');
     };
-    if (!document.getElementById('paloma-ccdock-css')) {
-      const st = document.createElement('style'); st.id = 'paloma-ccdock-css';
-      st.textContent = '@media (max-width:991px){.fs-cc-banner2_component{translate:0 var(--cc-dy,0px);transition:translate .7s cubic-bezier(.65,0,.35,1),color .6s cubic-bezier(.65,0,.35,1)}'
-        + 'html.is-menu-open .fs-cc-banner2_component{translate:0 0}}';
-      document.head.appendChild(st);
-    }
-    new ResizeObserver(measure).observe(banner);
-    addEventListener('resize', measure); mq.addEventListener('change', measure);
-    if (document.fonts) document.fonts.ready.then(measure);
-    measure();
+    banner.setAttribute('data-dock', 'top'); root.classList.add('cc-dock-top');
+    place(); addEventListener('resize', place);
+    if (document.fonts) document.fonts.ready.then(() => { lastW = 0; place(); });
+    const toBottom = () => {
+      const visible = mq.matches && getComputedStyle(banner).display !== 'none';
+      const from = visible ? banner.getBoundingClientRect().top : 0;
+      banner.removeAttribute('data-dock'); root.classList.remove('cc-dock-top');
+      if (!visible || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      const dy = from - banner.getBoundingClientRect().top;
+      banner.animate([{ translate: '0 ' + dy + 'px' }, { translate: '0 0' }], { duration: 700, easing: EASE });
+    };
+    const mo = new MutationObserver(() => {
+      if (root.classList.contains('is-menu-open') && banner.hasAttribute('data-dock')) { toBottom(); mo.disconnect(); }
+    });
+    mo.observe(root, { attributes: true, attributeFilter: ['class'] });
     return true;
   };
   App.inits.push(() => { if (!wired) wired = wire(); });
