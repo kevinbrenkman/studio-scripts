@@ -11,7 +11,7 @@
  *  - Jobs 1.2.0 (open/close uses the ReadMore motion): Careers page (CMS > Jobs). Tags load from the Jobs template page (CMS > Job Types), like CaseTags;
  *    rows with a Description open and close, empty Apply link falls back to hello@wearepaloma.be.
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
- *  - SliderFX 1.8.1 (phone: project sliders centre the slide; parallax measured once, no layout reads per frame) (Case Study Slider: parallax + swipe fix, no stagger; never empty when scrolling back up; parallax matches the grid: zoom 1.2, shift 8) (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
+ *  - SliderFX 1.9.0 (parallax reads the slider position from its transform, never from layout; the list gets its own GPU layer) (phone: project sliders centre the slide; parallax measured once, no layout reads per frame) (Case Study Slider: parallax + swipe fix, no stagger; never empty when scrolling back up; parallax matches the grid: zoom 1.2, shift 8) (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
  *    Depth: images are scaled up in their frame and move sideways with the card's position (horizontal parallax). Hooks into CaseSlider's slider:ready event.
  *  - TrailStop 1.0.0: the desktop Image Trail stops and fades out as soon as a link to another page is clicked.
  *  - TapStack 1.3.0: About on touch devices, each tap drops a pile of 5 Image Trail images (different one on top each time, 70% size) on the page, kept on screen; they fade out after 2.5s.
@@ -448,16 +448,20 @@
       const list = root.querySelector('.splide__list');
       const SEL = '.project-card_media img, .social-card_media > img, .social-card_media > video, .media-card_media > img, .media-card_media > video';
       let map = null, base = 0;
+      // Slider position from the transform Splide wrote (no layout read). Move.getPosition() measures the list,
+      // which right after auto scroll moved it forced a full layout every frame: the slider stepped instead of gliding.
+      const posOf = () => { const m = list && /(-?[\d.]+)px/.exec(list.style.transform); return m ? +m[1] : Move.getPosition(); };
+      if (list) list.style.willChange = 'transform'; // own GPU layer: slow auto scroll glides on subpixels instead of snapping to whole pixels
       const build = () => {
         const L = list ? list.getBoundingClientRect().left : 0;
-        base = L - Move.getPosition();
+        base = L - posOf();
         map = cards().map((c) => { const r = c.getBoundingClientRect(); return { off: r.left - L, w: r.width, imgs: [...c.querySelectorAll(SEL)] }; });
       };
       sp.on('resized refresh updated', () => { map = null; last = null; });
       root.addEventListener('pointerenter', () => { map = null; }, { passive: true }); // HoverFlip adds images on hover
       tick = () => {
         if (!inView) return;
-        const pos = Move.getPosition();
+        const pos = posOf();
         if (pos === last && ++frames % 30) return;
         if (pos === last) map = null; // idle re-check twice a second: pick up late or added images
         last = pos;
