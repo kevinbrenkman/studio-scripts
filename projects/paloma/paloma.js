@@ -30,6 +30,7 @@
  *  - LogoHover 1.0.0: hovering the nav logo brakes the spin to a stop facing forward (loop start/end), leaving spins it back up.
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
  *  - SceneScroll 1.4.0 (no position: fixed, so iOS 26 Safari shows the clouds under its toolbars; scroll-driven CSS where supported). 1.3.0 (parallax on the GSAP ticker: keeps running after Swup page changes). 1.2.0 (scene lives outside #swup: clouds fade out and in with the theme, never a plain background in between). 1.1.0 (poster still under the canvas, canvas fades in when the scene is ready). 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
+ *  - CookieDock 1.0.0: below 992px the cookie banner sits under the menu button; opening the menu slides it to the bottom.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
  *  - MediaPoster 1.2.0 (also the Full Video Player: thumbnail + video 2px bigger per side, video hidden until first play): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
@@ -1449,6 +1450,42 @@ if (!document.getElementById('paloma-splide-sr')) {
       window.gsap ? gsap.to(old, { autoAlpha: 0, duration: calm() ? 0 : FADE.out, ease: 'power2.inOut', onComplete: end }) : end();
     });
   });
+})();
+
+/* ---------- CookieDock ---------- */
+// Tablet and phone (below 992px): the cookie banner sits right under the menu button, same right edge. When the
+// menu opens, it slides down to its normal place at the bottom of the screen, so menu and banner fit together.
+// Measured here (button position, banner size), handed to CSS as --cc-dy; the slide itself is a CSS transition.
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const GAP = 8; // px between the menu button and the banner
+  let wired = false;
+  const wire = () => {
+    const banner = document.querySelector('.fs-cc-banner2_component');
+    const toggle = document.querySelector('[data-nav-toggle]');
+    if (!banner || !toggle) return false;
+    const mq = matchMedia('(max-width: 991px)');
+    const measure = () => {
+      if (!mq.matches || getComputedStyle(banner).display === 'none') { banner.style.removeProperty('--cc-dy'); return; }
+      const prev = banner.style.translate; banner.style.translate = 'none'; // measure the resting (bottom) position
+      const b = banner.getBoundingClientRect(), t = toggle.getBoundingClientRect();
+      banner.style.translate = prev;
+      banner.style.setProperty('--cc-dy', Math.min(0, t.bottom + GAP - b.top).toFixed(1) + 'px');
+    };
+    if (!document.getElementById('paloma-ccdock-css')) {
+      const st = document.createElement('style'); st.id = 'paloma-ccdock-css';
+      st.textContent = '@media (max-width:991px){.fs-cc-banner2_component{translate:0 var(--cc-dy,0px);transition:translate .7s cubic-bezier(.65,0,.35,1),color .6s cubic-bezier(.65,0,.35,1)}'
+        + 'html.is-menu-open .fs-cc-banner2_component{translate:0 0}}';
+      document.head.appendChild(st);
+    }
+    new ResizeObserver(measure).observe(banner);
+    addEventListener('resize', measure); mq.addEventListener('change', measure);
+    if (document.fonts) document.fonts.ready.then(measure);
+    measure();
+    return true;
+  };
+  App.inits.push(() => { if (!wired) wired = wire(); });
+  if (document.readyState !== 'loading') wired = wire();
 })();
 
 /* ---------- MailMagnet ---------- */
