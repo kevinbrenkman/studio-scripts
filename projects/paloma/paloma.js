@@ -31,8 +31,8 @@
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
  *  - SceneScroll 1.5.0 (clouds leave on click, data-leaving drops the sky body colour at once). 1.4.0 (no position: fixed, so iOS 26 Safari shows the clouds under its toolbars; scroll-driven CSS where supported). 1.3.0 (parallax on the GSAP ticker: keeps running after Swup page changes). 1.2.0 (scene lives outside #swup: clouds fade out and in with the theme, never a plain background in between). 1.1.0 (poster still under the canvas, canvas fades in when the scene is ready). 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
  *  - ThemePace 1.0.0: page change colour crossfade on body 1.5x faster, so new content never lands on a half-changed background.
- *  - CookieExpand 1.0.0: Preferences open inside the cookie banner (it grows, text crossfades); choices replayed in Finsweet's own form.
- *  - CookieDock 1.3.0 (--cc-prefs-top: preferences open on the banner's spot). 1.2.1 (gap = the banner's edge margin; "#" consent links no longer scroll to top). 1.1.0: below 992px the cookie banner starts under the menu button; the first menu open moves it to the bottom for good. No motion on load or scroll.
+ *  - CookieExpand 1.1.0 (footer Cookie Preferences expands the banner while it is up). 1.0.0: Preferences open inside the cookie banner (it grows, text crossfades); choices replayed in Finsweet's own form.
+ *  - CookieDock 1.3.1 (all fs-cc links skip Swup, footer link included). 1.3.0 (--cc-prefs-top: preferences open on the banner's spot). 1.2.1 (gap = the banner's edge margin; "#" consent links no longer scroll to top). 1.1.0: below 992px the cookie banner starts under the menu button; the first menu open moves it to the bottom for good. No motion on load or scroll.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
  *  - MediaPoster 1.2.0 (also the Full Video Player: thumbnail + video 2px bigger per side, video hidden until first play): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
@@ -1549,7 +1549,8 @@ if (!document.getElementById('paloma-splide-sr')) {
   if (document.readyState !== 'loading') wired = wire();
   // Finsweet's buttons are links to "#": Swup treated them as an anchor visit and scrolled to the top.
   // data-no-swup makes Swup skip them; preventDefault stops the browser's own jump to "#".
-  const noSwup = () => document.querySelectorAll('.fs-cc-banner2_component, .fs-cc-prefs2_component')
+  // Also every other consent link on the page, like Cookie Preferences in the footer (re-marked after each page change)
+  const noSwup = () => document.querySelectorAll('.fs-cc-banner2_component, .fs-cc-prefs2_component, a[fs-cc]')
     .forEach((el) => el.setAttribute('data-no-swup', ''));
   App.inits.push(noSwup);
   if (document.readyState !== 'loading') noSwup(); else document.addEventListener('DOMContentLoaded', noSwup);
@@ -1620,9 +1621,10 @@ if (!document.getElementById('paloma-splide-sr')) {
       if (pick && banner.contains(pick)) { e.preventDefault(); e.stopPropagation(); choose(pick); return; }
       const btn = e.target.closest && e.target.closest('[fs-cc="open-preferences"]');
       if (!btn) return;
-      if (banner.contains(btn) && getComputedStyle(banner).display !== 'none') {
+      if (getComputedStyle(banner).display !== 'none') {
+        // Banner still up (no choice made yet): open the settings in it, also from the footer link
         e.preventDefault(); e.stopPropagation(); expand();
-      } else restore(); // footer link: Finsweet opens the normal card, which needs its form back
+      } else restore(); // after consent: Finsweet opens the normal card, which needs its form back
     }, true);
     // Banner closed by Finsweet (accept, reject or save): put the form back for later
     new MutationObserver(() => { if (getComputedStyle(banner).display === 'none') restore(); })
