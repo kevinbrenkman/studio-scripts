@@ -36,7 +36,7 @@
  *  - MediaPoster 1.2.0 (also the Full Video Player: thumbnail + video 2px bigger per side, video hidden until first play): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
  *    same slider:ready event, so SliderMotion (trackpad, auto scroll) and SliderFX (reveal, parallax) run on it too.
  *    Own module because CaseSlider removes slides that link to the current page (the play button is href="#").
- *  - CardRim 1.1.0 (data-rim-always: the cookie banner rim drifts too). 1.0.0: Social Card playing with sound gets the glass button rim round the video edge; drifts round,
+ *  - CardRim 1.1.1: scans the whole document (the banner is outside #swup). 1.1.0 (data-rim-always: the cookie banner rim drifts too). 1.0.0: Social Card playing with sound gets the glass button rim round the video edge; drifts round,
  *    turns to the cursor on hover. Markup and CSS in the Social Card component (.social-card_rim).
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
@@ -1039,7 +1039,8 @@
     hl.forEach((g) => { const p = edge(el.offsetWidth, el.offsetHeight, r.a + g.off); g.x(p.x); g.y(p.y); });
     live.add(r);
   };
-  const init = (scope = document) => { (scope || document).querySelectorAll('[data-card-rim]').forEach(setup); if (live.size) start(); };
+  // Always the whole document: Swup inits pass the page container, the cookie banner sits outside it
+  const init = () => { document.querySelectorAll('[data-card-rim]').forEach(setup); if (live.size) start(); };
   App.inits.push(init);
   // Page change: drop the social cards, keep always-on rims outside the page content (cookie banner)
   App.destroys.push(() => { live.forEach((r) => { if (!r.always) { delete r.el._cr; live.delete(r); } }); if (!live.size) stop(); });
