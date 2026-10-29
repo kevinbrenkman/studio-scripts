@@ -30,6 +30,7 @@
  *  - LogoHover 1.0.0: hovering the nav logo brakes the spin to a stop facing forward (loop start/end), leaving spins it back up.
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
  *  - SceneScroll 1.5.0 (clouds leave on click, data-leaving drops the sky body colour at once). 1.4.0 (no position: fixed, so iOS 26 Safari shows the clouds under its toolbars; scroll-driven CSS where supported). 1.3.0 (parallax on the GSAP ticker: keeps running after Swup page changes). 1.2.0 (scene lives outside #swup: clouds fade out and in with the theme, never a plain background in between). 1.1.0 (poster still under the canvas, canvas fades in when the scene is ready). 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
+ *  - ThemePace 1.0.0: page change colour crossfade on body 1.5x faster, so new content never lands on a half-changed background.
  *  - CookieDock 1.3.0 (--cc-prefs-top: preferences open on the banner's spot). 1.2.1 (gap = the banner's edge margin; "#" consent links no longer scroll to top). 1.1.0: below 992px the cookie banner starts under the menu button; the first menu open moves it to the bottom for good. No motion on load or scroll.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
@@ -1479,6 +1480,22 @@ if (!document.getElementById('paloma-splide-sr')) {
     if (next && next === project(live)) return; // stays; init() drops the incoming copy
     leave();
   });
+})();
+
+/* ---------- ThemePace ---------- */
+// The Swup shell (site footer) crossfades body background + text colour over 0.9s and starts fading the new content
+// in at 0.5s, so the first words showed up on a half-changed background (red on blue, Lost objects to About).
+// Here the body crossfade runs 1.5x faster (0.6s): the colours have settled by the time the content appears.
+// Nav buttons and other extras keep their own timing.
+(() => {
+  const SPEED = 1.5;
+  let on = false;
+  const hook = () => {
+    if (on || !window.swup || !window.swup.hooks || !window.gsap) return;
+    on = true;
+    window.swup.hooks.on('content:replace', () => gsap.getTweensOf(document.body).forEach((t) => t.timeScale(SPEED)));
+  };
+  if (document.readyState !== 'loading') hook(); else document.addEventListener('DOMContentLoaded', hook);
 })();
 
 /* ---------- CookieDock ---------- */
