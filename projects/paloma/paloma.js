@@ -13,7 +13,7 @@
  *    Footer [data-jobs-count] shows the number of open jobs on every page (read from /careers once).
  *  - SliderFX 1.8.1 (phone: project sliders centre the slide; parallax measured once, no layout reads per frame) (Case Study Slider: parallax + swipe fix, no stagger; never empty when scrolling back up; parallax matches the grid: zoom 1.2, shift 8) (also keeps Splide's index in sync with auto scroll, so swipes never jump back): the cards in view slide up one by one each time the slider scrolls into view.
  *    Depth: images are scaled up in their frame and move sideways with the card's position (horizontal parallax). Hooks into CaseSlider's slider:ready event.
- *  - TapStack 1.1.0: About on touch devices, each tap drops a pile of 5 Image Trail images where you tapped; they fade out after 2.5s.
+ *  - TapStack 1.2.0: About on touch devices, each tap drops a pile of 5 Image Trail images (a different one on top each time, 70% size); they fade out after 2.5s.
  *  - GridFX 1.4.0: projects grid (home + Selected projects): cards reveal on scroll and spread apart (max 20px) towards the top and
  *    bottom of the screen. Grid, case media and the video player thumbnail: images get a vertical parallax.
  *  - ArrowLinks 1.4.1 (static check only on real links; the slider heading wrapper is a div): hover motion moved to the native Webflow interaction "Arrow link hover" (tweak on the canvas).
@@ -1753,12 +1753,16 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   if (document.readyState !== 'loading') wired = wire();
 })();
 
-/* TapStack 1.1.0: touch devices on pages with an Image Trail ([data-trail], About). The desktop trail follows the mouse,
+/* TapStack 1.2.0: touch devices on pages with an Image Trail ([data-trail], About). The desktop trail follows the mouse,
    which a phone doesn't have, so each tap drops a little pile of BURST trail images where you tapped, one on top of the
-   other, and the pile fades out after HOLD seconds. Taps on links, buttons, the nav and the footer are ignored. */
+   other, and the pile fades out after HOLD seconds. Every pile ends with a different image on top (they take turns).
+   SIZE scales the images down from the desktop trail size. Taps on links, buttons, the nav and the footer are ignored.
+   iOS Safari tints its toolbar with whatever fixed element touches the bottom edge, so the layer has no height
+   (it only shows while a pile is up) and piles never reach the bottom of the screen. */
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
-  const BURST = 5, HOLD = 2.5, STEP = 0.07, SPREAD = 28, TILT = 8, MOVE = 12; // SPREAD: px the pile scatters; MOVE: px a finger may move and still count as a tap
+  const BURST = 5, HOLD = 2.5, STEP = 0.07, SPREAD = 24, TILT = 8, SIZE = 0.7, MOVE = 12, EDGE = 24;
+  // SPREAD: px the pile scatters; MOVE: px a finger may move and still count as a tap; EDGE: px kept free above the bottom
   const SKIP = '.navigation, .nav_menu, .footer, a, button, [data-trail-off]';
   const live = new Set();
   const init = (scope = document) => {
@@ -1769,20 +1773,27 @@ document.addEventListener('touchstart', () => {}, { passive: true });
       const items = [...root.querySelectorAll('[data-trail-item]')];
       if (!items.length) return;
       gsap.set(items, { position: 'absolute', top: 0, left: 0, xPercent: -50, yPercent: -50, display: 'none' });
-      gsap.set(root, { display: 'block' });
-      let i = 0, z = 0, start = null;
+      gsap.set(root, { display: 'none', bottom: 'auto', height: 0, overflow: 'visible' });
+      let z = 0, turn = 0, piles = 0, start = null;
       const r = gsap.utils.random;
       const drop = (x, y) => {
         const n = Math.min(BURST, items.length);
-        for (let k = 0; k < n; k++) {
-          const el = items[i]; i = (i + 1) % items.length;
+        const top = items[turn++ % items.length]; // the image that ends on top: next in line every tap
+        const rest = gsap.utils.shuffle(items.filter((el) => el !== top)).slice(0, n - 1);
+        const pile = [...rest, top];
+        // Keep the whole pile clear of the bottom edge (Safari toolbar) and the top of the screen
+        const h = (top.offsetHeight || 280) * SIZE / 2 + SPREAD;
+        y = Math.max(h, Math.min(y, innerHeight - h - EDGE));
+        if (!piles++) gsap.set(root, { display: 'block' });
+        pile.forEach((el, k) => {
           gsap.killTweensOf(el);
-          gsap.set(el, { display: 'block', zIndex: ++z, x: x + r(-SPREAD, SPREAD), y: y + r(-SPREAD, SPREAD), rotation: r(-TILT, TILT), scale: calm ? 1 : 0.7, opacity: 0 });
+          gsap.set(el, { display: 'block', zIndex: ++z, x: x + r(-SPREAD, SPREAD), y: y + r(-SPREAD, SPREAD), rotation: r(-TILT, TILT), scale: calm ? SIZE : SIZE * 0.7, opacity: 0 });
           gsap.timeline({ delay: k * STEP })
-            .to(el, { scale: 1, opacity: 1, duration: calm ? 0.2 : 0.4, ease: 'back.out(1.4)' })
-            .to(el, { opacity: 0, scale: calm ? 1 : 0.92, duration: 0.6, ease: 'power2.in' }, HOLD)
+            .to(el, { scale: SIZE, opacity: 1, duration: calm ? 0.2 : 0.4, ease: 'back.out(1.4)' })
+            .to(el, { opacity: 0, scale: calm ? SIZE : SIZE * 0.92, duration: 0.6, ease: 'power2.in' }, HOLD)
             .set(el, { display: 'none' });
-        }
+        });
+        gsap.delayedCall(HOLD + 0.6 + n * STEP, () => { if (!--piles) gsap.set(root, { display: 'none' }); });
       };
       const down = (e) => { start = e.isPrimary ? { x: e.clientX, y: e.clientY, t: e.target } : null; };
       const up = (e) => {
@@ -1796,7 +1807,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
       addEventListener('pointerdown', down, opt);
       addEventListener('pointerup', up, opt);
       addEventListener('pointercancel', () => { start = null; }, opt);
-      root._tap = () => { ac.abort(); gsap.killTweensOf(items); gsap.set(items, { display: 'none' }); delete root._tap; };
+      root._tap = () => { ac.abort(); gsap.killTweensOf(items); gsap.set(items, { display: 'none' }); gsap.set(root, { display: 'none' }); piles = 0; delete root._tap; };
       live.add(root);
     });
   };
