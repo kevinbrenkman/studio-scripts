@@ -4,7 +4,7 @@
  * Registers into the Swup shell registry (App.inits / App.destroys) from the site footer.
  *
  * Modules
- *  - EmblemMask 2.6.0 (new matte: Bianca's better model, 5s loop; same emblem size on every card, 30vw, optically +10% on square, -8% on portrait cards):  replaces HoverMask 1.1.0 (spinning SVG). Project card hover shows the
+ *  - EmblemMask 2.6.1 (matte reversed so the emblem spins the other way; Bianca's model, 5s loop; same emblem size on every card, 30vw, optically +10% on square, -8% on portrait cards):  replaces HoverMask 1.1.0 (spinning SVG). Project card hover shows the
  *    thumbnail inside the spinning 3D emblem (Quy). WebGL: a grayscale matte video (white = emblem)
  *    is the alpha for the thumbnail. One H.264 file for every browser, because Safari drops the
  *    alpha of HEVC video when it is drawn to a canvas.
@@ -72,7 +72,7 @@
   // Matte: white emblem on black, square, H.264 MP4. Must be served with CORS (jsDelivr does).
   // Override per site without a release: put data-emblem-matte="https://..." on any element (e.g. the project card).
   const EMBLEM = {
-    matte: 'https://cdn.jsdelivr.net/gh/kevinbrenkman/studio-scripts@46960f18a1737f769cab31046b4b982cb87b558c/projects/paloma/assets/emblem-matte.mp4',
+    matte: 'https://cdn.jsdelivr.net/gh/kevinbrenkman/studio-scripts@39c61f89cf42001411587051e274d7b71199417a/projects/paloma/assets/emblem-matte.mp4',
     size: 0.3,    // emblem size as a share of the viewport width: the same on every card (portrait, square, wide)
     max: 0.85,    // never more than this share of the card's shortest side (small cards, narrow screens)
     square: 0.1,  // optical boost on square cards (looks smaller there): +10% on a perfect square, fading out towards 1.6:1
