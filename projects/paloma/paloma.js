@@ -20,7 +20,7 @@
  *    bottom of the screen. Grid, case media and the video player thumbnail: images get a vertical parallax.
  *  - ArrowLinks 1.4.1 (static check only on real links; the slider heading wrapper is a div): hover motion moved to the native Webflow interaction "Arrow link hover" (tweak on the canvas).
  *    Script keeps: press scale on all arrow links, the Apply text arrow hover, links left on # visual only. Services: the hover card image is zoomed and follows the cursor.
- *  - CaseTags 1.10.0 (slider tags load when the slider comes near the screen, not on page load). 1.9.0: tags 28px tall (design), default cursor; slider cards get their tags straight away. Moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
+ *  - CaseTags 1.10.1 (card link is now a slug-built overlay next to the tags: the slug comes from the card's link, not one around the tags). 1.10.0: (slider tags load when the slider comes near the screen, not on page load). 1.9.0: tags 28px tall (design), default cursor; slider cards get their tags straight away. Moved here from the registered CaseTags 1.6.0 (frees a slot). Same behaviour, tags appear
  *    without the stagger.
  *  - SocialSlider 1.8.0 (infinite again from 768px up; phone unchanged). 1.7.0 (page margin straight from the CSS variable, phone layout via Splide breakpoints; Splide's "…" announcer hidden on every slider). 1.6.1 (re-measures after load so the last card keeps its right margin) 1.6.0 (phone: first card left, last right, the rest centred; touch: sliding away pauses the playing card): Case Study Slider component (Social Cards and/or Media Cards). Arrows split apart when pressed
  *    and glow in the direction you slide.
@@ -786,7 +786,9 @@
   const slugOf = (el) => {
     const v = (el.getAttribute('data-tags-from') || '').trim();
     if (v) return v;
-    const a = el.closest('a[href]');
+    // The card link is an overlay next to the tags (built from the slug, project-card_overlay), not around them
+    const card = el.closest('.project-card, .case-slider_slide');
+    const a = el.closest('a[href]') || (card && card.querySelector('a[href]'));
     if (a) { try { const s = last(new URL(a.href, location.origin).pathname); if (s) return s; } catch (_) {} }
     return last(location.pathname);
   };
@@ -2053,7 +2055,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     document.head.appendChild(st);
   }
   const NAV = '.navigation a[href], [data-nav-menu] a[href]';
-  const CARDS = '.project-card a[href], a.project-card[href], a.project-card_link[href]';
+  const CARDS = '.project-card a[href], .case-slider_slide a[href], a.project-card[href], a.project-card_link[href]';
   const cache = new Map(); // path -> Promise<boolean ok>
   const bad = new Set();   // paths known to 404
   const check = (path) => {
