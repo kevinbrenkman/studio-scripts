@@ -35,7 +35,7 @@
  *  - CookieDock 1.3.1 (all fs-cc links skip Swup, footer link included). 1.3.0 (--cc-prefs-top: preferences open on the banner's spot). 1.2.1 (gap = the banner's edge margin; "#" consent links no longer scroll to top). 1.1.0: below 992px the cookie banner starts under the menu button; the first menu open moves it to the bottom for good. No motion on load or scroll.
  *  - MailMagnet 1.2.0: Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
- *  - MediaPoster 1.2.0 (also the Full Video Player: thumbnail + video 2px bigger per side, video hidden until first play): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
+ *  - MediaPoster 1.2.1 (player UI keeps its blurred glass: the fade-in no longer leaves a filter behind). 1.2.0 (also the Full Video Player: thumbnail + video 2px bigger per side, video hidden until first play): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
  *    same slider:ready event, so SliderMotion (trackpad, auto scroll) and SliderFX (reveal, parallax) run on it too.
  *    Own module because CaseSlider removes slides that link to the current page (the play button is href="#").
  *  - CardRim 1.1.1: scans the whole document (the banner is outside #swup). 1.1.0 (data-rim-always: the cookie banner rim drifts too). 1.0.0: Social Card playing with sound gets the glass button rim round the video edge; drifts round,
@@ -1076,10 +1076,11 @@
     // Video hidden until first play: on iPhone the (empty, black) native HLS video sat on top of the thumbnail
     '[data-bunny-player-init]:not([data-player-activated="true"]) .bunny-player__video{opacity:0}' +
     // Player thumbnail + play button + controls stay hidden until the thumbnail has loaded (CardLoaded adds is-loaded),
-    // then fade in together: no buttons floating on an empty box
+    // then fade in together: no buttons floating on an empty box. 1.2.1: fill backwards, not both: a filter that stays on
+    // after the fade makes the controls a backdrop root, so their glass buttons lost the blur
     '@keyframes paloma-player-in{from{filter:opacity(0)}to{filter:opacity(1)}}' +
     'html:not(.wf-design-mode) [data-bunny-player-init]:not(.is-loaded)>:is(.bunny-player__placeholder,.bunny-player__playpause,.bunny-player__interface){filter:opacity(0);pointer-events:none}' +
-    'html:not(.wf-design-mode) [data-bunny-player-init].is-loaded>:is(.bunny-player__placeholder,.bunny-player__playpause,.bunny-player__interface){animation:paloma-player-in .8s cubic-bezier(.25,.1,.25,1) both}' +
+    'html:not(.wf-design-mode) [data-bunny-player-init].is-loaded>:is(.bunny-player__placeholder,.bunny-player__playpause,.bunny-player__interface){animation:paloma-player-in .8s cubic-bezier(.25,.1,.25,1) backwards}' +
     'html:not(.wf-design-mode) [data-bunny-player-init].is-loaded>:is(.bunny-player__playpause,.bunny-player__interface){animation-delay:.2s}';
   document.head.appendChild(st);
 })();
