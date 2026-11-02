@@ -43,6 +43,8 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - ContactRotate 1.0.0: contact page. The questions above the email take turns every 2.2s and every 140px of scrolling nudges
+ *    them on; the email slides in again with each one (the joke: one address for everything).
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
 (() => {
@@ -2299,4 +2301,61 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   addEventListener('popstate', stop);
   // Next page: show the layer again (the trail scripts hide or show its images themselves)
   App.inits.push((s = document) => { if (window.gsap) (s || document).querySelectorAll('[data-trail]').forEach((r) => gsap.set(r, { clearProps: 'opacity,visibility' })); });
+})();
+
+/* ---------- ContactRotate ---------- */
+// Contact component ([data-contact-rotate]): every child of [data-rotate-labels] is one question. They take turns,
+// sliding up out of a mask; the email in [data-rotate-mail] slides out and in again with each one, same address.
+// Every MS, and every STEP px of scrolling (any direction) nudges it on and restarts the clock. Pauses off screen
+// and in a background tab. Reduced motion: the text swaps without sliding.
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const MS = 2200;   // time per question
+  const STEP = 140;  // px of scrolling per question
+  const DUR = 0.8;   // slide duration (s)
+  const OFF = 110;   // yPercent out of view (a bit more than 100: italic descenders)
+  const live = new Set();
+  const setup = (root) => {
+    if (root._rot || !window.gsap) return;
+    const lab = root.querySelector('[data-rotate-labels]'), box = root.querySelector('[data-rotate-mail]');
+    const items = lab ? [...lab.children] : [];
+    if (items.length < 2) return;
+    const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const m0 = box && box.firstElementChild;
+    const m1 = m0 && m0.cloneNode(true);
+    if (m1) { m1.setAttribute('aria-hidden', 'true'); box.appendChild(m1); }
+    gsap.set(items, { visibility: 'visible', yPercent: (n) => (n ? OFF : 0) });
+    if (m1) gsap.set(m1, { visibility: 'visible', yPercent: OFF });
+    let i = 0, mc = m0, mn = m1, busy = false, timer = 0, acc = 0, lastY = scrollY, inView = true;
+    const go = () => {
+      if (busy) return;
+      const cur = items[i]; i = (i + 1) % items.length; const nxt = items[i];
+      if (calm) { gsap.set(cur, { yPercent: OFF }); gsap.set(nxt, { yPercent: 0 }); return; }
+      busy = true;
+      const tl = gsap.timeline({ defaults: { duration: DUR, ease: 'power3.inOut' }, onComplete: () => { busy = false; } });
+      tl.to(cur, { yPercent: -OFF }, 0).fromTo(nxt, { yPercent: OFF }, { yPercent: 0 }, 0);
+      if (mc && mn) { tl.to(mc, { yPercent: -OFF }, 0.08).fromTo(mn, { yPercent: OFF }, { yPercent: 0 }, 0.08); const t = mc; mc = mn; mn = t; }
+    };
+    const tick = () => { if (inView && !document.hidden) go(); };
+    const restart = () => { clearInterval(timer); timer = setInterval(tick, calm ? MS * 1.5 : MS); };
+    const onScroll = () => {
+      const y = scrollY; acc += Math.abs(y - lastY); lastY = y;
+      if (acc >= STEP && inView) { acc = 0; go(); restart(); }
+    };
+    const io = new IntersectionObserver((es) => { inView = es[0].isIntersecting; }, { threshold: 0.2 });
+    io.observe(root);
+    addEventListener('scroll', onScroll, { passive: true });
+    restart();
+    root._rot = () => {
+      clearInterval(timer); io.disconnect(); removeEventListener('scroll', onScroll);
+      gsap.killTweensOf(items); gsap.set(items, { clearProps: 'all' });
+      if (m0) { gsap.killTweensOf([m0, m1]); gsap.set(m0, { clearProps: 'all' }); m1.remove(); }
+      delete root._rot;
+    };
+    live.add(root);
+  };
+  const init = (s = document) => (s || document).querySelectorAll('[data-contact-rotate]').forEach(setup);
+  App.inits.push(init);
+  App.destroys.push(() => { live.forEach((r) => r._rot && r._rot()); live.clear(); });
+  if (document.readyState !== 'loading') init(document);
 })();
