@@ -43,8 +43,8 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
- *  - ContactRotate 1.1.0 (speed from the component prop, email fades instead of sliding, after the question): contact page.
- *    The questions above the email take turns; every 120px of scrolling moves them on; the email fades out and in again
+ *  - ContactRotate 1.1.1 (email slides again, 0.35s after the question; speed from the component prop): contact page.
+ *    The questions above the email take turns; every 120px of scrolling moves them on; the email slides out and in again
  *    with each one (the joke: one address for everything).
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
@@ -2306,14 +2306,14 @@ document.addEventListener('touchstart', () => {}, { passive: true });
 
 /* ---------- ContactRotate ---------- */
 // Contact component ([data-contact-rotate]): every child of [data-rotate-labels] is one question. They take turns,
-// sliding up out of a mask; then the email ([data-rotate-mail]) fades out and back in, same address (the joke).
+// sliding up out of a mask; then the email ([data-rotate-mail]) slides out and in again, same address (the joke).
 // Speed: the component prop "Seconds per question" (data-rotate-seconds). Every STEP px of scrolling also moves it
 // on and restarts the clock. Pauses off screen and in a background tab. Reduced motion: no slide, plain swap.
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
   const STEP = 120;  // px of scrolling per question
   const DUR = 0.8;   // question slide (s)
-  const MAIL = { at: 0.45, out: 0.35, gap: 0.05, in: 0.6 }; // email fade: starts after the question, out, pause, in
+  const MAIL_AT = 0.35; // the email starts sliding this many seconds after the question
   const OFF = 140;   // yPercent out of view: well past 100, so italic descenders never peek into the mask
   const live = new Set();
   const setup = (root) => {
@@ -2324,7 +2324,10 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     const sec = parseFloat(root.getAttribute('data-rotate-seconds'));
     const MS = (sec >= 1 ? sec : 3.5) * 1000;
     const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const mail = box && box.firstElementChild;
+    const m0 = box && box.firstElementChild;
+    const m1 = m0 && m0.cloneNode(true);
+    if (m1) { m1.setAttribute('aria-hidden', 'true'); box.appendChild(m1); gsap.set(m1, { visibility: 'visible', yPercent: OFF }); }
+    let mc = m0, mn = m1;
     gsap.set(items, { visibility: 'visible', yPercent: (n) => (n ? OFF : 0) });
     let i = 0, busy = false, timer = 0, acc = 0, lastY = scrollY, inView = true;
     const go = () => {
@@ -2335,8 +2338,11 @@ document.addEventListener('touchstart', () => {}, { passive: true });
       const tl = gsap.timeline({ onComplete: () => { busy = false; } });
       tl.to(cur, { yPercent: -OFF, duration: DUR, ease: 'power3.inOut' }, 0)
         .fromTo(nxt, { yPercent: OFF }, { yPercent: 0, duration: DUR, ease: 'power3.inOut' }, 0);
-      if (mail) tl.to(mail, { opacity: 0, duration: MAIL.out, ease: 'power2.in' }, MAIL.at)
-        .to(mail, { opacity: 1, duration: MAIL.in, ease: 'power2.out' }, MAIL.at + MAIL.out + MAIL.gap);
+      if (mc && mn) {
+        tl.to(mc, { yPercent: -OFF, duration: DUR, ease: 'power3.inOut' }, MAIL_AT)
+          .fromTo(mn, { yPercent: OFF }, { yPercent: 0, duration: DUR, ease: 'power3.inOut' }, MAIL_AT);
+        const t = mc; mc = mn; mn = t;
+      }
     };
     const tick = () => { if (inView && !document.hidden) go(); };
     const restart = () => { clearInterval(timer); timer = setInterval(tick, calm ? MS * 1.5 : MS); };
@@ -2351,7 +2357,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     root._rot = () => {
       clearInterval(timer); io.disconnect(); removeEventListener('scroll', onScroll);
       gsap.killTweensOf(items); gsap.set(items, { clearProps: 'all' });
-      if (mail) { gsap.killTweensOf(mail); gsap.set(mail, { clearProps: 'opacity' }); }
+      if (m0) { gsap.killTweensOf([m0, m1]); gsap.set(m0, { clearProps: 'all' }); m1.remove(); }
       delete root._rot;
     };
     live.add(root);
