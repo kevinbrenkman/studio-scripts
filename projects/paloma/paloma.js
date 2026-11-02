@@ -43,7 +43,7 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
- *  - ContactRotate 1.0.0: contact page. The questions above the email take turns every 2.2s and every 140px of scrolling nudges
+ *  - ContactRotate 1.0.1 (lines travel further, no descender peeking at the mask edge): contact page. The questions above the email take turns every 2.2s and every 140px of scrolling nudges
  *    them on; the email slides in again with each one (the joke: one address for everything).
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
@@ -2313,7 +2313,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   const MS = 2200;   // time per question
   const STEP = 140;  // px of scrolling per question
   const DUR = 0.8;   // slide duration (s)
-  const OFF = 110;   // yPercent out of view (a bit more than 100: italic descenders)
+  const OFF = 140;   // yPercent out of view: well past 100, so italic descenders never peek into the mask
   const live = new Set();
   const setup = (root) => {
     if (root._rot || !window.gsap) return;
