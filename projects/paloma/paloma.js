@@ -43,7 +43,7 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
- *  - ContactRotate 2.2.0 (quick repeated swipes each count; Effect prop: mask or fade): contact page. One scroll or swipe
+ *  - ContactRotate 2.3.0 (fade effect matched to Flor's reference: pair waits faintly below, grows in, shrinks out upwards). 2.2.0 (quick repeated swipes each count; Effect prop: mask or fade): contact page. One scroll or swipe
  *    turns the questions above the email one step in an endless loop; the email (same address, the joke) follows just behind.
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
@@ -2309,8 +2309,9 @@ document.addEventListener('touchstart', () => {}, { passive: true });
 // one swipe moves exactly one step, up or down; swipe again right away for the next one. Trackpad momentum (the
 // slowly decaying tail after a flick) is ignored, a fresh flick during that tail is recognised by its jump in speed.
 // The email (same address, the joke) follows just behind. Endless in both directions; the page doesn't scroll.
-// data-rotate-effect (component prop "Effect"): "mask" = lines slide through a mask; "fade" = question and email fade
-// in from below and fade out upwards, no mask. Reduced motion: same steps, no movement.
+// data-rotate-effect (component prop "Effect"): "mask" = lines slide through a mask; "fade" = Flor's reference: question
+// and email move as one pair, the next pair waits faintly below (small, almost transparent) and grows in, the old one
+// shrinks and fades out upwards. Reduced motion: same steps, no movement.
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
   const DUR = 0.8;        // slide (s)
@@ -2321,7 +2322,8 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   const MIN_WHEEL = 4;    // ignore tiny wheel jitters (px)
   const MIN_SWIPE = 30;   // px a swipe needs to count
   const OFF = 140;        // mask: yPercent between two lines (past 100, so italic descenders never peek into the mask)
-  const FADE_Y = 60;      // fade: yPercent a line travels while it fades in or out
+  // fade effect (matched to the reference video): pair below = 80% size, 12% opacity; leaving pair = 75% size, gone
+  const F = { dur: 0.55, ease: 'power2.out', upGap: 0.3, below: { scale: 0.8, opacity: 0.12 }, above: { scale: 0.75 } };
   const live = new Set();
   const setup = (root) => {
     if (root._rot || !window.gsap) return;
@@ -2336,20 +2338,48 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     for (let k = 1; m0 && k < N; k++) { const c = m0.cloneNode(true); c.setAttribute('aria-hidden', 'true'); box.appendChild(c); mails.push(c); }
     gsap.set([...labels, ...mails], { visibility: 'visible' });
     // Line k sits d = (k - pos) steps from the middle, wrapped so the list never ends
-    const place = (list, pos) => list.forEach((el, k) => {
+    // fade: question and email scale as one pair around the pair's centre (aL/aM: their offsets from it, px)
+    let upG = 0, downG = 0, aL = 0, aM = 0;
+    const measure = () => {
+      if (!fade) return;
+      const rl = lab.getBoundingClientRect(), rm = (box || lab).getBoundingClientRect();
+      const c = (rl.top + rm.bottom) / 2, h = rm.bottom - rl.top;
+      aL = (rl.top + rl.bottom) / 2 - c; aM = (rm.top + rm.bottom) / 2 - c;
+      const det = root.querySelector('.contact_details');
+      const room = det ? det.getBoundingClientRect().top - rm.bottom : innerHeight * 0.3; // space down to the details
+      downG = Math.max(h * 0.9, room * 0.95); upG = innerHeight * F.upGap;
+    };
+    measure();
+    const look = (d, a) => {
+      let sc, op, y;
+      if (d >= 0) {
+        const t = Math.min(d, 1);
+        sc = 1 - (1 - F.below.scale) * t;
+        op = d <= 1 ? 1 - (1 - F.below.opacity) * d : Math.max(0, F.below.opacity * (1 - (d - 1) * 2));
+        y = d * downG;
+      } else {
+        sc = 1 - (1 - F.above.scale) * Math.min(-d, 1);
+        op = Math.max(0, 1 + d);
+        y = d * upG;
+      }
+      return { y: y + a * (sc - 1), scale: sc, opacity: op };
+    };
+    const place = (list, pos, a) => list.forEach((el, k) => {
       let d = (((k - pos) % N) + N) % N; if (d > N / 2) d -= N;
-      if (fade) gsap.set(el, { yPercent: d * FADE_Y, opacity: Math.max(0, 1 - Math.abs(d)) });
+      if (fade) gsap.set(el, look(d, a));
       else gsap.set(el, { yPercent: d * OFF });
     });
     const st = { q: 0, m: 0 };   // current position of the questions and of the email
     let target = 0, inView = true, quiet = 0, inGesture = false, prevAbs = 0, lastStep = 0, ty = null;
-    const render = () => { place(labels, st.q); place(mails, st.m); };
+    const render = () => { place(labels, st.q, aL); place(mails, st.m, aM); };
+    const resize = () => { measure(); render(); };
     render();
     const step = (dir) => {
       if (!inView || !dir) return;
       lastStep = performance.now();
       target += dir;
       if (calm) { st.q = st.m = target; render(); return; }
+      if (fade) { gsap.to(st, { q: target, m: target, duration: F.dur, ease: F.ease, overwrite: false, onUpdate: render }); return; }
       gsap.to(st, { q: target, duration: DUR, ease: 'power3.inOut', overwrite: false, onUpdate: render });
       gsap.to(st, { m: target, duration: DUR, ease: 'power3.inOut', delay: MAIL_AT, overwrite: false, onUpdate: render });
     };
@@ -2373,8 +2403,9 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     addEventListener('wheel', wheel, { passive: true });
     addEventListener('touchstart', tstart, { passive: true });
     addEventListener('touchend', tend, { passive: true });
+    addEventListener('resize', resize);
     root._rot = () => {
-      clearTimeout(quiet); io.disconnect(); gsap.killTweensOf(st);
+      clearTimeout(quiet); io.disconnect(); gsap.killTweensOf(st); removeEventListener('resize', resize);
       removeEventListener('wheel', wheel); removeEventListener('touchstart', tstart); removeEventListener('touchend', tend);
       gsap.set(labels, { clearProps: 'all' });
       if (m0) { gsap.set(m0, { clearProps: 'all' }); mails.slice(1).forEach((c) => c.remove()); }
