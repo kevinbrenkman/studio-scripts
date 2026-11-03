@@ -43,8 +43,8 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
- *  - ContactRotate 2.0.0 (scroll-driven, endless; no timer): contact page. Wheel, trackpad or swipe turns the questions
- *    above the email like a loop, the next one half in view mid-scroll; the email (same address, the joke) trails just behind.
+ *  - ContactRotate 2.1.0 (one scroll or swipe = one question, momentum ignored): contact page. Each gesture turns the
+ *    questions above the email one step in an endless loop; the email (same address, the joke) follows just behind.
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
 (() => {
@@ -2305,19 +2305,18 @@ document.addEventListener('touchstart', () => {}, { passive: true });
 
 /* ---------- ContactRotate ---------- */
 // Contact component ([data-contact-rotate]): every child of [data-rotate-labels] is one question, each with the same
-// email ([data-rotate-mail], copied once per question). Scrolling (wheel, trackpad, swipe) turns them like a loop:
-// the questions follow the scroll directly and the next one is already half in view mid-scroll; the email trails a
-// little behind, so it flips just after its question. Endless in both directions; when scrolling stops it settles on
-// the nearest question. The page itself doesn't need to scroll for this (it's one screen). Reduced motion: one
-// question per scroll gesture, no slide.
+// email ([data-rotate-mail], copied once per question). One scroll gesture = one question: a wheel/trackpad scroll
+// (however long its momentum runs) or one swipe moves exactly one step, up or down. The question slides, the email
+// (same address, the joke) follows just behind. Endless in both directions. The page itself doesn't scroll (one screen).
+// Reduced motion: same steps, no slide.
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
-  const PX = 180;          // px of scrolling per question (wheel/trackpad); swipes count a bit more (SWIPE)
-  const SWIPE = 1.6;
-  const FOLLOW = 0.14;     // how fast the questions catch up with the scroll (0-1 per frame)
-  const MAIL_FOLLOW = 0.1; // the email follows the questions a little slower: the stagger
-  const SETTLE = 160;      // ms without scrolling before it settles on the nearest question
-  const OFF = 140;         // yPercent between two lines: well past 100, so italic descenders never peek into the mask
+  const DUR = 0.8;        // slide (s)
+  const MAIL_AT = 0.15;   // the email starts this much later than the question (s)
+  const QUIET = 220;      // ms without wheel events before the next scroll counts as a new gesture (trackpad momentum)
+  const MIN_WHEEL = 4;    // ignore tiny wheel jitters (px)
+  const MIN_SWIPE = 30;   // px a swipe needs to count
+  const OFF = 140;        // yPercent between two lines: well past 100, so italic descenders never peek into the mask
   const live = new Set();
   const setup = (root) => {
     if (root._rot || !window.gsap) return;
@@ -2335,36 +2334,38 @@ document.addEventListener('touchstart', () => {}, { passive: true });
       let d = (((k - pos) % N) + N) % N; if (d > N / 2) d -= N;
       gsap.set(el, { yPercent: d * OFF });
     });
-    let target = 0, cur = 0, curM = 0, inView = true, settle = 0, ty = null, gesture = false;
-    place(labels, 0); place(mails, 0);
-    const nudge = (steps) => {
-      if (!inView) return;
-      if (calm) { if (!gesture) { gesture = true; target = Math.round(target) + Math.sign(steps); cur = curM = target; place(labels, cur); place(mails, curM); } }
-      else target += steps;
-      clearTimeout(settle);
-      settle = setTimeout(() => { gesture = false; target = Math.round(target); }, SETTLE);
+    const st = { q: 0, m: 0 };   // current position of the questions and of the email
+    let target = 0, inView = true, quiet = 0, wheelLock = false, ty = null;
+    const render = () => { place(labels, st.q); place(mails, st.m); };
+    render();
+    const step = (dir) => {
+      if (!inView || !dir) return;
+      target += dir;
+      if (calm) { st.q = st.m = target; render(); return; }
+      gsap.to(st, { q: target, duration: DUR, ease: 'power3.inOut', overwrite: false, onUpdate: render });
+      gsap.to(st, { m: target, duration: DUR, ease: 'power3.inOut', delay: MAIL_AT, overwrite: false, onUpdate: render });
     };
-    const wheel = (e) => nudge((e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY) / PX);
+    // Wheel/trackpad: the first event of a gesture steps, the rest (incl. momentum) is ignored until it goes quiet
+    const wheel = (e) => {
+      const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+      clearTimeout(quiet); quiet = setTimeout(() => { wheelLock = false; }, QUIET);
+      if (wheelLock || Math.abs(dy) < MIN_WHEEL) return;
+      wheelLock = true; step(Math.sign(dy));
+    };
     const tstart = (e) => { ty = e.touches[0].clientY; };
-    const tmove = (e) => { if (ty === null) return; const y = e.touches[0].clientY; nudge(((ty - y) * SWIPE) / PX); ty = y; };
-    const tend = () => { ty = null; };
-    const frame = () => {
-      if (calm) return;
-      if (Math.abs(target - cur) < 0.0005 && Math.abs(cur - curM) < 0.0005) return;
-      cur += (target - cur) * FOLLOW; curM += (cur - curM) * MAIL_FOLLOW;
-      place(labels, cur); place(mails, curM);
+    const tend = (e) => {
+      if (ty === null) return;
+      const dy = ty - e.changedTouches[0].clientY; ty = null;
+      if (Math.abs(dy) >= MIN_SWIPE) step(Math.sign(dy));
     };
     const io = new IntersectionObserver((es) => { inView = es[0].isIntersecting; }, { threshold: 0.2 });
     io.observe(root);
     addEventListener('wheel', wheel, { passive: true });
     addEventListener('touchstart', tstart, { passive: true });
-    addEventListener('touchmove', tmove, { passive: true });
     addEventListener('touchend', tend, { passive: true });
-    gsap.ticker.add(frame);
     root._rot = () => {
-      clearTimeout(settle); io.disconnect(); gsap.ticker.remove(frame);
-      removeEventListener('wheel', wheel); removeEventListener('touchstart', tstart);
-      removeEventListener('touchmove', tmove); removeEventListener('touchend', tend);
+      clearTimeout(quiet); io.disconnect(); gsap.killTweensOf(st);
+      removeEventListener('wheel', wheel); removeEventListener('touchstart', tstart); removeEventListener('touchend', tend);
       gsap.set(labels, { clearProps: 'all' });
       if (m0) { gsap.set(m0, { clearProps: 'all' }); mails.slice(1).forEach((c) => c.remove()); }
       delete root._rot;
