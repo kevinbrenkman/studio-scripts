@@ -43,7 +43,7 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
- *  - ContactRotate 2.3.2 (fade: the next pair is invisible until it moves in). 2.3.1 (fade: next pair sits low like the reference). 2.3.0 (fade effect matched to Flor's reference: pair waits faintly below, grows in, shrinks out upwards). 2.2.0 (quick repeated swipes each count; Effect prop: mask or fade): contact page. One scroll or swipe
+ *  - ContactRotate 2.3.3 (one swipe = exactly one step: a swipe's own speed-up no longer counts as a new flick). 2.3.2 (fade: the next pair is invisible until it moves in). 2.3.1 (fade: next pair sits low like the reference). 2.3.0 (fade effect matched to Flor's reference: pair waits faintly below, grows in, shrinks out upwards). 2.2.0 (quick repeated swipes each count; Effect prop: mask or fade): contact page. One scroll or swipe
  *    turns the questions above the email one step in an endless loop; the email (same address, the joke) follows just behind.
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
@@ -2316,9 +2316,11 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   window.App = window.App || { inits: [], destroys: [] };
   const DUR = 0.8;        // slide (s)
   const MAIL_AT = 0.15;   // the email starts this much later than the question (s)
-  const QUIET = 160;      // ms without wheel events: the next scroll is a new gesture
-  const GAP = 280;        // ms at least between two steps from one continuous stream of wheel events
-  const KICK = 1.6;       // a wheel event this many times faster than the previous one = a new flick
+  const QUIET = 200;      // ms without wheel events: the next scroll is a new gesture
+  const GAP = 450;        // ms at least between two steps from one continuous stream of wheel events
+  const KICK = 1.6;       // a new flick inside the momentum: this many times faster than the event before...
+  const DECAY = 0.35;     // ...and only after the stream had slowed to this share of its peak (so one swipe's own
+                          // speeding up and wobbling never counts twice)
   const MIN_WHEEL = 4;    // ignore tiny wheel jitters (px)
   const MIN_SWIPE = 30;   // px a swipe needs to count
   const OFF = 140;        // mask: yPercent between two lines (past 100, so italic descenders never peek into the mask)
@@ -2369,7 +2371,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
       else gsap.set(el, { yPercent: d * OFF });
     });
     const st = { q: 0, m: 0 };   // current position of the questions and of the email
-    let target = 0, inView = true, quiet = 0, inGesture = false, prevAbs = 0, lastStep = 0, ty = null;
+    let target = 0, inView = true, quiet = 0, inGesture = false, prevAbs = 0, peak = 0, slowed = false, lastStep = 0, ty = null;
     const render = () => { place(labels, st.q, aL); place(mails, st.m, aM); };
     const resize = () => { measure(); render(); };
     render();
@@ -2384,10 +2386,16 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     };
     const wheel = (e) => {
       const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY, a = Math.abs(dy);
-      clearTimeout(quiet); quiet = setTimeout(() => { inGesture = false; prevAbs = 0; }, QUIET);
-      if (a < MIN_WHEEL) { prevAbs = a; return; }
-      // New gesture: first event after a pause, or a clear speed-up inside a stream (a new flick over the momentum)
-      const fresh = !inGesture || (a > prevAbs * KICK && performance.now() - lastStep > GAP);
+      clearTimeout(quiet); quiet = setTimeout(() => { inGesture = false; prevAbs = 0; peak = 0; slowed = false; }, QUIET);
+      if (a < MIN_WHEEL) { prevAbs = a; if (peak && a < peak * DECAY) slowed = true; return; }
+      // New gesture: the first event after a pause, or a clear new flick on top of a momentum tail that had already
+      // slowed down. While one swipe is still speeding up or wobbling, nothing extra happens.
+      let fresh = !inGesture;
+      if (!fresh) {
+        if (a < peak * DECAY) slowed = true;
+        fresh = slowed && a > prevAbs * KICK && a > peak * 0.5 && performance.now() - lastStep > GAP;
+      }
+      if (fresh) { peak = a; slowed = false; } else peak = Math.max(peak, a);
       prevAbs = a; inGesture = true;
       if (fresh) step(Math.sign(dy));
     };
