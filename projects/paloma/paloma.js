@@ -43,8 +43,8 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
- *  - ContactRotate 2.1.0 (one scroll or swipe = one question, momentum ignored): contact page. Each gesture turns the
- *    questions above the email one step in an endless loop; the email (same address, the joke) follows just behind.
+ *  - ContactRotate 2.2.0 (quick repeated swipes each count; Effect prop: mask or fade): contact page. One scroll or swipe
+ *    turns the questions above the email one step in an endless loop; the email (same address, the joke) follows just behind.
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
 (() => {
@@ -2305,18 +2305,23 @@ document.addEventListener('touchstart', () => {}, { passive: true });
 
 /* ---------- ContactRotate ---------- */
 // Contact component ([data-contact-rotate]): every child of [data-rotate-labels] is one question, each with the same
-// email ([data-rotate-mail], copied once per question). One scroll gesture = one question: a wheel/trackpad scroll
-// (however long its momentum runs) or one swipe moves exactly one step, up or down. The question slides, the email
-// (same address, the joke) follows just behind. Endless in both directions. The page itself doesn't scroll (one screen).
-// Reduced motion: same steps, no slide.
+// email ([data-rotate-mail], copied once per question). One scroll gesture = one question: a wheel/trackpad scroll or
+// one swipe moves exactly one step, up or down; swipe again right away for the next one. Trackpad momentum (the
+// slowly decaying tail after a flick) is ignored, a fresh flick during that tail is recognised by its jump in speed.
+// The email (same address, the joke) follows just behind. Endless in both directions; the page doesn't scroll.
+// data-rotate-effect (component prop "Effect"): "mask" = lines slide through a mask; "fade" = question and email fade
+// in from below and fade out upwards, no mask. Reduced motion: same steps, no movement.
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
   const DUR = 0.8;        // slide (s)
   const MAIL_AT = 0.15;   // the email starts this much later than the question (s)
-  const QUIET = 220;      // ms without wheel events before the next scroll counts as a new gesture (trackpad momentum)
+  const QUIET = 160;      // ms without wheel events: the next scroll is a new gesture
+  const GAP = 280;        // ms at least between two steps from one continuous stream of wheel events
+  const KICK = 1.6;       // a wheel event this many times faster than the previous one = a new flick
   const MIN_WHEEL = 4;    // ignore tiny wheel jitters (px)
   const MIN_SWIPE = 30;   // px a swipe needs to count
-  const OFF = 140;        // yPercent between two lines: well past 100, so italic descenders never peek into the mask
+  const OFF = 140;        // mask: yPercent between two lines (past 100, so italic descenders never peek into the mask)
+  const FADE_Y = 60;      // fade: yPercent a line travels while it fades in or out
   const live = new Set();
   const setup = (root) => {
     if (root._rot || !window.gsap) return;
@@ -2324,33 +2329,38 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     const labels = lab ? [...lab.children] : [];
     const N = labels.length;
     if (N < 2) return;
+    const fade = (root.getAttribute('data-rotate-effect') || '').trim() === 'fade';
     const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
     const m0 = box && box.firstElementChild;
     const mails = m0 ? [m0] : [];
     for (let k = 1; m0 && k < N; k++) { const c = m0.cloneNode(true); c.setAttribute('aria-hidden', 'true'); box.appendChild(c); mails.push(c); }
     gsap.set([...labels, ...mails], { visibility: 'visible' });
-    // Line k sits (k - pos) steps away from the middle, wrapped so the list never ends
+    // Line k sits d = (k - pos) steps from the middle, wrapped so the list never ends
     const place = (list, pos) => list.forEach((el, k) => {
       let d = (((k - pos) % N) + N) % N; if (d > N / 2) d -= N;
-      gsap.set(el, { yPercent: d * OFF });
+      if (fade) gsap.set(el, { yPercent: d * FADE_Y, opacity: Math.max(0, 1 - Math.abs(d)) });
+      else gsap.set(el, { yPercent: d * OFF });
     });
     const st = { q: 0, m: 0 };   // current position of the questions and of the email
-    let target = 0, inView = true, quiet = 0, wheelLock = false, ty = null;
+    let target = 0, inView = true, quiet = 0, inGesture = false, prevAbs = 0, lastStep = 0, ty = null;
     const render = () => { place(labels, st.q); place(mails, st.m); };
     render();
     const step = (dir) => {
       if (!inView || !dir) return;
+      lastStep = performance.now();
       target += dir;
       if (calm) { st.q = st.m = target; render(); return; }
       gsap.to(st, { q: target, duration: DUR, ease: 'power3.inOut', overwrite: false, onUpdate: render });
       gsap.to(st, { m: target, duration: DUR, ease: 'power3.inOut', delay: MAIL_AT, overwrite: false, onUpdate: render });
     };
-    // Wheel/trackpad: the first event of a gesture steps, the rest (incl. momentum) is ignored until it goes quiet
     const wheel = (e) => {
-      const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
-      clearTimeout(quiet); quiet = setTimeout(() => { wheelLock = false; }, QUIET);
-      if (wheelLock || Math.abs(dy) < MIN_WHEEL) return;
-      wheelLock = true; step(Math.sign(dy));
+      const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY, a = Math.abs(dy);
+      clearTimeout(quiet); quiet = setTimeout(() => { inGesture = false; prevAbs = 0; }, QUIET);
+      if (a < MIN_WHEEL) { prevAbs = a; return; }
+      // New gesture: first event after a pause, or a clear speed-up inside a stream (a new flick over the momentum)
+      const fresh = !inGesture || (a > prevAbs * KICK && performance.now() - lastStep > GAP);
+      prevAbs = a; inGesture = true;
+      if (fresh) step(Math.sign(dy));
     };
     const tstart = (e) => { ty = e.touches[0].clientY; };
     const tend = (e) => {
