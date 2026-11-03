@@ -43,7 +43,7 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
- *  - ContactRotate 2.3.1 (fade: next pair sits low like the reference, partly below the screen edge). 2.3.0 (fade effect matched to Flor's reference: pair waits faintly below, grows in, shrinks out upwards). 2.2.0 (quick repeated swipes each count; Effect prop: mask or fade): contact page. One scroll or swipe
+ *  - ContactRotate 2.3.2 (fade: the next pair is invisible until it moves in). 2.3.1 (fade: next pair sits low like the reference). 2.3.0 (fade effect matched to Flor's reference: pair waits faintly below, grows in, shrinks out upwards). 2.2.0 (quick repeated swipes each count; Effect prop: mask or fade): contact page. One scroll or swipe
  *    turns the questions above the email one step in an endless loop; the email (same address, the joke) follows just behind.
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
@@ -2322,8 +2322,9 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   const MIN_WHEEL = 4;    // ignore tiny wheel jitters (px)
   const MIN_SWIPE = 30;   // px a swipe needs to count
   const OFF = 140;        // mask: yPercent between two lines (past 100, so italic descenders never peek into the mask)
-  // fade effect (matched to the reference video): pair below = 80% size, 12% opacity; leaving pair = 75% size, gone
-  const F = { dur: 0.55, ease: 'power2.out', upGap: 0.3, downGap: 0.44, below: { scale: 0.8, opacity: 0.12 }, above: { scale: 0.75 } };
+  // fade effect (matched to the reference video): next pair comes from below at 80% size, invisible until it moves;
+  // leaving pair goes up to 75% size and fades out
+  const F = { dur: 0.55, ease: 'power2.out', upGap: 0.3, downGap: 0.44, below: { scale: 0.8, opacity: 0 }, above: { scale: 0.75 } };
   const live = new Set();
   const setup = (root) => {
     if (root._rot || !window.gsap) return;
