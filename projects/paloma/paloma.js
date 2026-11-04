@@ -29,7 +29,7 @@
  *  - LogoOnMedia 1.1.0: nav logo gets data-on-media over images/videos (filter lift in the Navigation embed); keeps the logo loop playing.
  *  - LogoHover 1.0.0: hovering the nav logo brakes the spin to a stop facing forward (loop start/end), leaving spins it back up.
  *  - PlayBounce 1.0.0: big play button in the Full Video Player springs back with more bounce when the cursor leaves.
- *  - SceneScroll 1.5.0 (clouds leave on click, data-leaving drops the sky body colour at once). 1.4.0 (no position: fixed, so iOS 26 Safari shows the clouds under its toolbars; scroll-driven CSS where supported). 1.3.0 (parallax on the GSAP ticker: keeps running after Swup page changes). 1.2.0 (scene lives outside #swup: clouds fade out and in with the theme, never a plain background in between). 1.1.0 (poster still under the canvas, canvas fades in when the scene is ready). 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
+ *  - SceneScroll 1.6.0 (also a self-hosted scene file: data-us-project-src). 1.5.0 (clouds leave on click, data-leaving drops the sky body colour at once). 1.4.0 (no position: fixed, so iOS 26 Safari shows the clouds under its toolbars; scroll-driven CSS where supported). 1.3.0 (parallax on the GSAP ticker: keeps running after Swup page changes). 1.2.0 (scene lives outside #swup: clouds fade out and in with the theme, never a plain background in between). 1.1.0 (poster still under the canvas, canvas fades in when the scene is ready). 1.0.0: Scene component (Unicorn Studio) as a fixed background; the square scrolls top to bottom with the page. Loads the SDK, Swup safe.
  *  - ThemePace 1.0.0: page change colour crossfade on body 1.5x faster, so new content never lands on a half-changed background.
  *  - CookieExpand 1.2.0 (checkboxes draw their ticked state inside the banner). 1.1.0 (footer Cookie Preferences expands the banner while it is up). 1.0.0: Preferences open inside the cookie banner (it grows, text crossfades); choices replayed in Finsweet's own form.
  *  - CookieDock 1.3.1 (all fs-cc links skip Swup, footer link included). 1.3.0 (--cc-prefs-top: preferences open on the banner's spot). 1.2.1 (gap = the banner's edge margin; "#" consent links no longer scroll to top). 1.1.0: below 992px the cookie banner starts under the menu button; the first menu open moves it to the bottom for good. No motion on load or scroll.
@@ -43,6 +43,7 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - 1.91.0: scene loads from a self-hosted file (Webflow assets) via data-us-project-src (SceneScroll 1.6.0).
  *  - 1.90.0: no parallax on the Full Video Player thumbnail (it matched the first video frame no more); project tags use the normal cursor.
  *  - ReadMoreTrim 1.0.0: empty paragraphs in the Case Header Read more text are removed.
  *  - SocialPoster 1.1.0: Case Media items get the Thumbnail URL prop too ([data-poster] on .case-media_item).
@@ -1430,7 +1431,8 @@ if (!document.getElementById('paloma-splide-sr')) {
       + '[data-scene-canvas].is-scroll-driven{animation:paloma-scene linear both;animation-timeline:scroll(root block)}';
     document.head.appendChild(st);
   };
-  const project = (el) => { const c = el && el.querySelector('[data-us-project]'); return c ? c.getAttribute('data-us-project') : ''; };
+  // The scene is a Unicorn project ID (data-us-project) or a self-hosted scene file (data-us-project-src, Webflow assets)
+  const project = (el) => { const c = el && el.querySelector('[data-us-project], [data-us-project-src]'); return c ? (c.getAttribute('data-us-project-src') || c.getAttribute('data-us-project') || '') : ''; };
   // Not position: fixed. iOS 26 Safari clips fixed elements at its toolbars and paints a flat tint there instead,
   // so the scene is a page-tall absolute layer (body is its containing block) and the canvas is moved down with the
   // scroll: on screen it travels from its top edge to its bottom edge over the full page scroll. Where the browser
@@ -1528,7 +1530,7 @@ if (!document.getElementById('paloma-splide-sr')) {
   App.destroys.push(() => {
     if (!live) return;
     const v = window.swup && window.swup.visit, html = v && v.to && v.to.html;
-    const next = html ? ((html.match(/data-us-project="([^"]+)"/) || [])[1] || '') : '';
+    const next = html ? ((html.match(/data-us-project-src="([^"]+)"/) || html.match(/data-us-project="([^"]+)"/) || [])[1] || '') : '';
     if (next && next === project(live)) return; // stays; init() drops the incoming copy
     leave();
   });
