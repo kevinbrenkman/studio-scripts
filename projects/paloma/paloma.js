@@ -43,7 +43,7 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
- *  - ContactRotate 2.6.1 (slot: less motion blur so the tilt reads). 2.6.0 (slot: real 3D drum, pairs tilt back in perspective; pairs above and below faintly visible at rest). 2.5.1 (slot: slower spin, 1.5 to 2.2s like the reference). 2.5.0 (slot: a scroll spins to a random other question; the next pair stays just visible at rest, the previous hides). 2.4.1 (slot: neighbours hidden at rest). 2.4.0 (Effect "slot": pairs on a turning drum, neighbours squashed and faded above and below, motion blur, overshoot). 2.3.3 (one swipe = exactly one step: a swipe's own speed-up no longer counts as a new flick). 2.3.2 (fade: the next pair is invisible until it moves in). 2.3.1 (fade: next pair sits low like the reference). 2.3.0 (fade effect matched to Flor's reference: pair waits faintly below, grows in, shrinks out upwards). 2.2.0 (quick repeated swipes each count; Effect prop: mask or fade): contact page. One scroll or swipe
+ *  - ContactRotate 2.7.0 (slot: email centred in the viewport; phone, address and socials pinned to the bottom by the Contact CSS). 2.6.1 (slot: less motion blur so the tilt reads). 2.6.0 (slot: real 3D drum, pairs tilt back in perspective; pairs above and below faintly visible at rest). 2.5.1 (slot: slower spin, 1.5 to 2.2s like the reference). 2.5.0 (slot: a scroll spins to a random other question; the next pair stays just visible at rest, the previous hides). 2.4.1 (slot: neighbours hidden at rest). 2.4.0 (Effect "slot": pairs on a turning drum, neighbours squashed and faded above and below, motion blur, overshoot). 2.3.3 (one swipe = exactly one step: a swipe's own speed-up no longer counts as a new flick). 2.3.2 (fade: the next pair is invisible until it moves in). 2.3.1 (fade: next pair sits low like the reference). 2.3.0 (fade effect matched to Flor's reference: pair waits faintly below, grows in, shrinks out upwards). 2.2.0 (quick repeated swipes each count; Effect prop: mask or fade): contact page. One scroll or swipe
  *    turns the questions above the email one step in an endless loop; the email (same address, the joke) follows just behind.
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
@@ -2331,7 +2331,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   // At rest only the middle pair shows: the neighbours fade in as the drum starts turning (showIn) and out once it lands (showOut)
   // A scroll spins to a random other question: at least minSpin steps; duration dur + perStep per step (max durMax).
   // rest: how visible the pairs above and below stay at rest (0 = hidden). persp: perspective distance in drum radii (lower = stronger 3D).
-  const SL = { angle: 40, gap: 1.05, fadePow: 4, blur: 2, motion: 60, motionMax: 4, dur: 1.1, perStep: 0.22, durMax: 2.2, minSpin: 2, ease: 'back.out(1.1)', showIn: 0.12, showOut: 0.4, rest: 0.3, persp: 2.5 };
+  const SL = { angle: 40, gap: 0.95, fadePow: 4, blur: 2, motion: 60, motionMax: 4, dur: 1.1, perStep: 0.22, durMax: 2.2, minSpin: 2, ease: 'back.out(1.1)', showIn: 0.12, showOut: 0.4, rest: 0.3, persp: 2.5 };
   const F = { dur: 0.55, ease: 'power2.out', upGap: 0.3, downGap: 0.44, below: { scale: 0.8, opacity: 0 }, above: { scale: 0.75 } };
   const live = new Set();
   const setup = (root) => {
@@ -2349,7 +2349,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     gsap.set([...labels, ...mails], { visibility: 'visible' });
     // Line k sits d = (k - pos) steps from the middle, wrapped so the list never ends
     // fade: question and email scale as one pair around the pair's centre (aL/aM: their offsets from it, px)
-    let upG = 0, downG = 0, aL = 0, aM = 0, R = 0;
+    let upG = 0, downG = 0, aL = 0, aM = 0, R = 0, off = 0;
     const measure = () => {
       if (!fade && !slot) return;
       const rl = lab.getBoundingClientRect(), rm = (box || lab).getBoundingClientRect();
@@ -2357,6 +2357,13 @@ document.addEventListener('touchstart', () => {}, { passive: true });
       aL = (rl.top + rl.bottom) / 2 - c; aM = (rm.top + rm.bottom) / 2 - c;
       downG = Math.max(h * 1.4, innerHeight * F.downGap); upG = Math.max(h * 1.1, innerHeight * F.upGap);
       R = (h * SL.gap) / Math.sin((SL.angle * Math.PI) / 180); // drum radius: neighbours sit SL.gap pair heights apart
+      // slot: the drum is centred on the screen, so the email sits exactly in the middle of the viewport.
+      // Measured from the layout (offsetTop), so page-load reveals or transitions that move the section don't skew it.
+      if (slot) {
+        const m = box || lab; let y = 0;
+        for (let e = m; e; e = e.offsetParent) y += e.offsetTop;
+        off = innerHeight / 2 - (y + m.offsetHeight / 2);
+      }
     };
     measure();
     const look = (d, a) => {
@@ -2385,7 +2392,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
       const show = Math.max(vis.v, SL.rest);
       const op = Math.pow(c, SL.fadePow) * (w + (1 - w) * show);
       // real 3D: each pair tilts back with the drum (rotateX) and sinks behind it (z), seen through a perspective
-      return { y: R * sn + a * c - a, z: (c - 1) * R, rotationX: (-th * 180) / Math.PI, transformPerspective: R * SL.persp, transformOrigin: '50% 50%', scaleY: 1, opacity: op, filter: b > 0.3 && op > 0.01 ? 'blur(' + b.toFixed(1) + 'px)' : 'none' };
+      return { y: off + R * sn + a * c - a, z: (c - 1) * R, rotationX: (-th * 180) / Math.PI, transformPerspective: R * SL.persp, transformOrigin: '50% 50%', scaleY: 1, opacity: op, filter: b > 0.3 && op > 0.01 ? 'blur(' + b.toFixed(1) + 'px)' : 'none' };
     };
     let lastQ = 0, mb = 0;
     const vis = { v: 0 };
