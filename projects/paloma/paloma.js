@@ -35,7 +35,7 @@
  *  - CookieDock 1.3.1 (all fs-cc links skip Swup, footer link included). 1.3.0 (--cc-prefs-top: preferences open on the banner's spot). 1.2.1 (gap = the banner's edge margin; "#" consent links no longer scroll to top). 1.1.0: below 992px the cookie banner starts under the menu button; the first menu open moves it to the bottom for good. No motion on load or scroll.
  *  - MailMagnet 1.3.0 (also [data-mail-magnet], the contact page email): Mail CTA email is pulled towards the cursor (flat, subtle horizontally, clamped to the window), springs back.
  *  - SliderDrag 1.0.0: all sliders. Trackpad drags the slider (settles on the nearest card, no page scroll while swiping). Auto scroll from the variant: Off / Slow (2) / Fast (4 = homepage).
- *  - MediaPoster 1.2.1 (player UI keeps its blurred glass: the fade-in no longer leaves a filter behind). 1.2.0 (also the Full Video Player: thumbnail + video 2px bigger per side, video hidden until first play): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
+ *  - MediaPoster 1.3.0 (play button fades in with its blur: own opacity, not a filter or the Section reveal on a parent; PlayerReveal: a player in the page slot rises in once on screen). 1.2.1 (player UI keeps its blurred glass: the fade-in no longer leaves a filter behind). 1.2.0 (also the Full Video Player: thumbnail + video 2px bigger per side, video hidden until first play): hides the image under a video loop once the video plays (no 1px edge). Same Splide setup as CaseSlider (loop, autoWidth, speed 1000) and the
  *    same slider:ready event, so SliderMotion (trackpad, auto scroll) and SliderFX (reveal, parallax) run on it too.
  *    Own module because CaseSlider removes slides that link to the current page (the play button is href="#").
  *  - CardRim 1.1.1: scans the whole document (the banner is outside #swup). 1.1.0 (data-rim-always: the cookie banner rim drifts too). 1.0.0: Social Card playing with sound gets the glass button rim round the video edge; drifts round,
@@ -1079,14 +1079,43 @@
     '.bunny-player .bunny-player__placeholder,.bunny-player .bunny-player__video{top:-2px!important;left:-2px!important;width:calc(100% + 4px)!important;height:calc(100% + 4px)!important;max-width:none}' +
     // Video hidden until first play: on iPhone the (empty, black) native HLS video sat on top of the thumbnail
     '[data-bunny-player-init]:not([data-player-activated="true"]) .bunny-player__video{opacity:0}' +
-    // Player thumbnail + play button + controls stay hidden until the thumbnail has loaded (CardLoaded adds is-loaded),
-    // then fade in together: no buttons floating on an empty box. 1.2.1: fill backwards, not both: a filter that stays on
-    // after the fade makes the controls a backdrop root, so their glass buttons lost the blur
+    // Player thumbnail + play button stay hidden until the thumbnail has loaded (CardLoaded adds is-loaded) and the player
+    // is on screen (PlayerReveal adds is-shown), then fade in: no buttons floating on an empty box.
+    // 1.3.0: the glass buttons fade with their OWN opacity. A filter or opacity on a parent (the old fade, or the Section
+    // reveal on the whole player) makes that parent a backdrop root, so the button showed without its blur until the fade
+    // ended. The thumbnail has no glass, so it keeps the filter fade.
     '@keyframes paloma-player-in{from{filter:opacity(0)}to{filter:opacity(1)}}' +
-    'html:not(.wf-design-mode) [data-bunny-player-init]:not(.is-loaded)>:is(.bunny-player__placeholder,.bunny-player__playpause,.bunny-player__interface){filter:opacity(0);pointer-events:none}' +
-    'html:not(.wf-design-mode) [data-bunny-player-init].is-loaded>:is(.bunny-player__placeholder,.bunny-player__playpause,.bunny-player__interface){animation:paloma-player-in .8s cubic-bezier(.25,.1,.25,1) backwards}' +
-    'html:not(.wf-design-mode) [data-bunny-player-init].is-loaded>:is(.bunny-player__playpause,.bunny-player__interface){animation-delay:.2s}';
+    '@keyframes paloma-player-btn{from{opacity:0}to{opacity:1}}' +
+    'html:not(.wf-design-mode) [data-bunny-player-init]:not(.is-loaded.is-shown)>.bunny-player__placeholder{filter:opacity(0)}' +
+    'html:not(.wf-design-mode) [data-bunny-player-init]:not(.is-loaded.is-shown) .bunny-player__big-btn{opacity:0}' +
+    'html:not(.wf-design-mode) [data-bunny-player-init]:not(.is-loaded.is-shown)>:is(.bunny-player__playpause,.bunny-player__interface){pointer-events:none}' +
+    'html:not(.wf-design-mode) [data-bunny-player-init].is-loaded.is-shown>.bunny-player__placeholder{animation:paloma-player-in .8s cubic-bezier(.25,.1,.25,1) backwards}' +
+    'html:not(.wf-design-mode) [data-bunny-player-init].is-loaded.is-shown .bunny-player__big-btn{animation:paloma-player-btn .8s cubic-bezier(.25,.1,.25,1) .2s backwards}' +
+    // A player straight in the page slot rises in itself (Section reveal skips it): translate, no opacity on the player
+    'html:not(.wf-design-mode) .page-slot>[data-bunny-player-init]{transition:translate .8s cubic-bezier(.22,1,.36,1)}' +
+    'html:not(.wf-design-mode) .page-slot>[data-bunny-player-init]:not(.is-shown){translate:0 40px}' +
+    '@media (prefers-reduced-motion:reduce){.page-slot>[data-bunny-player-init]{translate:none!important;transition:none!important}}';
   document.head.appendChild(st);
+})();
+
+/* ---------- PlayerReveal ---------- */
+// Full Video Player: is-shown once the player is on screen (85% down, like the Section reveal). A player straight in the
+// page slot waits for it and rises in (CSS in MediaPoster); any other player is shown at once.
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  let io = null;
+  const init = (scope = document) => {
+    if (!io && 'IntersectionObserver' in window) io = new IntersectionObserver((es) => es.forEach((e) => {
+      if (e.isIntersecting) { e.target.classList.add('is-shown'); io.unobserve(e.target); }
+    }), { rootMargin: '0px 0px -15% 0px' });
+    (scope || document).querySelectorAll('[data-bunny-player-init]').forEach((p) => {
+      if (p.classList.contains('is-shown')) return;
+      if (!io || !p.parentElement || !p.parentElement.classList.contains('page-slot')) p.classList.add('is-shown');
+      else io.observe(p);
+    });
+  };
+  App.inits.push(init);
+  if (document.readyState !== 'loading') init(document); else document.addEventListener('DOMContentLoaded', () => init(document));
 })();
 
 /* ---------- SocialSlider ---------- */
