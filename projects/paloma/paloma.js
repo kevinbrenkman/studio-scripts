@@ -43,7 +43,7 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
- *  - ContactRotate 2.8.0 (slot: drum matched to Flor's reference frame: 60deg between pairs, neighbours squashed to half height, about 28% visible and soft at rest). 2.7.1 (slot: more space between the pairs, like the reference). 2.7.0 (slot: email centred in the viewport; phone, address and socials pinned to the bottom by the Contact CSS). 2.6.1 (slot: less motion blur so the tilt reads). 2.6.0 (slot: real 3D drum, pairs tilt back in perspective; pairs above and below faintly visible at rest). 2.5.1 (slot: slower spin, 1.5 to 2.2s like the reference). 2.5.0 (slot: a scroll spins to a random other question; the next pair stays just visible at rest, the previous hides). 2.4.1 (slot: neighbours hidden at rest). 2.4.0 (Effect "slot": pairs on a turning drum, neighbours squashed and faded above and below, motion blur, overshoot). 2.3.3 (one swipe = exactly one step: a swipe's own speed-up no longer counts as a new flick). 2.3.2 (fade: the next pair is invisible until it moves in). 2.3.1 (fade: next pair sits low like the reference). 2.3.0 (fade effect matched to Flor's reference: pair waits faintly below, grows in, shrinks out upwards). 2.2.0 (quick repeated swipes each count; Effect prop: mask or fade): contact page. One scroll or swipe
+ *  - ContactRotate 2.9.0 (slot: on arrival only the centre pair shows, the neighbours reveal with the first spin). 2.8.0 (slot: drum matched to Flor's reference frame: 60deg between pairs, neighbours squashed to half height, about 28% visible and soft at rest). 2.7.1 (slot: more space between the pairs, like the reference). 2.7.0 (slot: email centred in the viewport; phone, address and socials pinned to the bottom by the Contact CSS). 2.6.1 (slot: less motion blur so the tilt reads). 2.6.0 (slot: real 3D drum, pairs tilt back in perspective; pairs above and below faintly visible at rest). 2.5.1 (slot: slower spin, 1.5 to 2.2s like the reference). 2.5.0 (slot: a scroll spins to a random other question; the next pair stays just visible at rest, the previous hides). 2.4.1 (slot: neighbours hidden at rest). 2.4.0 (Effect "slot": pairs on a turning drum, neighbours squashed and faded above and below, motion blur, overshoot). 2.3.3 (one swipe = exactly one step: a swipe's own speed-up no longer counts as a new flick). 2.3.2 (fade: the next pair is invisible until it moves in). 2.3.1 (fade: next pair sits low like the reference). 2.3.0 (fade effect matched to Flor's reference: pair waits faintly below, grows in, shrinks out upwards). 2.2.0 (quick repeated swipes each count; Effect prop: mask or fade): contact page. One scroll or swipe
  *    turns the questions above the email one step in an endless loop; the email (same address, the joke) follows just behind.
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
@@ -2389,13 +2389,14 @@ document.addEventListener('touchstart', () => {}, { passive: true });
       const b = Math.abs(sn) * SL.blur + mb;
       // the pairs above and below stay faintly visible at rest (SL.rest) and light up while the drum turns (vis.v 0..1)
       const w = Math.max(0, 1 - Math.abs(d) * 2);
-      const show = Math.max(vis.v, SL.rest);
+      const show = Math.max(vis.v, revealed ? SL.rest : 0);
       const op = Math.pow(c, SL.fadePow) * (w + (1 - w) * show);
       // real 3D: each pair tilts back with the drum (rotateX) and sinks behind it (z), seen through a perspective
       return { y: off + R * sn + a * c - a, z: (c - 1) * R, rotationX: (-th * 180) / Math.PI, transformPerspective: R * SL.persp, transformOrigin: '50% 50%', scaleY: 1, opacity: op, filter: b > 0.3 && op > 0.01 ? 'blur(' + b.toFixed(1) + 'px)' : 'none' };
     };
     let lastQ = 0, mb = 0;
     const vis = { v: 0 };
+    let revealed = false; // slot: on arrival only the centre pair shows; the pairs above and below appear with the first spin and then stay
     const place = (list, pos, a) => list.forEach((el, k) => {
       let d = (((k - pos) % N) + N) % N; if (d > N / 2) d -= N;
       if (slot) gsap.set(el, drum(d, a, mb));
@@ -2417,6 +2418,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
       // gestures during a spin are ignored until it lands
       if (slot && performance.now() < spinEnd - 120) return;
       lastStep = performance.now();
+      revealed = true;
       if (slot && !calm) {
         const cur = ((Math.round(target) % N) + N) % N;
         let k; do { k = SL.minSpin + Math.floor(Math.random() * N); } while ((((cur + dir * k) % N) + N) % N === cur && N > 1);
