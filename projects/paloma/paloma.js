@@ -43,7 +43,7 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
- *  - ContactRotate 2.3.3 (one swipe = exactly one step: a swipe's own speed-up no longer counts as a new flick). 2.3.2 (fade: the next pair is invisible until it moves in). 2.3.1 (fade: next pair sits low like the reference). 2.3.0 (fade effect matched to Flor's reference: pair waits faintly below, grows in, shrinks out upwards). 2.2.0 (quick repeated swipes each count; Effect prop: mask or fade): contact page. One scroll or swipe
+ *  - ContactRotate 2.4.0 (Effect "slot": pairs on a turning drum, neighbours squashed and faded above and below, motion blur, overshoot). 2.3.3 (one swipe = exactly one step: a swipe's own speed-up no longer counts as a new flick). 2.3.2 (fade: the next pair is invisible until it moves in). 2.3.1 (fade: next pair sits low like the reference). 2.3.0 (fade effect matched to Flor's reference: pair waits faintly below, grows in, shrinks out upwards). 2.2.0 (quick repeated swipes each count; Effect prop: mask or fade): contact page. One scroll or swipe
  *    turns the questions above the email one step in an endless loop; the email (same address, the joke) follows just behind.
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
@@ -2309,7 +2309,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
 // one swipe moves exactly one step, up or down; swipe again right away for the next one. Trackpad momentum (the
 // slowly decaying tail after a flick) is ignored, a fresh flick during that tail is recognised by its jump in speed.
 // The email (same address, the joke) follows just behind. Endless in both directions; the page doesn't scroll.
-// data-rotate-effect (component prop "Effect"): "mask" = lines slide through a mask; "fade" = Flor's reference: question
+// data-rotate-effect (component prop "Effect"): "slot" = slot machine drum (see SL); "mask" = lines slide through a mask; "fade" = Flor's reference: question
 // and email move as one pair, the next pair waits faintly below (small, almost transparent) and grows in, the old one
 // shrinks and fades out upwards. Reduced motion: same steps, no movement.
 (() => {
@@ -2326,6 +2326,9 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   const OFF = 140;        // mask: yPercent between two lines (past 100, so italic descenders never peek into the mask)
   // fade effect (matched to the reference video): next pair comes from below at 80% size, invisible until it moves;
   // leaving pair goes up to 75% size and fades out
+  // slot effect (Flor's slot machine reference): angle between pairs on the drum, gap in pair heights, how fast the
+  // neighbours fade (cos^fadePow: 40deg = about 34%), neighbour blur, motion blur while turning, settle with overshoot
+  const SL = { angle: 40, gap: 1.05, fadePow: 4, blur: 3, motion: 90, motionMax: 7, dur: 0.75, ease: 'back.out(1.5)' };
   const F = { dur: 0.55, ease: 'power2.out', upGap: 0.3, downGap: 0.44, below: { scale: 0.8, opacity: 0 }, above: { scale: 0.75 } };
   const live = new Set();
   const setup = (root) => {
@@ -2334,7 +2337,8 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     const labels = lab ? [...lab.children] : [];
     const N = labels.length;
     if (N < 2) return;
-    const fade = (root.getAttribute('data-rotate-effect') || '').trim() === 'fade';
+    const effect = (root.getAttribute('data-rotate-effect') || '').trim();
+    const fade = effect === 'fade', slot = effect === 'slot';
     const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
     const m0 = box && box.firstElementChild;
     const mails = m0 ? [m0] : [];
@@ -2342,13 +2346,14 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     gsap.set([...labels, ...mails], { visibility: 'visible' });
     // Line k sits d = (k - pos) steps from the middle, wrapped so the list never ends
     // fade: question and email scale as one pair around the pair's centre (aL/aM: their offsets from it, px)
-    let upG = 0, downG = 0, aL = 0, aM = 0;
+    let upG = 0, downG = 0, aL = 0, aM = 0, R = 0;
     const measure = () => {
-      if (!fade) return;
+      if (!fade && !slot) return;
       const rl = lab.getBoundingClientRect(), rm = (box || lab).getBoundingClientRect();
       const c = (rl.top + rm.bottom) / 2, h = rm.bottom - rl.top;
       aL = (rl.top + rl.bottom) / 2 - c; aM = (rm.top + rm.bottom) / 2 - c;
       downG = Math.max(h * 1.4, innerHeight * F.downGap); upG = Math.max(h * 1.1, innerHeight * F.upGap);
+      R = (h * SL.gap) / Math.sin((SL.angle * Math.PI) / 180); // drum radius: neighbours sit SL.gap pair heights apart
     };
     measure();
     const look = (d, a) => {
@@ -2365,14 +2370,28 @@ document.addEventListener('touchstart', () => {}, { passive: true });
       }
       return { y: y + a * (sc - 1), scale: sc, opacity: op };
     };
+    // slot: the pairs sit on a turning drum. Angle per step SL.angle; a pair is squashed (cos) and fades with its
+    // angle, neighbours are slightly blurred, and the whole drum gets motion blur while it turns (mb, px)
+    const drum = (d, a, mb) => {
+      const th = (d * SL.angle * Math.PI) / 180;
+      if (Math.abs(th) >= Math.PI / 2) return { y: 0, scaleY: 0, opacity: 0, filter: 'none' };
+      const c = Math.cos(th), sn = Math.sin(th);
+      const b = Math.abs(sn) * SL.blur + mb;
+      return { y: R * sn + a * c - a, scaleY: c, opacity: Math.pow(c, SL.fadePow), filter: b > 0.3 ? 'blur(' + b.toFixed(1) + 'px)' : 'none' };
+    };
+    let lastQ = 0, mb = 0;
     const place = (list, pos, a) => list.forEach((el, k) => {
       let d = (((k - pos) % N) + N) % N; if (d > N / 2) d -= N;
-      if (fade) gsap.set(el, look(d, a));
+      if (slot) gsap.set(el, drum(d, a, mb));
+      else if (fade) gsap.set(el, look(d, a));
       else gsap.set(el, { yPercent: d * OFF });
     });
     const st = { q: 0, m: 0 };   // current position of the questions and of the email
     let target = 0, inView = true, quiet = 0, inGesture = false, prevAbs = 0, peak = 0, slowed = false, lastStep = 0, ty = null;
-    const render = () => { place(labels, st.q, aL); place(mails, st.m, aM); };
+    const render = () => {
+      if (slot) { mb = Math.min(SL.motionMax, Math.abs(st.q - lastQ) * SL.motion); lastQ = st.q; }
+      place(labels, st.q, aL); place(mails, st.m, aM);
+    };
     const resize = () => { measure(); render(); };
     render();
     const step = (dir) => {
@@ -2381,6 +2400,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
       target += dir;
       if (calm) { st.q = st.m = target; render(); return; }
       if (fade) { gsap.to(st, { q: target, m: target, duration: F.dur, ease: F.ease, overwrite: false, onUpdate: render }); return; }
+      if (slot) { gsap.to(st, { q: target, m: target, duration: SL.dur, ease: SL.ease, overwrite: true, onUpdate: render, onComplete: render }); return; }
       gsap.to(st, { q: target, duration: DUR, ease: 'power3.inOut', overwrite: false, onUpdate: render });
       gsap.to(st, { m: target, duration: DUR, ease: 'power3.inOut', delay: MAIL_AT, overwrite: false, onUpdate: render });
     };
