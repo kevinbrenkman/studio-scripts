@@ -43,7 +43,7 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
- *  - ContactRotate 2.4.1 (slot: neighbours hidden at rest, they only show while the drum turns). 2.4.0 (Effect "slot": pairs on a turning drum, neighbours squashed and faded above and below, motion blur, overshoot). 2.3.3 (one swipe = exactly one step: a swipe's own speed-up no longer counts as a new flick). 2.3.2 (fade: the next pair is invisible until it moves in). 2.3.1 (fade: next pair sits low like the reference). 2.3.0 (fade effect matched to Flor's reference: pair waits faintly below, grows in, shrinks out upwards). 2.2.0 (quick repeated swipes each count; Effect prop: mask or fade): contact page. One scroll or swipe
+ *  - ContactRotate 2.5.0 (slot: a scroll spins to a random other question; the next pair stays just visible at rest, the previous hides). 2.4.1 (slot: neighbours hidden at rest). 2.4.0 (Effect "slot": pairs on a turning drum, neighbours squashed and faded above and below, motion blur, overshoot). 2.3.3 (one swipe = exactly one step: a swipe's own speed-up no longer counts as a new flick). 2.3.2 (fade: the next pair is invisible until it moves in). 2.3.1 (fade: next pair sits low like the reference). 2.3.0 (fade effect matched to Flor's reference: pair waits faintly below, grows in, shrinks out upwards). 2.2.0 (quick repeated swipes each count; Effect prop: mask or fade): contact page. One scroll or swipe
  *    turns the questions above the email one step in an endless loop; the email (same address, the joke) follows just behind.
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
  */
@@ -2329,7 +2329,9 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   // slot effect (Flor's slot machine reference): angle between pairs on the drum, gap in pair heights, how fast the
   // neighbours fade (cos^fadePow: 40deg = about 34%), neighbour blur, motion blur while turning, settle with overshoot
   // At rest only the middle pair shows: the neighbours fade in as the drum starts turning (showIn) and out once it lands (showOut)
-  const SL = { angle: 40, gap: 1.05, fadePow: 4, blur: 3, motion: 90, motionMax: 7, dur: 0.75, ease: 'back.out(1.5)', showIn: 0.12, showOut: 0.4 };
+  // A scroll spins to a random other question: at least minSpin steps; duration dur + perStep per step (max durMax).
+  // restNext: how visible the next pair below stays at rest (0 = hidden); the one above hides at rest.
+  const SL = { angle: 40, gap: 1.05, fadePow: 4, blur: 3, motion: 90, motionMax: 9, dur: 0.6, perStep: 0.12, durMax: 1.6, minSpin: 2, ease: 'back.out(1.2)', showIn: 0.12, showOut: 0.4, restNext: 0.45 };
   const F = { dur: 0.55, ease: 'power2.out', upGap: 0.3, downGap: 0.44, below: { scale: 0.8, opacity: 0 }, above: { scale: 0.75 } };
   const live = new Set();
   const setup = (root) => {
@@ -2379,8 +2381,10 @@ document.addEventListener('touchstart', () => {}, { passive: true });
       const c = Math.cos(th), sn = Math.sin(th);
       const b = Math.abs(sn) * SL.blur + mb;
       // neighbours only show while the drum turns (vis.v 0..1); the pair in the middle always shows
+      // ...except the next pair below, which stays just visible at rest (SL.restNext), like on a real reel
       const w = Math.max(0, 1 - Math.abs(d) * 2);
-      const op = Math.pow(c, SL.fadePow) * (w + (1 - w) * vis.v);
+      const show = d > 0 ? Math.max(vis.v, SL.restNext) : vis.v;
+      const op = Math.pow(c, SL.fadePow) * (w + (1 - w) * show);
       return { y: R * sn + a * c - a, scaleY: c, opacity: op, filter: b > 0.3 && op > 0.01 ? 'blur(' + b.toFixed(1) + 'px)' : 'none' };
     };
     let lastQ = 0, mb = 0;
@@ -2399,18 +2403,28 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     };
     const resize = () => { measure(); render(); };
     render();
+    let spinEnd = 0;
     const step = (dir) => {
       if (!inView || !dir) return;
+      // slot: one gesture spins the reel to a random other question (several steps, past a full turn sometimes);
+      // gestures during a spin are ignored until it lands
+      if (slot && performance.now() < spinEnd - 120) return;
       lastStep = performance.now();
-      target += dir;
+      if (slot && !calm) {
+        const cur = ((Math.round(target) % N) + N) % N;
+        let k; do { k = SL.minSpin + Math.floor(Math.random() * N); } while ((((cur + dir * k) % N) + N) % N === cur && N > 1);
+        target += dir * k;
+      } else target += dir;
       if (calm) { st.q = st.m = target; render(); return; }
       if (fade) { gsap.to(st, { q: target, m: target, duration: F.dur, ease: F.ease, overwrite: false, onUpdate: render }); return; }
       if (slot) {
+        const dur = Math.min(SL.durMax, SL.dur + SL.perStep * Math.abs(target - st.q));
+        spinEnd = performance.now() + dur * 1000;
         gsap.killTweensOf(vis);
         gsap.timeline({ onUpdate: render })
           .to(vis, { v: 1, duration: SL.showIn, ease: 'power1.out' })
-          .to(vis, { v: 0, duration: SL.showOut, ease: 'power1.inOut' }, SL.dur * 0.7);
-        gsap.to(st, { q: target, m: target, duration: SL.dur, ease: SL.ease, overwrite: true, onUpdate: render, onComplete: render });
+          .to(vis, { v: 0, duration: SL.showOut, ease: 'power1.inOut' }, dur * 0.75);
+        gsap.to(st, { q: target, m: target, duration: dur, ease: SL.ease, overwrite: true, onUpdate: render, onComplete: render });
         return;
       }
       gsap.to(st, { q: target, duration: DUR, ease: 'power3.inOut', overwrite: false, onUpdate: render });
