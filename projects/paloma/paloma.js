@@ -43,6 +43,7 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - 1.90.0: no parallax on the Full Video Player thumbnail (it matched the first video frame no more); project tags use the normal cursor.
  *  - ReadMoreTrim 1.0.0: empty paragraphs in the Case Header Read more text are removed.
  *  - SocialPoster 1.1.0: Case Media items get the Thumbnail URL prop too ([data-poster] on .case-media_item).
  *  - ContactRotate 2.9.0 (slot: on arrival only the centre pair shows, the neighbours reveal with the first spin). 2.8.0 (slot: drum matched to Flor's reference frame: 60deg between pairs, neighbours squashed to half height, about 28% visible and soft at rest). 2.7.1 (slot: more space between the pairs, like the reference). 2.7.0 (slot: email centred in the viewport; phone, address and socials pinned to the bottom by the Contact CSS). 2.6.1 (slot: less motion blur so the tilt reads). 2.6.0 (slot: real 3D drum, pairs tilt back in perspective; pairs above and below faintly visible at rest). 2.5.1 (slot: slower spin, 1.5 to 2.2s like the reference). 2.5.0 (slot: a scroll spins to a random other question; the next pair stays just visible at rest, the previous hides). 2.4.1 (slot: neighbours hidden at rest). 2.4.0 (Effect "slot": pairs on a turning drum, neighbours squashed and faded above and below, motion blur, overshoot). 2.3.3 (one swipe = exactly one step: a swipe's own speed-up no longer counts as a new flick). 2.3.2 (fade: the next pair is invisible until it moves in). 2.3.1 (fade: next pair sits low like the reference). 2.3.0 (fade effect matched to Flor's reference: pair waits faintly below, grows in, shrinks out upwards). 2.2.0 (quick repeated swipes each count; Effect prop: mask or fade): contact page. One scroll or swipe
@@ -571,8 +572,9 @@
     scope = scope || document;
     const grid = scope.querySelector('.projects-grid');
     // Case pages: loop images and videos inside the media blocks. Not the Full Video Player (it has its own controls).
-    // Images in case media, plus the Full Video Player thumbnail. No video elements: the playing video stays put.
-    const caseImgs = [...scope.querySelectorAll('.case-media_item img, [data-bunny-player-init] img')];
+    // Images in case media only. Not the Full Video Player thumbnail: zoomed for the parallax it no longer matched the
+    // first frame of the video when it starts playing.
+    const caseImgs = [...scope.querySelectorAll('.case-media_item img')];
     const blocks = []; // spread on case pages removed: too much there. Grid only.
     if (!grid && !caseImgs.length && !blocks.length) return;
     stop();
@@ -773,7 +775,9 @@
   // (a tag inside a project card still opens the project, it just doesn't announce itself as its own button)
   if (!document.getElementById('paloma-tags-css')) {
     const st = document.createElement('style'); st.id = 'paloma-tags-css';
-    st.textContent = '.case-header_tag-list .nav_button{display:inline-flex;align-items:center;height:2em;padding-top:0;padding-bottom:0;cursor:default}';
+    st.textContent = '.case-header_tag-list .nav_button{display:inline-flex;align-items:center;height:2em;padding-top:0;padding-bottom:0;cursor:default}' +
+      // Tags aren't links (yet): the normal arrow, also on a card whose link isn't ready on staging (NotReady)
+      '.case-header_tag-list,.case-header_tag-list *{cursor:default}[data-not-ready] :is(.case-header_tag-list,.case-header_tag-list *){cursor:default!important}';
     document.head.appendChild(st);
   }
   const docs = App._docs = App._docs || new Map();
@@ -2085,7 +2089,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   window.App = window.App || { inits: [], destroys: [] };
   if (!document.getElementById('paloma-notready-css')) {
     const st = document.createElement('style'); st.id = 'paloma-notready-css';
-    st.textContent = '[data-not-ready],[data-not-ready] *{cursor:not-allowed!important}';
+    st.textContent = '[data-not-ready],[data-not-ready] *{cursor:not-allowed!important}[data-not-ready] :is(.case-header_tag-list,.case-header_tag-list *){cursor:default!important}';
     document.head.appendChild(st);
   }
   const NAV = '.navigation a[href], [data-nav-menu] a[href]';
