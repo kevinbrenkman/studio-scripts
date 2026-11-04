@@ -43,6 +43,7 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - SocialPoster 1.1.0: Case Media items get the Thumbnail URL prop too ([data-poster] on .case-media_item).
  *  - ContactRotate 2.9.0 (slot: on arrival only the centre pair shows, the neighbours reveal with the first spin). 2.8.0 (slot: drum matched to Flor's reference frame: 60deg between pairs, neighbours squashed to half height, about 28% visible and soft at rest). 2.7.1 (slot: more space between the pairs, like the reference). 2.7.0 (slot: email centred in the viewport; phone, address and socials pinned to the bottom by the Contact CSS). 2.6.1 (slot: less motion blur so the tilt reads). 2.6.0 (slot: real 3D drum, pairs tilt back in perspective; pairs above and below faintly visible at rest). 2.5.1 (slot: slower spin, 1.5 to 2.2s like the reference). 2.5.0 (slot: a scroll spins to a random other question; the next pair stays just visible at rest, the previous hides). 2.4.1 (slot: neighbours hidden at rest). 2.4.0 (Effect "slot": pairs on a turning drum, neighbours squashed and faded above and below, motion blur, overshoot). 2.3.3 (one swipe = exactly one step: a swipe's own speed-up no longer counts as a new flick). 2.3.2 (fade: the next pair is invisible until it moves in). 2.3.1 (fade: next pair sits low like the reference). 2.3.0 (fade effect matched to Flor's reference: pair waits faintly below, grows in, shrinks out upwards). 2.2.0 (quick repeated swipes each count; Effect prop: mask or fade): contact page. One scroll or swipe
  *    turns the questions above the email one step in an endless loop; the email (same address, the joke) follows just behind.
  *  - CardPress 1.3.0 (dragging cancels the press, no spring): project cards (grid and slider) scale to 99% as a whole (image + info) zoom out a little while pressed and spring back on release.
@@ -2028,14 +2029,14 @@ document.addEventListener('touchstart', () => {}, { passive: true });
 })();
 
 /* ---------- SocialPoster ---------- */
-// Social Card thumbnail: the Thumbnail URL prop ([data-poster], e.g. a Bunny thumbnail.jpg link) wins; otherwise the
-// Thumbnail image; if that's empty too, a Bunny Video URL gives its own thumbnail (same folder, thumbnail.jpg).
+// Social Card and Case Media thumbnails: the Thumbnail URL prop ([data-poster], e.g. a Bunny thumbnail.jpg link) wins;
+// otherwise the Image; if that's empty too, a Bunny Video URL gives its own thumbnail (same folder, thumbnail.jpg).
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
   const empty = (img) => { const s = img.getAttribute('src') || ''; return !s || /placeholder/i.test(s); };
   const bunnyThumb = (u) => (/b-cdn\.net\/.+\/(playlist\.m3u8|play_\d+p\.mp4)/.test(u || '') ? u.replace(/[^/]+$/, 'thumbnail.jpg') : '');
   const set = (img, url) => { img.removeAttribute('srcset'); img.removeAttribute('sizes'); img.src = url; };
-  const init = (scope = document) => (scope || document).querySelectorAll('.social-card_media').forEach((m) => {
+  const init = (scope = document) => (scope || document).querySelectorAll('.social-card_media, .case-media_item').forEach((m) => {
     const img = m.querySelector('img'); if (!img) return;
     const own = (m.getAttribute('data-poster') || '').trim();
     if (own) return set(img, own);
