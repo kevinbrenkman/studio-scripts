@@ -1,5 +1,5 @@
 /*!
- * slider.js 1.1.2 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.2.0 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
  * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.9.0.
  *
@@ -17,7 +17,7 @@
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.1.2';
+  if (window.__studioSlider) return; window.__studioSlider = '1.2.0';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -33,6 +33,8 @@
       '[data-slider] .splide__track{overflow:hidden;position:relative}' +
       // data-slider-overflow="visible": slides run past the slider to the edge, clip on a parent (overflow-x: clip on the section)
       '[data-slider][data-slider-overflow="visible"] .splide__track{overflow:visible}' +
+      // CMS list in the slot of a static list wrapper: let it take the full width
+      '[data-slider-list]>.w-dyn-list{flex:0 0 100%;min-width:0}' +
       '[data-slider].is-initialized .splide__list{display:flex;backface-visibility:hidden;margin:0!important;padding:0!important}' +
       '[data-slider].is-initialized .splide__slide{flex-shrink:0;position:relative;list-style:none}' +
       '[data-slider]:not(.is-slider-ready) [data-slider-list],[data-slider]:not(.is-slider-ready) .w-dyn-items{visibility:hidden}' +
@@ -272,8 +274,11 @@
     if (root._slider) return;
     root._slider = true;
 
-    const track = root.querySelector('[data-slider-track]') || root.querySelector('.w-dyn-list');
-    const list = root.querySelector('[data-slider-list]') || (track && track.querySelector('.w-dyn-items'));
+    // A Collection List inside the slider wins: its wrapper is the track, its list holds the slides.
+    // So a Slider component (track > list > slot) works with static slides and with a CMS list dropped in its slot.
+    const dyn = root.querySelector('.w-dyn-items');
+    const track = dyn ? dyn.closest('.w-dyn-list') : root.querySelector('[data-slider-track]');
+    const list = dyn || root.querySelector('[data-slider-list]');
     if (!track || !list) { console.warn('[slider] needs [data-slider-track] and [data-slider-list]', root); root.classList.add('is-slider-ready'); return; }
 
     // data-slider-exclude-current: drop the slide that links to this page ("More projects" on a project page)

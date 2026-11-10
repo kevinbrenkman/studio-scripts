@@ -163,6 +163,7 @@ data-slider-per-page="1"
 6. Empty CMS list: slider hidden.
 
 Changelog
+- 1.2.0 (Nov 2026, Shelter): a Collection List inside the root always wins as track and list, so one Slider component (track > list > slot) takes static slides or a CMS list in its slot.
 - 1.1.2 (Nov 2026, Shelter): `data-slider-overflow="visible"`.
 - 1.1.1 (Nov 2026, Shelter): `data-slider-gap="css"`. Splide owns the gap while mounted and the list's CSS gap is zeroed, given back on breakpoint destroy. Fixes the loop offset and drift when the list also had a CSS gap.
 - 1.1.0 (Nov 2026, Shelter): `data-slider-autoplay`, `data-slider-mobile="false"`, `data-slider-name` for outside arrows. Layout CSS only while Splide is mounted (`.is-initialized`), so a destroyed slider keeps its Webflow layout. Works inside a Webflow component slot: the slot content holds `[data-slider-track]` (or the Collection List Wrapper) and the list.
