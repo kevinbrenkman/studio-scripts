@@ -4,7 +4,7 @@ Webflow site for Shelter (Onkruid, Asiat Park Vilvoorde). Development only, desi
 Webflow site: "Shelter" (shelter-ea606b). Figma: Shelter V3 (Copy), page **Final Kevin** only.
 Scope: one-pager plus one detail per event (the drawer), €3.000. Base: `docs/core.md` + `docs/splide.md`.
 
-Status: planned 10 Nov 2026, nothing built yet.
+Status: step 1 done 10 Nov 2026 (fonts, Variables, global embed, core code, Events collection, spike).
 
 ---
 
@@ -14,7 +14,7 @@ Status: planned 10 Nov 2026, nothing built yet.
 |---|---|
 | De Radar | Cards (agreed with Lukas on call) |
 | Event detail | Drawer over the homepage, own URL per event, through the Swup Fragment Plugin (CHG pattern, clean rebuild) |
-| Event URL | `/radar/[slug]`. Template page = Homepage component + filled drawer |
+| Event URL | `/radar/[slug]`. Template page = Top component + its own Radar section (own collection list, same Event Card component) + Bottom component + filled drawer. Spike 10 Nov: Webflow does not allow a CMS collection list inside a component, so one "Homepage" component is impossible |
 | Direct entry on an event URL | Page without intro, drawer open |
 | Mobile | Stack the desktop sections, follow the one mobile frame. Drawer full width from the right |
 | Content | As in the design. Lukas edits in Webflow |
@@ -79,7 +79,7 @@ Colour mapping: Variables hold the four colours. A global embed maps `html[data-
 1. **Foundation** (2 to 3h)
    - Fonts (woff2), Variables, global embed: font smoothing, iOS no-zoom, colour mapping, outline heading style
    - Core head and footer code, `#swup` wrapper
-   - Spike, 30 min: a collection list inside a component on the CMS template page. Fails? Rethink the drawer before step 4
+   - Spike, 30 min: a collection list inside a component on the CMS template page. **Result: not possible** (platform limit). A collection list directly on the template page works. Drawer setup changed accordingly (section 1)
 2. **Layout** (4 to 6h): all sections desktop, then mobile stacked. Copy from the design
 3. **CMS and sliders** (2 to 3h): Events collection (title, slug, date label, tag Shelter/Niteshop, image, intro, body, Wanneer, Waar, Hoe laat, ticket link). Radar: `data-slider-type="loop"`, autoplay 5s through `data-slider-options`, no slider below 760px. Social: `data-slider-autoscroll="2"` (40px/s)
 4. **Drawer** (3 to 4h): core 1.1.0, `core/drawer.js`, template page, fragment rules `/` <-> `/radar/:slug` and slug <-> slug swap `#drawer` only
