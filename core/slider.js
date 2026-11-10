@@ -1,5 +1,5 @@
 /*!
- * slider.js 1.3.1 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.4.0 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
  * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.9.0.
  *
@@ -17,7 +17,7 @@
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.3.1';
+  if (window.__studioSlider) return; window.__studioSlider = '1.4.0';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -35,6 +35,9 @@
       '[data-slider][data-slider-overflow="visible"] .splide__track{overflow:visible}' +
       // CMS list in the slot of a static list wrapper: let it take the full width
       '[data-slider-list]>.w-dyn-list{flex:0 0 100%;min-width:0}' +
+      // Finite sliders: the arrow at an end fades out (is-disabled), the other one stays
+      '[data-slider-prev],[data-slider-next]{transition:opacity .3s ease,visibility 0s linear 0s}' +
+      '[data-slider-prev].is-disabled,[data-slider-next].is-disabled{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .3s ease,visibility 0s linear .3s}' +
       '[data-slider].is-initialized .splide__list{display:flex;backface-visibility:hidden;margin:0!important;padding:0!important}' +
       '[data-slider].is-initialized .splide__slide{flex-shrink:0;position:relative;list-style:none}' +
       '[data-slider]:not(.is-slider-ready) [data-slider-list],[data-slider]:not(.is-slider-ready) .w-dyn-items{visibility:hidden}' +
@@ -96,6 +99,14 @@
     if (ap > 0 && !RM) Object.assign(o, { autoplay: true, interval: ap, pauseOnHover: true, pauseOnFocus: true, resetProgress: false });
     // data-slider-mobile="false": no slider under 768px, the list falls back to its own Webflow layout
     if (a('mobile') === 'false') o.breakpoints[767].destroy = true;
+    // data-slider-start="2" or "upcoming": first slide whose [data-slider-date] (on or in the slide) is today or later
+    const st = a('start');
+    if (st === 'upcoming') {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const slides = [...(listOf(root) || root).children];
+      const i = slides.findIndex((s) => { const el = s.matches('[data-slider-date]') ? s : s.querySelector('[data-slider-date]'); const d = el && new Date(el.getAttribute('data-slider-date')); return d && !isNaN(d) && d >= today; });
+      o.start = i < 0 ? Math.max(0, slides.length - 1) : i;
+    } else if (st && !isNaN(+st)) o.start = +st;
     if (o.autoWidth) delete o.perPage;
     if (RM) o.speed = 0;
     try { Object.assign(o, JSON.parse(a('options') || '{}')); } // escape hatch: data-slider-options='{"rewind":true}'
