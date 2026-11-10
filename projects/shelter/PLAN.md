@@ -4,7 +4,9 @@ Webflow site for Shelter (Onkruid, Asiat Park Vilvoorde). Development only, desi
 Webflow site: "Shelter" (shelter-ea606b). Figma: Shelter V3 (Copy), page **Final Kevin** only.
 Scope: one-pager plus one detail per event (the drawer), €3.000. Base: `docs/core.md` + `docs/splide.md`.
 
-Status: step 1 done 10 Nov 2026 (fonts, Variables, global embed, core code, Events collection, spike).
+Status (10 Nov 2026): steps 1 to 3 done. Radar = Splide (`core/slider.js` 1.3.0, Slider component inside the Radar component, CMS list in its slot, free drag). Social = title component + Marquee component (`core/marquee.js`, prototype code) with Social Image instances in its slot.
+
+Way of working (from Paloma): one section at a time, checked on staging before the next. Kevin does slot placement and restructuring in the Designer; Claude does styles, Variables, props, CMS, scripts. No component nested in a slot of another component's slot.
 
 ---
 
