@@ -1,5 +1,5 @@
 /*!
- * slider.js 1.0.0 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.1.0 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
  * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.9.0.
  *
@@ -17,7 +17,7 @@
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.0.0';
+  if (window.__studioSlider) return; window.__studioSlider = '1.1.0';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -31,8 +31,8 @@
     st.id = 'studio-slider-css';
     st.textContent =
       '[data-slider] .splide__track{overflow:hidden;position:relative}' +
-      '[data-slider] .splide__list{display:flex;backface-visibility:hidden;margin:0!important;padding:0!important}' +
-      '[data-slider] .splide__slide{flex-shrink:0;position:relative;list-style:none}' +
+      '[data-slider].is-initialized .splide__list{display:flex;backface-visibility:hidden;margin:0!important;padding:0!important}' +
+      '[data-slider].is-initialized .splide__slide{flex-shrink:0;position:relative;list-style:none}' +
       '[data-slider]:not(.is-slider-ready) [data-slider-list],[data-slider]:not(.is-slider-ready) .w-dyn-items{visibility:hidden}' +
       // Screen reader announcer shows "…" while sliding without Splide CSS: hide it visually only
       '.splide__sr{position:absolute!important;width:1px!important;height:1px!important;margin:-1px!important;padding:0!important;border:0!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;clip-path:inset(50%)!important;white-space:nowrap!important}';
@@ -73,6 +73,11 @@
         }
       }
     };
+    // data-slider-autoplay="5000": advance every 5s, pauses on hover and focus (Splide's own Autoplay)
+    const ap = parseFloat(a('autoplay'));
+    if (ap > 0 && !RM) Object.assign(o, { autoplay: true, interval: ap, pauseOnHover: true, pauseOnFocus: true, resetProgress: false });
+    // data-slider-mobile="false": no slider under 768px, the list falls back to its own Webflow layout
+    if (a('mobile') === 'false') o.breakpoints[767].destroy = true;
     if (o.autoWidth) delete o.perPage;
     if (RM) o.speed = 0;
     try { Object.assign(o, JSON.parse(a('options') || '{}')); } // escape hatch: data-slider-options='{"rewind":true}'
@@ -229,7 +234,10 @@
 
   /* ---------- Arrows ---------- */
   const arrows = (root, sp) => {
-    const prev = [...root.querySelectorAll('[data-slider-prev]')], next = [...root.querySelectorAll('[data-slider-next]')];
+    // Arrows inside the root, plus arrows anywhere on the page that name this slider: data-slider-next="radar" + data-slider-name="radar"
+    const name = attr(root, 'name');
+    const find = (k) => [...new Set([...root.querySelectorAll('[data-slider-' + k + ']'), ...(name ? document.querySelectorAll('[data-slider-' + k + '="' + name + '"]') : [])])];
+    const prev = find('prev'), next = find('next');
     if (!prev.length && !next.length) return null;
     const goPrev = (e) => { e.preventDefault(); sp.go('<'); }, goNext = (e) => { e.preventDefault(); sp.go('>'); };
     prev.forEach((b) => b.addEventListener('click', goPrev));
@@ -242,6 +250,8 @@
       next.forEach((b) => b.classList.toggle('is-disabled', C.getNext() < 0));
     };
     sp.on('mounted move', update); update();
+    // Autoplay restarts its interval after a manual arrow click
+    if (sp.Components.Autoplay && sp.options.autoplay) next.concat(prev).forEach((b) => b.addEventListener('click', () => { try { sp.Components.Autoplay.play(); } catch (e) {} }));
     return () => { prev.forEach((b) => b.removeEventListener('click', goPrev)); next.forEach((b) => b.removeEventListener('click', goNext)); };
   };
 
@@ -291,6 +301,7 @@
         root.dispatchEvent(new CustomEvent('slider:ready', { bubbles: true, detail: { splide: sp } }));
       });
       sp.mount();
+      root.classList.add('is-slider-ready'); // also when a breakpoint destroyed it at mount (data-slider-mobile="false")
       root._sp = sp;
       root._sliderDestroy = () => {
         cleanups.forEach((c) => { try { c(); } catch (e) {} });

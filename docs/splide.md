@@ -58,7 +58,10 @@ All on the `[data-slider]` root. Everything is optional.
 | `data-slider-gap-mobile`, `-focus-mobile`, `-padding-left-mobile`, `-padding-right-mobile` | desktop value | Under 768px |
 | `data-slider-pagination` | `false` | Splide dots |
 | `data-slider-drag` | `true` | Mouse / touch drag |
-| `data-slider-options` | | JSON escape hatch, merged last: `{"rewind":true,"perMove":2}` |
+| `data-slider-autoplay` | | Interval in ms, e.g. `5000`. Pauses on hover and focus, restarts after an arrow click. Off with reduced motion |
+| `data-slider-mobile` | `true` | `false` = no slider under 768px; the list keeps its own Webflow layout (grid, stack) |
+| `data-slider-name` | | Name for arrows outside the root: `data-slider-next="radar"` anywhere on the page |
+| `data-slider-options` | | JSON escape hatch, merged last: `{"rewind":true,"perMove":2}`. Replaces `breakpoints` as a whole |
 
 **Behaviour**
 | Attribute | What |
@@ -159,4 +162,5 @@ data-slider-per-page="1"
 6. Empty CMS list: slider hidden.
 
 Changelog
+- 1.1.0 (Nov 2026, Shelter): `data-slider-autoplay`, `data-slider-mobile="false"`, `data-slider-name` for outside arrows. Layout CSS only while Splide is mounted (`.is-initialized`), so a destroyed slider keeps its Webflow layout. Works inside a Webflow component slot: the slot content holds `[data-slider-track]` (or the Collection List Wrapper) and the list.
 - 1.0.0 (Nov 2026): extracted from Paloma. One file, attribute driven, own arrows, add-ons opt in.
