@@ -40,15 +40,17 @@ The prototype lays out a 1512px frame in absolute positions and zooms it to the 
 
 "Bouw aan Shelter", "Hang in niteshop", "Join de club", "De Radar", "Volg Shelter op...".
 
-Figma: live text, Obscura TM Fixed Regular, 105px, line height 70px, fill = page colour, black outline. Every letter sits on top of the one before it, and line 2 hangs over line 1.
+Figma: live text, Obscura TM Fixed Regular, 105px, line height 70px, fill = page colour, black outline. Line 2 hangs over line 1.
 
-CSS on one text element (`-webkit-text-stroke` + `paint-order: stroke fill`) paints all strokes first and all fills after, so overlapping letters merge into one shape. That is the "sticking together" Lukas saw.
+Within a word the letters should merge into one shape (as in Figma). Across words they should not: the next word, and line 2 as a whole, lands on top of the one before.
 
-Fix: `data-outline-text` on the heading. A small script splits the text into one span per letter (screen readers keep the full text through `aria-label`). Each letter then paints its own stroke and fill in order, so every next letter, and line 2 as a whole, lands on top. Lukas edits the heading as normal text.
+CSS on one text element (`-webkit-text-stroke` + `paint-order: stroke fill`) paints all strokes first and all fills after, so the whole heading merges into one shape and line 2 no longer hangs over line 1.
+
+Fix: `data-outline-text` on the heading. A small script splits the text into one span per **word** (screen readers keep the full text through `aria-label`). Inside a word the letters merge; each next word paints its own stroke and fill after the one before, so line 2 lands on top of line 1. Lukas edits the heading as normal text.
 
 - Stroke width in CSS = 2x the Figma stroke (half of it is covered by the fill)
 - In the Designer the heading shows the merged version (no script there). Accepted
-- Test the letter spacing per heading against Figma
+- Test against Figma: two words touching on the same line now show an outline between them. Check per heading
 
 ## 4. Draw your Shelter
 
