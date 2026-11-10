@@ -121,6 +121,8 @@
   const logo = (root) => {
     if (root._logo) return;
     const box = root.querySelector('[data-logo-frames]');
+    // Building photo: the hook, or else the image in the logo that is not one of the versions
+    if (!root.querySelector('[data-logo-building]')) { const b = [...root.querySelectorAll('img')].find((i) => !box || !box.contains(i)); if (b) b.setAttribute('data-logo-building', ''); }
     const frames = () => (box ? [...box.children] : []);
     if (frames().length < 2) { reveal(); return; }
     html.classList.add('is-logo-ready');
