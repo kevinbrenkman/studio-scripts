@@ -145,13 +145,13 @@
       timer = setInterval(() => { step++; show(step); if (step >= n) { stop(); setTimeout(reveal, 150); } }, INTRO_MS);
     }
 
-    const hovers = [...document.querySelectorAll('[data-logo-hover]')];
-    const on = (e) => { if (e.pointerType === 'mouse' && !html.classList.contains('is-drawing')) root.classList.add('is-building'); };
-    const off = () => root.classList.remove('is-building');
-    hovers.forEach((h) => { h.addEventListener('pointerenter', on); h.addEventListener('pointerleave', off); });
+    // Delegated, so it keeps working when the sign image is swapped for its inline SVG
+    const on = (e) => { if (e.pointerType === 'mouse' && e.target.closest('[data-logo-hover]') && !html.classList.contains('is-drawing')) root.classList.add('is-building'); };
+    const off = (e) => { const h = e.target.closest('[data-logo-hover]'); if (h && !h.contains(e.relatedTarget)) root.classList.remove('is-building'); };
+    document.addEventListener('pointerover', on); document.addEventListener('pointerout', off);
     root._logo = () => {
       stop(); root.removeEventListener('click', toggle); root.removeEventListener('keydown', key);
-      hovers.forEach((h) => { h.removeEventListener('pointerenter', on); h.removeEventListener('pointerleave', off); });
+      document.removeEventListener('pointerover', on); document.removeEventListener('pointerout', off);
       delete root._logo;
     };
   };
