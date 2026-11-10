@@ -52,6 +52,7 @@ All on the `[data-slider]` root. Everything is optional.
 | `data-slider-auto-width` | `true` | `false` = Splide sets the width via `per-page` |
 | `data-slider-per-page` | `1` | Only with `auto-width="false"` |
 | `data-slider-gap` | `1.25rem` | Any CSS length, or `css`: use the list's own column-gap from the Designer (converted to em). Never combine a CSS gap on the list with a length here, the loop drifts by one gap per slide |
+| `data-slider-overflow` | `hidden` | `visible`: slides run past the slider to the page edge. Clip on a parent instead (`overflow-x: clip` on the section, not hidden, so sticky keeps working) |
 | `data-slider-focus` | `0` | `0` = left aligned, `center` = active slide centred |
 | `data-slider-speed` | `1000` | ms |
 | `data-slider-padding-left` / `-right` | `0` | Track padding, e.g. `11.67vw` to align with the grid |
@@ -162,6 +163,7 @@ data-slider-per-page="1"
 6. Empty CMS list: slider hidden.
 
 Changelog
+- 1.1.2 (Nov 2026, Shelter): `data-slider-overflow="visible"`.
 - 1.1.1 (Nov 2026, Shelter): `data-slider-gap="css"`. Splide owns the gap while mounted and the list's CSS gap is zeroed, given back on breakpoint destroy. Fixes the loop offset and drift when the list also had a CSS gap.
 - 1.1.0 (Nov 2026, Shelter): `data-slider-autoplay`, `data-slider-mobile="false"`, `data-slider-name` for outside arrows. Layout CSS only while Splide is mounted (`.is-initialized`), so a destroyed slider keeps its Webflow layout. Works inside a Webflow component slot: the slot content holds `[data-slider-track]` (or the Collection List Wrapper) and the list.
 - 1.0.0 (Nov 2026): extracted from Paloma. One file, attribute driven, own arrows, add-ons opt in.
