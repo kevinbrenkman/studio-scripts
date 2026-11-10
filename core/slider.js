@@ -1,5 +1,5 @@
 /*!
- * slider.js 1.1.0 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.1.1 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
  * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.9.0.
  *
@@ -17,7 +17,7 @@
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.1.0';
+  if (window.__studioSlider) return; window.__studioSlider = '1.1.1';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -51,13 +51,23 @@
   const val = (v, d) => (v == null || v === '' ? d : (isNaN(+v) ? v : +v)); // keeps units: '1.25rem', '11vw'
   const on = (v, d) => (v == null ? d : v !== 'false');
 
+  // data-slider-gap="css": take the gap from the list's own column-gap (set in the Designer), as em so it scales.
+  // Splide then owns the gap (slide margins) and the list's CSS gap is zeroed while mounted, or the loop drifts.
+  const listOf = (root) => root.querySelector('[data-slider-list]') || root.querySelector('.w-dyn-items');
+  const cssGap = (root) => {
+    const l = listOf(root); if (!l) return 0;
+    const c = getComputedStyle(l), g = parseFloat(c.columnGap) || 0;
+    return g ? (g / (parseFloat(c.fontSize) || 16)).toFixed(4) + 'em' : 0;
+  };
+
   const readOptions = (root) => {
     const a = (k) => attr(root, k);
+    const gapCss = a('gap') === 'css', g = gapCss ? cssGap(root) : (a('gap') || '1.25rem');
     const o = {
       type: a('type') || 'loop',                 // loop | slide | fade
       autoWidth: on(a('auto-width'), true),      // slide width from Webflow, not from Splide
       perPage: val(a('per-page'), 1),            // only used when auto-width="false"
-      gap: a('gap') || '1.25rem',
+      gap: g,
       focus: val(a('focus'), 0),                 // 0 = left aligned, 'center' = centred
       speed: val(a('speed'), 1000),
       easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
@@ -67,7 +77,7 @@
       padding: { left: a('padding-left') || 0, right: a('padding-right') || 0 },
       breakpoints: {
         767: {
-          gap: a('gap-mobile') || a('gap') || '1.25rem',
+          gap: a('gap-mobile') || g,
           focus: val(a('focus-mobile'), val(a('focus'), 0)),
           padding: { left: a('padding-left-mobile') || a('padding-left') || 0, right: a('padding-right-mobile') || a('padding-right') || 0 }
         }
@@ -289,7 +299,16 @@
       list.classList.add('splide__list');
       [...list.children].forEach((s) => s.classList.add('splide__slide'));
 
-      const sp = new Splide(root, readOptions(root));
+      const opts = readOptions(root);
+      const gapCss = attr(root, 'gap') === 'css';
+      const zeroGap = (z) => (z ? list.style.setProperty('gap', '0px', 'important') : list.style.removeProperty('gap'));
+      if (gapCss) zeroGap(true);
+      const sp = new Splide(root, opts);
+      if (gapCss) {
+        // Breakpoint destroy (data-slider-mobile="false") gives the list its Webflow gap back; remount takes it again
+        sp.on('destroy', () => zeroGap(false));
+        sp.on('mounted', () => { if (list.style.getPropertyValue('gap') !== '0px') { zeroGap(true); sp.refresh(); } });
+      }
       const cleanups = [];
       sp.on('mounted', () => {
         [arrows, trackpad, autoscroll, reveal, parallax].forEach((fn) => { try { const c = fn(root, sp); if (c) cleanups.push(c); } catch (e) { console.warn('[slider]', e); } });
