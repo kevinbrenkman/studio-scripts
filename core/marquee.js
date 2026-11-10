@@ -1,5 +1,5 @@
 /*!
- * marquee.js 1.1.0 (kevinbrenkman/studio-scripts/core)
+ * marquee.js 1.2.0 (kevinbrenkman/studio-scripts/core)
  * Endless strip that keeps moving (also on hover). Drag eases toward the finger, a throw carries on
  * and glides back to cruising speed. Ported from the Shelter prototype (Onkruid). No dependencies.
  *
@@ -10,11 +10,11 @@
  * Options (attributes on the root)
  *   data-marquee-speed="40"         px per second at a 16px root font size (scales with the em layout). Default 40
  *   data-marquee-direction="left"   left | right. Default left
- *   data-marquee-drag="false"       no dragging
+ *   data-marquee-drag="false"       no dragging (mouse, touch and horizontal trackpad swipe)
  *   data-marquee-mobile="false"     off under 768px: the track keeps its own Webflow layout (e.g. a grid)
  */
 (() => {
-  if (window.__studioMarquee) return; window.__studioMarquee = '1.1.0';
+  if (window.__studioMarquee) return; window.__studioMarquee = '1.2.0';
   window.App = window.App || { inits: [], destroys: [] };
 
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -75,7 +75,7 @@
     const tick = (now) => {
       const dt = Math.min(now - last, 64) / 1000; last = now;
       if (dragging) x += (target - x) * (1 - Math.exp(-dt * 22));          // follow the finger with a short ease
-      else if (!RM) { v += (cruise - v) * (1 - Math.exp(-dt * 0.9)); x += v * dt; } // throw decays to cruise
+      else if (!RM) { v += (cruise - v) * (1 - Math.exp(-dt * 1.8)); x += v * dt; } // throw decays to cruise
       render();
       raf = requestAnimationFrame(tick);
     };
@@ -95,8 +95,19 @@
     const up = () => {
       if (!dragging) return;
       dragging = false;
-      v = performance.now() - lastT > 90 ? cruise : Math.max(-3600, Math.min(3600, dragV * 1.2)); // a finger that stopped doesn't throw
+      v = performance.now() - lastT > 90 ? cruise : Math.max(-1800, Math.min(1800, dragV * 0.8)); // a finger that stopped doesn't throw
       root.classList.remove('is-dragging');
+    };
+    // Horizontal trackpad swipe moves the strip with your fingers; the page does not scroll meanwhile (Lenis gets nothing)
+    let lock = 0, lockT = 0;
+    const wheel = (e) => {
+      if (!on || !canDrag) return;
+      const ax = Math.abs(e.deltaX), ay = Math.abs(e.deltaY);
+      if (!lock && ax <= ay) return; // vertical: normal page scroll
+      lock = 1; clearTimeout(lockT); lockT = setTimeout(() => { lock = 0; }, 220);
+      e.preventDefault(); e.stopImmediatePropagation();
+      const dx = e.deltaMode === 1 ? e.deltaX * 16 : e.deltaX;
+      x -= dx; v = cruise; // after the swipe it simply cruises on
     };
     const onResize = () => { if (on) { measure(); render(); } };
 
@@ -118,6 +129,7 @@
     root.addEventListener('pointermove', move);
     root.addEventListener('pointerup', up);
     root.addEventListener('pointercancel', up);
+    root.addEventListener('wheel', wheel, { capture: true, passive: false });
     addEventListener('resize', onResize);
     MOBILE.addEventListener('change', sync);
     sync();
@@ -126,6 +138,7 @@
       stop();
       root.removeEventListener('pointerdown', down); root.removeEventListener('pointermove', move);
       root.removeEventListener('pointerup', up); root.removeEventListener('pointercancel', up);
+      root.removeEventListener('wheel', wheel, { capture: true }); clearTimeout(lockT);
       removeEventListener('resize', onResize); MOBILE.removeEventListener('change', sync);
       delete root._marquee;
     };
