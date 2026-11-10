@@ -163,6 +163,7 @@ data-slider-per-page="1"
 6. Empty CMS list: slider hidden.
 
 Changelog
+- 1.3.0 (Nov 2026, Shelter): `data-slider-drag="free"` (flick with momentum, then snap), `data-slider-flick` (flick power, default 500).
 - 1.2.0 (Nov 2026, Shelter): a Collection List inside the root always wins as track and list, so one Slider component (track > list > slot) takes static slides or a CMS list in its slot.
 - 1.1.2 (Nov 2026, Shelter): `data-slider-overflow="visible"`.
 - 1.1.1 (Nov 2026, Shelter): `data-slider-gap="css"`. Splide owns the gap while mounted and the list's CSS gap is zeroed, given back on breakpoint destroy. Fixes the loop offset and drift when the list also had a CSS gap.

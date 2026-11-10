@@ -1,5 +1,5 @@
 /*!
- * marquee.js 1.0.0 (kevinbrenkman/studio-scripts/core)
+ * marquee.js 1.1.0 (kevinbrenkman/studio-scripts/core)
  * Endless strip that keeps moving (also on hover). Drag eases toward the finger, a throw carries on
  * and glides back to cruising speed. Ported from the Shelter prototype (Onkruid). No dependencies.
  *
@@ -14,7 +14,7 @@
  *   data-marquee-mobile="false"     off under 768px: the track keeps its own Webflow layout (e.g. a grid)
  */
 (() => {
-  if (window.__studioMarquee) return; window.__studioMarquee = '1.0.0';
+  if (window.__studioMarquee) return; window.__studioMarquee = '1.1.0';
   window.App = window.App || { inits: [], destroys: [] };
 
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -75,7 +75,7 @@
     const tick = (now) => {
       const dt = Math.min(now - last, 64) / 1000; last = now;
       if (dragging) x += (target - x) * (1 - Math.exp(-dt * 22));          // follow the finger with a short ease
-      else if (!RM) { v += (cruise - v) * (1 - Math.exp(-dt * 1.6)); x += v * dt; } // throw decays to cruise
+      else if (!RM) { v += (cruise - v) * (1 - Math.exp(-dt * 0.9)); x += v * dt; } // throw decays to cruise
       render();
       raf = requestAnimationFrame(tick);
     };
@@ -95,7 +95,7 @@
     const up = () => {
       if (!dragging) return;
       dragging = false;
-      v = performance.now() - lastT > 90 ? cruise : Math.max(-2600, Math.min(2600, dragV)); // a finger that stopped doesn't throw
+      v = performance.now() - lastT > 90 ? cruise : Math.max(-3600, Math.min(3600, dragV * 1.2)); // a finger that stopped doesn't throw
       root.classList.remove('is-dragging');
     };
     const onResize = () => { if (on) { measure(); render(); } };
