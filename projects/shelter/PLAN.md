@@ -14,8 +14,9 @@ Status: step 1 done 10 Nov 2026 (fonts, Variables, global embed, core code, Even
 |---|---|
 | De Radar | Cards (agreed with Lukas on call) |
 | Event detail | Drawer over the homepage, own URL per event, through the Swup Fragment Plugin (CHG pattern, clean rebuild) |
-| Event URL | `/radar/[slug]`. Template page = Top component + its own Radar section (own collection list, same Event Card component) + Bottom component + filled drawer. Spike 10 Nov: Webflow does not allow a CMS collection list inside a component, so one "Homepage" component is impossible |
-| Direct entry on an event URL | Page without intro, drawer open |
+| Event URL | `/radar/[slug]`. Template page = Layout (Global, drawer filled from the CMS, empty `#swup`). Direct entry: `drawer.js` fetches `/` and puts its `#swup` content behind the drawer (Kevin, 10 Nov: homepage edited in one place only). From the homepage: Swup Fragment swaps only `#drawer`. Close = Swup to `/`, only the drawer leaves |
+| Direct entry on an event URL | Drawer opens first, homepage loads in behind it (no intro). Scripts init on the injected content through `App.inits(scope)` |
+| Structure | Layout component with a Page Slot; every section is its own component inside the slot. Radar collection list sits in a slot of the Radar component (to test) |
 | Mobile | Stack the desktop sections, follow the one mobile frame. Drawer full width from the right |
 | Content | As in the design. Lukas edits in Webflow |
 | Fonts | Obscura TM Fixed (light 300, regular 400, bold 700) and Neue Haas Grotesk Text (55 Roman, 56 Italic, 65 Medium, 66 Medium Italic, 75 Bold, 76 Bold Italic) |
