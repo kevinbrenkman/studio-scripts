@@ -1,10 +1,11 @@
 /*!
- * shelter.js 0.2.0 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.3.0 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
  *   [data-logo]                 click: loop the versions, click again: lock the one showing. Plays once on load.
- *     [data-logo-frames]        its children are the logo versions (a slot: a new SVG joins the cycle)
+ *     [data-logo-base]          version 1, the fixed logo with the cut-out (optional; else: the logo image outside the slot)
+ *     [data-logo-frames]        its children are the other versions (a slot: a new SVG joins the cycle)
  *     [data-logo-building]      photo inside the letters of version 1 while a [data-logo-hover] is hovered
  *   [data-logo-hover]           hovering it (mouse) shows the building (the "coming soon" sign)
  * Reveal (after the logo intro, or as soon as you scroll): html.is-revealed + 'shelter:reveal' on document
@@ -27,7 +28,7 @@
  *   [data-scroll-arrow]         scrolls down one screen, flips up at the bottom and goes to the top
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.2.0';
+  if (window.__shelter) return; window.__shelter = '0.3.0';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -42,13 +43,13 @@
     st.id = 'shelter-css';
     st.textContent = [
       // Logo: one version at a time (the Designer shows the first, see the Global embed)
-      'html.is-logo-ready [data-logo-frames]>*{visibility:hidden}',
-      'html.is-logo-ready [data-logo-frames]>.is-on{visibility:visible}',
+      'html.is-logo-ready [data-logo-frame]{visibility:hidden}',
+      'html.is-logo-ready [data-logo-frame].is-on{visibility:visible}',
       '[data-logo]{cursor:pointer;-webkit-tap-highlight-color:transparent;outline-offset:4px}',
       '[data-logo-building]{opacity:0;transition:opacity .3s ease;pointer-events:none}',
       '[data-logo].is-building [data-logo-building]{opacity:1}',
-      'html.is-logo-ready [data-logo].is-building [data-logo-frames]>*{visibility:hidden}',
-      'html.is-logo-ready [data-logo].is-building [data-logo-frames]>:first-child{visibility:visible}',
+      'html.is-logo-ready [data-logo].is-building [data-logo-frame]{visibility:hidden}',
+      'html.is-logo-ready [data-logo].is-building [data-logo-base]{visibility:visible}',
       // Reveal (hidden states live in the site head so nothing flashes before this file loads)
       '@keyframes sh-sign{0%{scale:0;rotate:-3deg}60%{scale:1.04;rotate:3deg}100%{scale:1;rotate:0deg}}',
       '@keyframes sh-swing{0%,100%{rotate:0deg}25%{rotate:4deg}75%{rotate:-3deg}}',
@@ -121,9 +122,13 @@
   const logo = (root) => {
     if (root._logo) return;
     const box = root.querySelector('[data-logo-frames]');
-    // Building photo: the hook, or else the image in the logo that is not one of the versions
-    if (!root.querySelector('[data-logo-building]')) { const b = [...root.querySelectorAll('img')].find((i) => !box || !box.contains(i)); if (b) b.setAttribute('data-logo-building', ''); }
-    const frames = () => (box ? [...box.children] : []);
+    const outside = [...root.querySelectorAll('img, svg')].filter((i) => (!box || !box.contains(i)) && !(i.parentElement && i.parentElement.closest('svg')));
+    // Version 1 (fixed, outside the slot): the hook, or else the first image outside the slot that is not the photo
+    let base = root.querySelector('[data-logo-base]') || outside.find((i) => !i.hasAttribute('data-logo-building'));
+    if (base) base.setAttribute('data-logo-base', '');
+    // Building photo: the hook, or else the other image outside the slot
+    if (!root.querySelector('[data-logo-building]')) { const b = outside.find((i) => i !== base); if (b) b.setAttribute('data-logo-building', ''); }
+    const frames = () => [root.querySelector('[data-logo-base]'), ...(box ? box.children : [])].filter(Boolean).map((f) => { f.setAttribute('data-logo-frame', ''); return f; });
     if (frames().length < 2) { reveal(); return; }
     html.classList.add('is-logo-ready');
     let cur = 0, timer = null;
