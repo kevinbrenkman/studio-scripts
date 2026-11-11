@@ -1,5 +1,5 @@
 /*!
- * hover-fx.js 1.0.1 (kevinbrenkman/studio-scripts/core)
+ * hover-fx.js 1.0.2 (kevinbrenkman/studio-scripts/core)
  * Small cursor effects with GSAP. Desktop (fine pointer) only, off with reduced motion. Needs GSAP (Webflow site setting).
  *
  * Magnetic  [data-magnetic]            pulled towards the cursor, springs back on leave (Paloma MailMagnet)
@@ -11,7 +11,7 @@
  *                                       Opt out: data-no-tilt. Inline links become inline-block so they can rotate.
  */
 (() => {
-  if (window.__studioHoverFx) return; window.__studioHoverFx = '1.0.1';
+  if (window.__studioHoverFx) return; window.__studioHoverFx = '1.0.2';
   window.App = window.App || { inits: [], destroys: [] };
   const ok = () => window.gsap && matchMedia('(hover: hover) and (pointer: fine)').matches && !matchMedia('(prefers-reduced-motion: reduce)').matches;
   const em = () => parseFloat(getComputedStyle(document.body).fontSize) || 16;
@@ -53,18 +53,19 @@
       const cl = (v, a) => Math.max(-a, Math.min(a, v));
       el._fx.x(cl(dx * 0.05 * k * near, maxT * k));
       el._fx.y(cl(dy * 0.04 * k * near, maxT * k));
-      el._fx.r(cl((dx / R) * 8 * k * (0.4 + near), 5 * k));
+      el._fx.r((el._fx.r0 || 0) + cl((dx / R) * 8 * k * (0.4 + near), 5 * k)); // on top of its own rotation (e.g. a mobile -90deg)
     });
   };
   const onMove = (e) => { mx = e.clientX; my = e.clientY; if (!raf) raf = requestAnimationFrame(followTick); };
-  const onOut = () => { mx = null; followers.forEach((el) => { el._fx.x(0); el._fx.y(0); el._fx.r(0); }); };
+  const onOut = () => { mx = null; followers.forEach((el) => { el._fx.x(0); el._fx.y(0); el._fx.r(el._fx.r0 || 0); }); };
   let followOn = false;
   const follow = (el) => {
     if (el._fx || !ok()) return;
     el._fx = {
       x: gsap.quickTo(el, 'x', { duration: 1.1, ease: 'power3.out' }),
       y: gsap.quickTo(el, 'y', { duration: 1.1, ease: 'power3.out' }),
-      r: gsap.quickTo(el, 'rotation', { duration: 1.4, ease: 'elastic.out(1, 0.5)' })
+      r: gsap.quickTo(el, 'rotation', { duration: 1.4, ease: 'elastic.out(1, 0.5)' }),
+      r0: gsap.getProperty(el, 'rotation') || 0
     };
     followers.add(el);
     if (!followOn) { followOn = true; document.addEventListener('pointermove', onMove, { passive: true }); document.documentElement.addEventListener('pointerleave', onOut); }
