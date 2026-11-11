@@ -96,6 +96,7 @@
       '[data-draw-layer].is-hidden{opacity:0}',
       'html.is-drawing [data-draw-layer]{z-index:6;pointer-events:auto;touch-action:none;cursor:crosshair}',
       '[data-draw-toggle]{cursor:pointer}',
+      '[data-draw-toggle]>[data-draw-save]{display:none}',
       'html.is-drawing [data-draw-toggle]{z-index:8;scale:1.06;animation:sh-nudge 1.6s ease-in-out infinite}',
       // Same trick as the sign: keep the (finished) pop-in in the list so it does not replay after drawing
       'html.is-revealed.is-drawing [data-draw-toggle]{animation:sh-pop .7s ' + SPRING + ' .55s backwards,sh-nudge 1.6s ease-in-out infinite}',
@@ -258,6 +259,7 @@
 
   /* ---------- Draw your Shelter ---------- */
   const STROKE = 26, INK = '#ff0000', W = 1512, H = 520; // prototype: line width in logo px, red marker
+  const SAVE_SVG = 'https://cdn.jsdelivr.net/gh/kevinbrenkman/studio-scripts@7c00808/projects/shelter/assets/balloon-save.svg';
   const draw = (toggle) => {
     if (toggle._draw) return;
     const root = document.querySelector('[data-logo]'); if (!root) return;
@@ -265,6 +267,13 @@
     if (!canvas) { canvas = document.createElement('canvas'); canvas.setAttribute('data-draw-layer', ''); canvas.setAttribute('aria-hidden', 'true'); canvas.className = 'is-hidden'; root.appendChild(canvas); }
     const ctx = canvas.getContext('2d');
     const hint = document.querySelector('[data-draw-hint]');
+    // No "save it" image in the Designer yet: add the prototype's (pinned), styled like the draw image
+    if (!toggle.querySelector('[data-draw-save]')) {
+      const first = toggle.firstElementChild, im = document.createElement('img');
+      im.src = SAVE_SVG; im.alt = 'Save it'; im.setAttribute('data-draw-save', ''); im.setAttribute('data-inline-svg', ''); im.setAttribute('data-bob', '');
+      if (first) im.className = first.getAttribute('class') || '';
+      toggle.appendChild(im); inline(im);
+    }
     let strokes = [], drawing = false, live = null;
 
     const strokePath = (pts) => {
