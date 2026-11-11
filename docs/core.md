@@ -251,9 +251,15 @@ No classes as JS hooks. Classes are for styling, attributes for behaviour, so a 
 3. Decide: theme crossfade yes or no. No themes? `USE_THEME_TWEEN: false`.
 4. Set `NAV_BTN` in `CORE_CONFIG` to the project's nav link selector, or `''`.
 5. Build the "Intro (first load)" interaction if the design has one; add its selectors to the `is-intro` CSS.
-6. Create `studio-scripts/projects/<project>/<project>.js`, add modules with `App.register`.
-7. Test: hard refresh on every page, then click through every page via Swup, back button, anchor links, every form.
-8. Pin the commit hash in the footer before handover (same hash for every studio-scripts file).
+6. Add the global embed (on canvas, in the Global component) with at least:
+   ```css
+   body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+   a { color: inherit; }   /* links are never Webflow blue */
+   @media (max-width: 767px) { input, select, textarea { font-size: 16px !important; } }   /* iOS: no zoom on focus */
+   ```
+7. Create `studio-scripts/projects/<project>/<project>.js`, add modules with `App.register`.
+8. Test: hard refresh on every page, then click through every page via Swup, back button, anchor links, every form.
+9. Pin the commit hash in the footer before handover (same hash for every studio-scripts file).
 
 ---
 
