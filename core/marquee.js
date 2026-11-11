@@ -1,11 +1,13 @@
 /*!
- * marquee.js 1.2.0 (kevinbrenkman/studio-scripts/core)
+ * marquee.js 1.3.0 (kevinbrenkman/studio-scripts/core)
  * Endless strip that keeps moving (also on hover). Drag eases toward the finger, a throw carries on
  * and glides back to cruising speed. Ported from the Shelter prototype (Onkruid). No dependencies.
  *
  * Markup
  *   [data-marquee]                  root (clips, gets cursor grab)
  *     [data-marquee-track]          the row of items (flex + gap in Webflow). Fallback: first child.
+ *
+ * Video: items may hold [data-video-loop] (video-loop.js, load it before this file); clones get their own video.
  *
  * Options (attributes on the root)
  *   data-marquee-speed="40"         px per second at a 16px root font size (scales with the em layout). Default 40
@@ -14,7 +16,7 @@
  *   data-marquee-mobile="false"     off under 768px: the track keeps its own Webflow layout (e.g. a grid)
  */
 (() => {
-  if (window.__studioMarquee) return; window.__studioMarquee = '1.2.0';
+  if (window.__studioMarquee) return; window.__studioMarquee = '1.3.0';
   window.App = window.App || { inits: [], destroys: [] };
 
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -53,8 +55,9 @@
       const first = track.children[0], firstClone = clones[0];
       setW = firstClone ? firstClone.offsetLeft - first.offsetLeft : 0;
     };
+    const drop = () => { clones.forEach((c) => { c.querySelectorAll('[data-video-loop]').forEach((x) => x._vl && x._vl()); c.remove(); }); clones = []; };
     const fill = () => {
-      clones.forEach((c) => c.remove()); clones = [];
+      drop();
       const items = [...track.children];
       // Enough copies to cover the root twice, so the loop never shows a gap
       let copies = 1, w = track.scrollWidth || 1;
@@ -65,6 +68,7 @@
         c.querySelectorAll('a,button').forEach((f) => f.setAttribute('tabindex', '-1'));
         track.appendChild(c); clones.push(c);
       });
+      if (App.videoLoop) App.videoLoop(track); // clones copy the DOM, not the playing video
       measure();
     };
     const render = () => {
@@ -120,7 +124,7 @@
     };
     const stop = () => {
       if (!on) return; on = false;
-      cancelAnimationFrame(raf); clones.forEach((c) => c.remove()); clones = [];
+      cancelAnimationFrame(raf); drop();
       track.style.transform = ''; root.classList.remove('is-marquee', 'is-dragging'); x = 0;
     };
     const sync = () => (offMobile && MOBILE.matches ? stop() : start());
