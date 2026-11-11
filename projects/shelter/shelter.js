@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.5.0 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.5.1 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -32,7 +32,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.5.0';
+  if (window.__shelter) return; window.__shelter = '0.5.1';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -95,6 +95,8 @@
       'html.is-drawing [data-draw-layer]{pointer-events:auto;touch-action:none;cursor:crosshair}',
       // The marker sits under the logo (the canvas comes first in [data-logo]); the logo lets the pointer through
       'html.is-drawing [data-logo] [data-logo-frame],html.is-drawing [data-logo] [data-logo-frames]{pointer-events:none}',
+      // The coming soon sign hangs over the logo: let the marker draw under it
+      'html.is-drawing [data-reveal="sign"]{pointer-events:none}',
       // Hint (prototype): fixed at the bottom while drawing. Same font and weight as the pills
       '[data-draw-hint]{position:fixed;left:50%;bottom:calc(1.25em + env(safe-area-inset-bottom,0px));z-index:12;display:flex;gap:.375em;align-items:center;opacity:0;transform:translate(-50%,.75em);pointer-events:none;transition:opacity .25s ease,transform .35s ' + SPRING + '}',
       'html.is-drawing [data-draw-hint]{opacity:1;transform:translate(-50%,0);pointer-events:auto}',
@@ -139,6 +141,8 @@
       const svg = doc.documentElement; if (!svg || svg.nodeName.toLowerCase() !== 'svg') return;
       svg.querySelectorAll('[fill]').forEach((n) => { if (/^(#fff(fff)?|white)$/i.test(n.getAttribute('fill'))) n.setAttribute('fill', 'currentColor'); });
       svg.querySelectorAll('[id]').forEach((n) => n.removeAttribute('id')); // ids repeat across versions
+      // Figma exports sometimes hold empty paths with a layer name as path data (d="Vector"): drop them (console errors)
+      svg.querySelectorAll('path').forEach((n) => { if (!/^\s*[Mm]/.test(n.getAttribute('d') || '')) n.remove(); });
       [...img.attributes].forEach((a) => { if (!['src', 'srcset', 'sizes', 'loading', 'alt', 'width', 'height'].includes(a.name)) svg.setAttribute(a.name, a.value); });
       svg.setAttribute('data-inline-svg-done', '');
       if (img.alt) { svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', img.alt); } else svg.setAttribute('aria-hidden', 'true');
