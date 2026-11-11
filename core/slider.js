@@ -1,5 +1,5 @@
 /*!
- * slider.js 1.4.0 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.4.1 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
  * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.9.0.
  *
@@ -17,7 +17,7 @@
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.4.0';
+  if (window.__studioSlider) return; window.__studioSlider = '1.4.1';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -134,12 +134,15 @@
     const wheel = (e) => {
       const ax = Math.abs(e.deltaX), ay = Math.abs(e.deltaY);
       if (!lock && ax <= ay) return; // vertical: normal page scroll
+      if (!sp.is('loop') && !root.classList.contains('is-overflow')) return; // everything fits: nothing to move
       lock = 1; clearTimeout(lockT); lockT = setTimeout(() => { lock = 0; }, 220);
       e.preventDefault(); e.stopImmediatePropagation();
       if (snapTw) { snapTw.kill(); snapTw = null; }
       if (sp.state.is(Splide.STATES.MOVING)) Move.cancel();
       if (!flashed && ax > 2) { flashed = true; flash(e.deltaX > 0 ? '[data-slider-next]' : '[data-slider-prev]'); }
-      Move.translate(Move.getPosition() - e.deltaX);
+      let p = Move.getPosition() - e.deltaX;
+      if (!sp.is('loop')) { const a = Move.getLimit(false), b = Move.getLimit(true); p = Math.min(Math.max(a, b), Math.max(Math.min(a, b), p)); } // no swiping into the void past the ends
+      Move.translate(p);
       clearTimeout(snapT); snapT = setTimeout(snap, 140);
     };
     root.addEventListener('wheel', wheel, { capture: true, passive: false });
@@ -274,11 +277,11 @@
     // Non-loop sliders: disable the arrow at the ends
     const update = () => {
       if (sp.is('loop')) return;
-      const C = sp.Components.Controller;
-      prev.forEach((b) => b.classList.toggle('is-disabled', C.getPrev() < 0));
-      next.forEach((b) => b.classList.toggle('is-disabled', C.getNext() < 0));
+      const C = sp.Components.Controller, fits = !root.classList.contains('is-overflow');
+      prev.forEach((b) => b.classList.toggle('is-disabled', fits || C.getPrev() < 0));
+      next.forEach((b) => b.classList.toggle('is-disabled', fits || C.getNext() < 0));
     };
-    sp.on('mounted move', update); update();
+    sp.on('mounted move moved resized overflow', update); update();
     // Autoplay restarts its interval after a manual arrow click
     if (sp.Components.Autoplay && sp.options.autoplay) next.concat(prev).forEach((b) => b.addEventListener('click', () => { try { sp.Components.Autoplay.play(); } catch (e) {} }));
     return () => { prev.forEach((b) => b.removeEventListener('click', goPrev)); next.forEach((b) => b.removeEventListener('click', goNext)); };
@@ -332,6 +335,9 @@
         sp.on('mounted', () => { if (list.style.getPropertyValue('gap') !== '0px') { zeroGap(true); sp.refresh(); } });
       }
       const cleanups = [];
+      // Everything fits (e.g. 3 cards): no dragging, no arrows (finite sliders only)
+      const fit = () => { if (sp.is('loop') || !sp.Components.Drag) return; sp.Components.Drag.disable(!root.classList.contains('is-overflow')); };
+      sp.on('mounted resized overflow', fit);
       sp.on('mounted', () => {
         [arrows, trackpad, autoscroll, reveal, parallax].forEach((fn) => { try { const c = fn(root, sp); if (c) cleanups.push(c); } catch (e) { console.warn('[slider]', e); } });
         root.classList.add('is-slider-ready');
