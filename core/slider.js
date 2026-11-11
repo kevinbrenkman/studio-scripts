@@ -1,5 +1,5 @@
 /*!
- * slider.js 1.5.1 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.5.2 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
  * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.9.0.
  *
@@ -23,7 +23,7 @@
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.5.1';
+  if (window.__studioSlider) return; window.__studioSlider = '1.5.2';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -105,7 +105,7 @@
     slides.forEach((x) => list.appendChild(x.el));
   };
 
-  const readOptions = (root) => {
+  const readOptions = (root, list) => {
     const a = (k) => attr(root, k);
     const gapCss = a('gap') === 'css', g = gapCss ? cssGap(root) : (a('gap') || '1.25rem');
     const o = {
@@ -140,7 +140,7 @@
     // data-slider-start="2" or "upcoming": first slide whose [data-slider-date] (on or in the slide) is today or later
     const st = a('start');
     if (st === 'upcoming') {
-      const t = today0(), slides = [...(listOf(root) || root).children];
+      const t = today0(), slides = [...(list || listOf(root) || root).children]; // the real slides (a CMS list in a slot: its items)
       const i = slides.findIndex((s) => { const d = whenOf(s); return d && d >= t; });
       o.start = i < 0 ? Math.max(0, slides.length - 1) : i;
     } else if (st && !isNaN(+st)) o.start = +st;
@@ -372,7 +372,7 @@
       [...list.children].forEach((s) => s.classList.add('splide__slide'));
 
       if (attr(root, 'start') === 'upcoming' && attr(root, 'order') !== 'cms') orderByDate(list);
-      const opts = readOptions(root);
+      const opts = readOptions(root, list);
       const gapCss = attr(root, 'gap') === 'css';
       const zeroGap = (z) => (z ? list.style.setProperty('gap', '0px', 'important') : list.style.removeProperty('gap'));
       if (gapCss) zeroGap(true);
