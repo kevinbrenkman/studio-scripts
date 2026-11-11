@@ -1,5 +1,5 @@
 /*!
- * slider.js 1.5.0 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.5.1 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
  * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.9.0.
  *
@@ -23,7 +23,7 @@
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.5.0';
+  if (window.__studioSlider) return; window.__studioSlider = '1.5.1';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -392,6 +392,11 @@
       // Everything fits (e.g. 3 cards): no dragging, no arrows (finite sliders only)
       const fit = () => { if (sp.is('loop') || !sp.Components.Drag) return; sp.Components.Drag.disable(!root.classList.contains('is-overflow')); };
       sp.on('mounted resized overflow', fit);
+      // While (and just after) a drag the root carries data-slider-dragged, so a click on a card at the end of a drag
+      // opens nothing (drawer.js and others check it; they listen before Splide's own click guard)
+      let dragT = 0;
+      sp.on('drag', () => { clearTimeout(dragT); root.setAttribute('data-slider-dragged', ''); });
+      sp.on('dragged', () => { clearTimeout(dragT); dragT = setTimeout(() => root.removeAttribute('data-slider-dragged'), 120); });
       // Opened on an upcoming event near the end: snap the index to the last position that still moves
       sp.on('mounted', () => { const C = sp.Components.Controller; if (!sp.is('loop') && C.getIndex() > C.getEnd()) C.setIndex(C.getEnd()); });
       sp.on('mounted', () => {

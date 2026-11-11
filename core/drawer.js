@@ -1,5 +1,5 @@
 /*!
- * drawer.js 1.1.1 (kevinbrenkman/studio-scripts/core)
+ * drawer.js 1.1.2 (kevinbrenkman/studio-scripts/core)
  * Side panel with its own URL, filled from a CMS template page. Ported from the Shelter prototype (Onkruid).
  *
  * How it works
@@ -25,7 +25,7 @@
  * State: html.is-drawer-open (scroll lock). Lenis stops while open. Works with core.js (Swup) and without it.
  */
 (() => {
-  if (window.__studioDrawer) return; window.__studioDrawer = '1.1.1';
+  if (window.__studioDrawer) return; window.__studioDrawer = '1.1.2';
   window.App = window.App || { inits: [], destroys: [] };
   const CFG = window.CORE_CONFIG || {};
   const html = document.documentElement;
@@ -155,7 +155,7 @@
   document.addEventListener('click', (e) => {
     const link = e.target.closest('[data-drawer-link]');
     if (link && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
-      if (link.closest('.is-dragging, [data-slider-dragged]')) return;
+      if (link.closest('.is-dragging, [data-slider-dragged]')) { e.preventDefault(); e.stopImmediatePropagation(); return; } // end of a slider drag, not a click
       e.preventDefault(); e.stopImmediatePropagation();
       show(urlFor(link), { from: link });
       return;

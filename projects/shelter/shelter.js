@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.4.0 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.4.1 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -34,7 +34,7 @@
  *   The canvas is added inside [data-logo]. Strokes are stored in logo coordinates (1512 x 520).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.4.0';
+  if (window.__shelter) return; window.__shelter = '0.4.1';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
