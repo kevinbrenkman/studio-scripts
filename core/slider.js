@@ -1,5 +1,5 @@
 /*!
- * slider.js 1.5.2 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.5.3 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
  * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.9.0.
  *
@@ -23,7 +23,7 @@
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.5.2';
+  if (window.__studioSlider) return; window.__studioSlider = '1.5.3';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -329,6 +329,7 @@
       next.forEach((b) => b.classList.toggle('is-disabled', fits || C.getNext() < 0));
     };
     sp.on('mounted move moved resized overflow', update); update();
+    requestAnimationFrame(update); setTimeout(update, 400); // after Splide settled the start position and overflow
     // Autoplay restarts its interval after a manual arrow click
     if (sp.Components.Autoplay && sp.options.autoplay) next.concat(prev).forEach((b) => b.addEventListener('click', () => { try { sp.Components.Autoplay.play(); } catch (e) {} }));
     return () => { prev.forEach((b) => b.removeEventListener('click', goPrev)); next.forEach((b) => b.removeEventListener('click', goNext)); };
