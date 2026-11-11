@@ -1,5 +1,5 @@
 /*!
- * drawer.js 1.0.0 (kevinbrenkman/studio-scripts/core)
+ * drawer.js 1.1.0 (kevinbrenkman/studio-scripts/core)
  * Side panel with its own URL, filled from a CMS template page. Ported from the Shelter prototype (Onkruid).
  *
  * How it works
@@ -18,10 +18,14 @@
  *   Base: data-drawer-base on an ancestor, or CORE_CONFIG.DRAWER_BASE (e.g. '/radar/')
  *   Home: data-drawer-home on the drawer, or CORE_CONFIG.DRAWER_HOME, default '/'
  *
- * State: html.is-drawer-open. Lenis stops while open. Works with core.js (Swup) and without it.
+ * Styling lives in Webflow: the script only toggles the combo class .is-open on [data-drawer], its
+ * [data-drawer-panel] and its scrim ([data-drawer] > [data-drawer-close]). Style the closed state on the base
+ * classes and the open state on the .is-open combos (with their transitions). Keep .is-open on in the Designer.
+ * Direct entry: the homepage behind it scrolls to CORE_CONFIG.DRAWER_ANCHOR ('#radar'), minus DRAWER_OFFSET (em).
+ * State: html.is-drawer-open (scroll lock). Lenis stops while open. Works with core.js (Swup) and without it.
  */
 (() => {
-  if (window.__studioDrawer) return; window.__studioDrawer = '1.0.0';
+  if (window.__studioDrawer) return; window.__studioDrawer = '1.1.0';
   window.App = window.App || { inits: [], destroys: [] };
   const CFG = window.CORE_CONFIG || {};
   const html = document.documentElement;
@@ -33,17 +37,9 @@
     const st = document.createElement('style');
     st.id = 'studio-drawer-css';
     st.textContent =
-      // Closed (only with the script running: in the Designer the drawer stays visible)
-      'html:not(.is-drawer-open) [data-drawer]{visibility:hidden;pointer-events:none;transition:visibility 0s linear ' + DUR + 'ms}' +
-      '[data-drawer]>[data-drawer-close]{transition:opacity .35s ease}' +
-      'html:not(.is-drawer-open) [data-drawer]>[data-drawer-close]{opacity:0}' +
-      '[data-drawer-panel]{transition:transform ' + DUR + 'ms cubic-bezier(.2,.9,.25,1)}' +
-      'html:not(.is-drawer-open) [data-drawer-panel]{transform:translateX(calc(100% + 2.5em))}' +
-      '@media (max-width:767px){html:not(.is-drawer-open) [data-drawer-panel]{transform:translateY(calc(100% + 2em))}}' +
+      // Only behaviour here; every visual state is a Webflow class (.is-open combos)
       'html.is-drawer-instant [data-drawer],html.is-drawer-instant [data-drawer] *{transition:none!important}' +
-      'html.is-drawer-open{overflow:hidden}' +
-      '@media (hover:hover){[data-drawer-panel] [data-drawer-close]:hover{transform:rotate(90deg)}}' +
-      '[data-drawer-ticket][hidden]{display:none!important}';
+      'html.is-drawer-open{overflow:hidden}';
     document.head.appendChild(st);
   }
 
@@ -67,11 +63,13 @@
 
   let drawer = null, returnFocus = null, pushed = false, homeTitle = document.title;
 
-  const tidy = (d) => {
-    const t = d.querySelector('[data-drawer-ticket]') || d.querySelector('[data-drawer-panel] a[href]:not([data-drawer-close])');
-    if (t) { const h = t.getAttribute('href'); if (!h || h === '#') t.hidden = true; }
-    const p = d.querySelector('[data-drawer-panel]'); if (p) p.setAttribute('data-lenis-prevent', '');
+  const parts = (d) => [d, ...d.querySelectorAll('[data-drawer-panel]'), ...[...d.children].filter((c) => c.matches('[data-drawer-close],[data-drawer-scrim]'))];
+  const setOpen = (d, on) => {
+    parts(d).forEach((el) => el.classList.toggle('is-open', on));
+    const p = d.querySelector('[data-drawer-panel]');
+    if (p) { p.setAttribute('data-lenis-prevent', ''); if (on) p.removeAttribute('inert'); else p.setAttribute('inert', ''); }
   };
+  const tidy = () => {};
 
   const open = (instant) => {
     if (!drawer) return;
@@ -80,6 +78,7 @@
     void drawer.offsetWidth; // let the closed state paint first, so it slides in
     requestAnimationFrame(() => {
       html.classList.add('is-drawer-open');
+      setOpen(drawer, true);
       const panel = drawer.querySelector('[data-drawer-panel]'); if (panel) panel.scrollTop = 0;
       const btn = drawer.querySelector('[data-drawer-panel] [data-drawer-close]');
       if (btn) btn.focus({ preventScroll: true });
@@ -90,6 +89,7 @@
   const close = (fromPop) => {
     if (!html.classList.contains('is-drawer-open')) return;
     html.classList.remove('is-drawer-open');
+    if (drawer) setOpen(drawer, false);
     if (window.lenis) lenis.start();
     if (returnFocus && returnFocus.isConnected) returnFocus.focus({ preventScroll: true });
     returnFocus = null;
@@ -107,7 +107,9 @@
   const show = (url, { push = true, from = null } = {}) => fetchDoc(url).then((doc) => {
     const d = doc.querySelector('[data-drawer]'); if (!d) { location.href = url; return; }
     const wasOpen = html.classList.contains('is-drawer-open');
-    place(document.importNode(d, true));
+    const fresh = document.importNode(d, true);
+    setOpen(fresh, wasOpen); // the template page has .is-open on (Designer): start closed so it slides in
+    place(fresh);
     returnFocus = from || returnFocus;
     if (push) {
       // Mark the current entry as ours too, so Back lands here without Swup reloading the page
@@ -127,6 +129,14 @@
       homeTitle = doc.title || homeTitle;
       target.innerHTML = src.innerHTML;
       App.inits.forEach((fn) => { try { fn(target); } catch (e) { console.warn('[drawer]', e); } });
+      // Put the homepage behind it at the spot the drawer belongs to (the Radar), as in the design
+      const sel = (drawer && drawer.getAttribute('data-drawer-anchor')) || CFG.DRAWER_ANCHOR;
+      const anchor = sel && document.querySelector(sel);
+      if (anchor) {
+        const fs = parseFloat(getComputedStyle(document.body).fontSize) || 16;
+        const y = anchor.getBoundingClientRect().top + scrollY - (parseFloat(CFG.DRAWER_OFFSET) || 0) * fs;
+        requestAnimationFrame(() => { if (window.lenis) { lenis.start(); lenis.scrollTo(y, { immediate: true, force: true }); lenis.stop(); } else scrollTo(0, y); });
+      }
       if (window.Webflow && Webflow.require) { try { Webflow.require('ix2') && Webflow.require('ix2').init(); } catch (e) {} }
     }).catch((e) => console.warn('[drawer] home did not load', e));
   };

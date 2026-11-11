@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.3.1 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.3.2 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -28,7 +28,7 @@
  *   [data-scroll-arrow]         scrolls down one screen, flips up at the bottom and goes to the top
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.3.1';
+  if (window.__shelter) return; window.__shelter = '0.3.2';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -57,7 +57,7 @@
       '@keyframes sh-bob{0%,100%{translate:0 0;rotate:0deg}50%{translate:0 -.25em;rotate:-1.2deg}}',
       '[data-reveal="sign"]{transform-origin:41.4% 5.3%}',
       'html.is-revealed [data-reveal="sign"]{animation:sh-sign .65s ease-out .2s backwards}',
-      '@media (hover:hover){[data-reveal="sign"]:hover{animation:sh-swing 1.6s ease-in-out infinite}}',
+      '@media (hover:hover){[data-reveal="sign"]:hover,html.is-revealed [data-reveal="sign"]:hover{animation:sh-swing 1.6s ease-in-out infinite}}',
       'html.is-revealed [data-reveal="pop"]{animation:sh-pop .7s ' + SPRING + ' .55s backwards}',
       '[data-reveal="product"]{transition:scale .5s ' + SPRING + ',rotate .5s ' + SPRING + '}',
       '[data-reveal="product"] img:not([data-reveal-outline]){transition:opacity .3s ease var(--sh-d,0s),scale .7s ' + SPRING + ' var(--sh-d,0s),rotate .7s ' + SPRING + ' var(--sh-d,0s)}',
@@ -214,10 +214,11 @@
     });
     document.querySelectorAll('[data-theme-set]').forEach((b) => b.setAttribute('aria-pressed', b.getAttribute('data-theme-set') === name ? 'true' : 'false'));
   };
+  // Capture + stop: the dots are links with href="#", so nothing else (Swup, anchor scrolling) jumps to the top
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-theme-set]'); if (!b) return;
-    e.preventDefault(); setTheme(b.getAttribute('data-theme-set'));
-  });
+    e.preventDefault(); e.stopImmediatePropagation(); setTheme(b.getAttribute('data-theme-set'));
+  }, true);
 
   /* ---------- Scroll arrow ---------- */
   const arrow = (btn) => {
@@ -229,7 +230,7 @@
       const to = atBottom() ? 0 : scrollY + innerHeight * 0.85;
       if (window.lenis && !RM) lenis.scrollTo(to, { duration: 1.1 }); else scrollTo({ top: to, behavior: RM ? 'auto' : 'smooth' });
     };
-    btn.addEventListener('click', click);
+    btn.addEventListener('click', (e) => { e.stopImmediatePropagation(); click(e); }, true);
     addEventListener('scroll', update, { passive: true }); addEventListener('resize', update); update();
     btn._arrow = true;
   };
