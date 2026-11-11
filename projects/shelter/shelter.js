@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.3.0 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.3.1 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -28,7 +28,7 @@
  *   [data-scroll-arrow]         scrolls down one screen, flips up at the bottom and goes to the top
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.3.0';
+  if (window.__shelter) return; window.__shelter = '0.3.1';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -124,7 +124,8 @@
     const box = root.querySelector('[data-logo-frames]');
     const outside = [...root.querySelectorAll('img, svg')].filter((i) => (!box || !box.contains(i)) && !(i.parentElement && i.parentElement.closest('svg')));
     // Version 1 (fixed, outside the slot): the hook, or else the first image outside the slot that is not the photo
-    let base = root.querySelector('[data-logo-base]') || outside.find((i) => !i.hasAttribute('data-logo-building'));
+    if (box) [...box.querySelectorAll('[data-logo-base]')].forEach((f) => f.removeAttribute('data-logo-base')); // versions in the slot are never the base
+    let base = outside.find((i) => i.hasAttribute('data-logo-base')) || outside.find((i) => !i.hasAttribute('data-logo-building'));
     if (base) base.setAttribute('data-logo-base', '');
     // Building photo: the hook, or else the other image outside the slot
     if (!root.querySelector('[data-logo-building]')) { const b = outside.find((i) => i !== base); if (b) b.setAttribute('data-logo-building', ''); }
@@ -236,7 +237,7 @@
   /* ---------- Init ---------- */
   const init = (scope = document) => {
     const s = scope || document;
-    s.querySelectorAll('img[data-inline-svg]').forEach(inline);
+    document.querySelectorAll('img[data-inline-svg]').forEach(inline); // also the fixed UI outside #swup
     s.querySelectorAll('[data-outline-text]').forEach(splitWords);
     s.querySelectorAll('[data-reveal="product"]').forEach((p, i) => {
       p.style.setProperty('--sh-d', (i * 0.12) + 's');
