@@ -1,5 +1,5 @@
 /*!
- * slider.js 1.4.1 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.5.0 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
  * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.9.0.
  *
@@ -12,12 +12,18 @@
  *       [data-slider-list]        Collection List (CMS) or any div. Fallback: .w-dyn-items. Its children are the slides.
  *     [data-slider-prev] / [data-slider-next]   optional arrow buttons, anywhere inside the root
  *
+ * Dates (data-slider-start="upcoming"): each slide (or an element in it) has data-slider-date (Sort Date, any Webflow
+ *   date format: 12/11/26 is read as day/month/year) and optionally data-slider-repeat ("Donderdag": a weekly event,
+ *   it counts as its next occurrence). Slides are put in date order, past ones first, and the slider opens on the first
+ *   upcoming one. Past events fill the space on the left when there are not enough upcoming ones.
+ *   data-slider-order="cms" keeps the CMS order.
+ * data-slider-drag="step": one slide per swipe (touch, mouse and trackpad). "free": momentum. Default: follows the finger.
  * Add-ons (attributes on the root): data-slider-autoscroll, data-slider-reveal, data-slider-parallax.
  * Trackpad drag is on by default (data-slider-trackpad="false" turns it off).
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.4.1';
+  if (window.__studioSlider) return; window.__studioSlider = '1.5.0';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -67,6 +73,38 @@
     return g ? (g / (parseFloat(c.fontSize) || 16)).toFixed(4) + 'em' : 0;
   };
 
+  /* ---------- Dates ---------- */
+  const MONTHS = ['jan', 'feb', 'mar|maa|mrt', 'apr', 'may|mei', 'jun', 'jul', 'aug', 'sep', 'oct|okt', 'nov', 'dec'];
+  const DAYS = ['sun|zon', 'mon|maa', 'tue|din', 'wed|woe', 'thu|don', 'fri|vri', 'sat|zat'];
+  const parseDate = (v) => {
+    v = (v || '').trim().toLowerCase(); if (!v) return null;
+    let m = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);                                   // 2026-11-12
+    if (m) return new Date(+m[1], m[2] - 1, +m[3]);
+    m = v.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);                          // 12/11/26 = 12 November (Belgian order)
+    if (m) return new Date(m[3].length === 2 ? 2000 + +m[3] : +m[3], m[2] - 1, +m[1]);
+    const mi = MONTHS.findIndex((k) => new RegExp('(^|[^a-z])(' + k + ')').test(v));          // 12 november 2026, Nov 12, 2026
+    const nums = v.match(/\d+/g) || [];
+    if (mi > -1 && nums.length) {
+      const y = nums.find((n) => n.length === 4) || new Date().getFullYear(), d = nums.find((n) => n.length <= 2);
+      if (d) return new Date(+y, mi, +d);
+    }
+    const t = new Date(v); return isNaN(t) ? null : t;
+  };
+  const weekday = (v) => { v = (v || '').trim().toLowerCase(); if (!v) return -1; return DAYS.findIndex((k) => new RegExp('^(' + k + ')').test(v.replace(/^elke\s+|^every\s+/, ''))); };
+  const today0 = () => { const t = new Date(); t.setHours(0, 0, 0, 0); return t; };
+  const read = (s, k) => { const el = s.matches('[data-slider-' + k + ']') ? s : s.querySelector('[data-slider-' + k + ']'); return el ? el.getAttribute('data-slider-' + k) : ''; };
+  // When a slide happens: its date, or for a weekly event the next time it's on (today counts)
+  const whenOf = (s) => {
+    const wd = weekday(read(s, 'repeat'));
+    if (wd > -1) { const t = today0(); t.setDate(t.getDate() + ((wd - t.getDay() + 7) % 7)); return t; }
+    const d = parseDate(read(s, 'date')); if (d) d.setHours(0, 0, 0, 0); return d;
+  };
+  const orderByDate = (list) => {
+    const slides = [...list.children].map((el, i) => ({ el, i, t: whenOf(el) }));
+    slides.sort((a, b) => (a.t ? a.t.getTime() : Infinity) - (b.t ? b.t.getTime() : Infinity) || a.i - b.i);
+    slides.forEach((x) => list.appendChild(x.el));
+  };
+
   const readOptions = (root) => {
     const a = (k) => attr(root, k);
     const gapCss = a('gap') === 'css', g = gapCss ? cssGap(root) : (a('gap') || '1.25rem');
@@ -81,7 +119,7 @@
       arrows: false,                             // custom arrows via [data-slider-prev] / [data-slider-next]
       pagination: on(a('pagination'), false),
       // data-slider-drag="free": a flick glides on with momentum, then snaps to the nearest slide
-      drag: a('drag') === 'free' ? 'free' : on(a('drag'), true),
+      drag: a('drag') === 'free' ? 'free' : a('drag') === 'step' ? true : on(a('drag'), true),
       snap: a('drag') === 'free',
       flickPower: val(a('flick'), 150),
       flickMaxPages: 1,
@@ -102,11 +140,12 @@
     // data-slider-start="2" or "upcoming": first slide whose [data-slider-date] (on or in the slide) is today or later
     const st = a('start');
     if (st === 'upcoming') {
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const slides = [...(listOf(root) || root).children];
-      const i = slides.findIndex((s) => { const el = s.matches('[data-slider-date]') ? s : s.querySelector('[data-slider-date]'); const d = el && new Date(el.getAttribute('data-slider-date')); return d && !isNaN(d) && d >= today; });
+      const t = today0(), slides = [...(listOf(root) || root).children];
+      const i = slides.findIndex((s) => { const d = whenOf(s); return d && d >= t; });
       o.start = i < 0 ? Math.max(0, slides.length - 1) : i;
     } else if (st && !isNaN(+st)) o.start = +st;
+    // Finite sliders: the last index is the last position that still moves (no dead arrow clicks at the end)
+    if (o.type === 'slide') o.omitEnd = true;
     if (o.autoWidth) delete o.perPage;
     if (RM) o.speed = 0;
     try { Object.assign(o, JSON.parse(a('options') || '{}')); } // escape hatch: data-slider-options='{"rewind":true}'
@@ -120,7 +159,9 @@
   const trackpad = (root, sp) => {
     if (attr(root, 'trackpad') === 'false' || !window.gsap) return null;
     const Move = sp.Components.Move, Ctrl = sp.Components.Controller;
-    let lock = 0, lockT = 0, snapT = 0, snapTw = null, flashed = false;
+    const step = attr(root, 'drag') === 'step';
+    let lock = 0, lockT = 0, snapT = 0, snapTw = null, flashed = false, from = 0;
+    const range = (i) => Math.max(0, Math.min(Ctrl.getEnd(), i));
     const flash = (sel) => {
       const btn = root.querySelector(sel); if (!btn) return;
       btn.classList.remove('is-flash'); void btn.offsetWidth; btn.classList.add('is-flash');
@@ -128,13 +169,16 @@
     };
     const snap = () => {
       flashed = false;
-      const pos = Move.getPosition(), i = Move.toIndex(pos), o = { p: pos };
+      const pos = Move.getPosition(), o = { p: pos };
+      let i = Move.toIndex(pos);
+      if (step) i = range(Math.max(from - 1, Math.min(from + 1, i))); // one slide per swipe
       snapTw = gsap.to(o, { p: Move.toPosition(i), duration: RM ? 0 : 0.6, ease: 'power3.out', onUpdate: () => Move.translate(o.p), onComplete: () => { Ctrl.setIndex(i); snapTw = null; } });
     };
     const wheel = (e) => {
       const ax = Math.abs(e.deltaX), ay = Math.abs(e.deltaY);
       if (!lock && ax <= ay) return; // vertical: normal page scroll
       if (!sp.is('loop') && !root.classList.contains('is-overflow')) return; // everything fits: nothing to move
+      if (!lock) from = Ctrl.getIndex(); // a new gesture
       lock = 1; clearTimeout(lockT); lockT = setTimeout(() => { lock = 0; }, 220);
       e.preventDefault(); e.stopImmediatePropagation();
       if (snapTw) { snapTw.kill(); snapTw = null; }
@@ -142,6 +186,7 @@
       if (!flashed && ax > 2) { flashed = true; flash(e.deltaX > 0 ? '[data-slider-next]' : '[data-slider-prev]'); }
       let p = Move.getPosition() - e.deltaX;
       if (!sp.is('loop')) { const a = Move.getLimit(false), b = Move.getLimit(true); p = Math.min(Math.max(a, b), Math.max(Math.min(a, b), p)); } // no swiping into the void past the ends
+      if (step) { const a = Move.toPosition(range(from - 1)), b = Move.toPosition(range(from + 1)); p = Math.min(Math.max(a, b), Math.max(Math.min(a, b), p)); } // at most one slide
       Move.translate(p);
       clearTimeout(snapT); snapT = setTimeout(snap, 140);
     };
@@ -271,7 +316,9 @@
     const find = (k) => [...new Set([...root.querySelectorAll('[data-slider-' + k + ']'), ...(name ? document.querySelectorAll('[data-slider-' + k + '="' + name + '"]') : [])])];
     const prev = find('prev'), next = find('next');
     if (!prev.length && !next.length) return null;
-    const goPrev = (e) => { e.preventDefault(); sp.go('<'); }, goNext = (e) => { e.preventDefault(); sp.go('>'); };
+    // Arrows are often links with href="#": stop the click here, or Webflow / Swup scroll the page to the top
+    const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+    const goPrev = (e) => { stop(e); sp.go('<'); }, goNext = (e) => { stop(e); sp.go('>'); };
     prev.forEach((b) => b.addEventListener('click', goPrev));
     next.forEach((b) => b.addEventListener('click', goNext));
     // Non-loop sliders: disable the arrow at the ends
@@ -324,6 +371,7 @@
       list.classList.add('splide__list');
       [...list.children].forEach((s) => s.classList.add('splide__slide'));
 
+      if (attr(root, 'start') === 'upcoming' && attr(root, 'order') !== 'cms') orderByDate(list);
       const opts = readOptions(root);
       const gapCss = attr(root, 'gap') === 'css';
       const zeroGap = (z) => (z ? list.style.setProperty('gap', '0px', 'important') : list.style.removeProperty('gap'));
@@ -335,9 +383,17 @@
         sp.on('mounted', () => { if (list.style.getPropertyValue('gap') !== '0px') { zeroGap(true); sp.refresh(); } });
       }
       const cleanups = [];
+      // data-slider-drag="step": a swipe moves one slide, however far or fast you drag
+      if (attr(root, 'drag') === 'step') sp.on('mounted', () => {
+        const C = sp.Components.Controller, toDest = C.toDest; let from = null;
+        sp.on('drag', () => { from = C.getIndex(); });
+        C.toDest = (d) => { const i = toDest(d); if (from === null) return i; const f = from; from = null; return Math.max(f - 1, Math.min(f + 1, i)); };
+      });
       // Everything fits (e.g. 3 cards): no dragging, no arrows (finite sliders only)
       const fit = () => { if (sp.is('loop') || !sp.Components.Drag) return; sp.Components.Drag.disable(!root.classList.contains('is-overflow')); };
       sp.on('mounted resized overflow', fit);
+      // Opened on an upcoming event near the end: snap the index to the last position that still moves
+      sp.on('mounted', () => { const C = sp.Components.Controller; if (!sp.is('loop') && C.getIndex() > C.getEnd()) C.setIndex(C.getEnd()); });
       sp.on('mounted', () => {
         [arrows, trackpad, autoscroll, reveal, parallax].forEach((fn) => { try { const c = fn(root, sp); if (c) cleanups.push(c); } catch (e) { console.warn('[slider]', e); } });
         root.classList.add('is-slider-ready');

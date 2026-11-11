@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.3.2 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.4.0 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -26,9 +26,15 @@
  *   img[data-inline-svg]        inlined so its white fill follows the page colour (also every logo version)
  * Fixed UI
  *   [data-scroll-arrow]         scrolls down one screen, flips up at the bottom and goes to the top
+ * Draw your Shelter (prototype: red marker on the outline logo, kept in memory, a reload starts clean)
+ *   [data-draw-toggle]          the balloon: draw / "save it" (the drawing fades out, drawing again brings it back)
+ *     [data-draw-save]          its "save it" version, shown while drawing (hide it in the Designer)
+ *   [data-draw-hint]            the hint at the bottom, gets .is-open while drawing (style the combo in Webflow)
+ *     [data-draw-clear]         clears the drawing
+ *   The canvas is added inside [data-logo]. Strokes are stored in logo coordinates (1512 x 520).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.3.2';
+  if (window.__shelter) return; window.__shelter = '0.4.0';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -57,7 +63,9 @@
       '@keyframes sh-bob{0%,100%{translate:0 0;rotate:0deg}50%{translate:0 -.25em;rotate:-1.2deg}}',
       '[data-reveal="sign"]{transform-origin:41.4% 5.3%}',
       'html.is-revealed [data-reveal="sign"]{animation:sh-sign .65s ease-out .2s backwards}',
-      '@media (hover:hover){[data-reveal="sign"]:hover,html.is-revealed [data-reveal="sign"]:hover{animation:sh-swing 1.6s ease-in-out infinite}}',
+      // Hover keeps sh-sign first in the list: the browser then keeps that (finished) entrance as is instead of
+      // replaying it when the mouse leaves. Only the swing is added and removed (prototype: entrance on load only).
+      '@media (hover:hover){[data-reveal="sign"]:hover{animation:sh-swing 1.6s ease-in-out infinite}html.is-revealed [data-reveal="sign"]:hover{animation:sh-sign .65s ease-out .2s backwards,sh-swing 1.6s ease-in-out infinite}}',
       'html.is-revealed [data-reveal="pop"]{animation:sh-pop .7s ' + SPRING + ' .55s backwards}',
       '[data-reveal="product"]{transition:scale .5s ' + SPRING + ',rotate .5s ' + SPRING + '}',
       '[data-reveal="product"] img:not([data-reveal-outline]){transition:opacity .3s ease var(--sh-d,0s),scale .7s ' + SPRING + ' var(--sh-d,0s),rotate .7s ' + SPRING + ' var(--sh-d,0s)}',
@@ -82,6 +90,18 @@
       '[data-scroll-arrow]{cursor:pointer;transition:transform .5s ' + SPRING + '}',
       '@media (hover:hover){[data-scroll-arrow]:hover{transform:translateY(.375em)}[data-scroll-arrow].is-up:hover{transform:rotate(180deg) translateY(.375em)}}',
       '[data-scroll-arrow].is-up{transform:rotate(180deg)}',
+      // Draw your Shelter
+      '@keyframes sh-nudge{0%,100%{rotate:0deg}50%{rotate:-5deg}}',
+      '[data-draw-layer]{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;transition:opacity .45s ease}',
+      '[data-draw-layer].is-hidden{opacity:0}',
+      'html.is-drawing [data-draw-layer]{z-index:6;pointer-events:auto;touch-action:none;cursor:crosshair}',
+      '[data-draw-toggle]{cursor:pointer}',
+      'html.is-drawing [data-draw-toggle]{z-index:8;scale:1.06;animation:sh-nudge 1.6s ease-in-out infinite}',
+      // Same trick as the sign: keep the (finished) pop-in in the list so it does not replay after drawing
+      'html.is-revealed.is-drawing [data-draw-toggle]{animation:sh-pop .7s ' + SPRING + ' .55s backwards,sh-nudge 1.6s ease-in-out infinite}',
+      'html.is-drawing [data-draw-toggle]>:not([data-draw-save]){display:none!important}',
+      'html.is-drawing [data-draw-toggle]>[data-draw-save]{display:block!important}',
+      '@media (prefers-reduced-motion:reduce){html.is-drawing [data-draw-toggle]{animation:none!important}}',
       '@media (prefers-reduced-motion:reduce){[data-bob],[data-ticker] [data-ticker-track],html.is-revealed [data-reveal]{animation:none!important}}'
     ].join('');
     document.head.appendChild(st);
@@ -137,7 +157,7 @@
     frames().forEach((f, i) => f.classList.toggle('is-on', i === 0));
     const stop = () => { clearInterval(timer); timer = null; root.setAttribute('aria-pressed', 'false'); };
     const loop = () => { stop(); timer = setInterval(() => show(cur + 1), LOOP_MS); root.setAttribute('aria-pressed', 'true'); };
-    const toggle = (e) => { if (e) e.preventDefault(); timer ? stop() : loop(); };
+    const toggle = (e) => { if (html.classList.contains('is-drawing')) return; if (e) e.preventDefault(); timer ? stop() : loop(); };
     const key = (e) => { if (e.key === 'Enter' || e.key === ' ') toggle(e); };
     if (!root.hasAttribute('role')) root.setAttribute('role', 'button');
     if (!root.hasAttribute('tabindex')) root.setAttribute('tabindex', '0');
@@ -157,6 +177,7 @@
     const on = (e) => { if (e.pointerType === 'mouse' && e.target.closest('[data-logo-hover]') && !html.classList.contains('is-drawing')) root.classList.add('is-building'); };
     const off = (e) => { const h = e.target.closest('[data-logo-hover]'); if (h && !h.contains(e.relatedTarget)) root.classList.remove('is-building'); };
     document.addEventListener('pointerover', on); document.addEventListener('pointerout', off);
+    root._logoApi = { show, stop };
     root._logo = () => {
       stop(); root.removeEventListener('click', toggle); root.removeEventListener('keydown', key);
       document.removeEventListener('pointerover', on); document.removeEventListener('pointerout', off);
@@ -235,6 +256,82 @@
     btn._arrow = true;
   };
 
+  /* ---------- Draw your Shelter ---------- */
+  const STROKE = 26, INK = '#ff0000', W = 1512, H = 520; // prototype: line width in logo px, red marker
+  const draw = (toggle) => {
+    if (toggle._draw) return;
+    const root = document.querySelector('[data-logo]'); if (!root) return;
+    let canvas = root.querySelector('[data-draw-layer]');
+    if (!canvas) { canvas = document.createElement('canvas'); canvas.setAttribute('data-draw-layer', ''); canvas.setAttribute('aria-hidden', 'true'); canvas.className = 'is-hidden'; root.appendChild(canvas); }
+    const ctx = canvas.getContext('2d');
+    const hint = document.querySelector('[data-draw-hint]');
+    let strokes = [], drawing = false, live = null;
+
+    const strokePath = (pts) => {
+      ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+      if (pts.length === 1) ctx.lineTo(pts[0][0] + 0.01, pts[0][1]);
+      for (let i = 1; i < pts.length - 1; i++) { // smooth through the midpoints
+        const mx = (pts[i][0] + pts[i + 1][0]) / 2, my = (pts[i][1] + pts[i + 1][1]) / 2;
+        ctx.quadraticCurveTo(pts[i][0], pts[i][1], mx, my);
+      }
+      if (pts.length > 1) ctx.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]);
+      ctx.stroke();
+    };
+    const redraw = () => {
+      ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      ctx.strokeStyle = INK; ctx.lineWidth = STROKE; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      strokes.forEach(strokePath);
+    };
+    const size = () => {
+      const r = canvas.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.round(r.width * dpr)); canvas.height = Math.max(1, Math.round(r.height * dpr));
+      redraw();
+    };
+    const toLogo = (e) => { const r = canvas.getBoundingClientRect(); return [Math.round((e.clientX - r.left) / r.width * W * 10) / 10, Math.round((e.clientY - r.top) / r.height * H * 10) / 10]; };
+    const down = (e) => { if (!drawing) return; e.preventDefault(); e.stopPropagation(); canvas.setPointerCapture(e.pointerId); live = [toLogo(e)]; strokes.push(live); redraw(); };
+    const move = (e) => { if (!live) return; (e.getCoalescedEvents ? e.getCoalescedEvents() : [e]).forEach((ev) => live.push(toLogo(ev))); redraw(); };
+    const end = () => { live = null; };
+    const swallow = (e) => { if (drawing) { e.preventDefault(); e.stopPropagation(); } }; // no logo cycling while drawing
+    canvas.addEventListener('pointerdown', down);
+    canvas.addEventListener('pointermove', move);
+    canvas.addEventListener('pointerup', end);
+    canvas.addEventListener('pointercancel', end);
+    canvas.addEventListener('click', swallow);
+
+    const setDrawing = (on) => {
+      drawing = on;
+      html.classList.toggle('is-drawing', on);
+      root.classList.remove('is-building');
+      if (hint) hint.classList.toggle('is-open', on);
+      toggle.setAttribute('aria-pressed', String(on));
+      toggle.setAttribute('aria-label', on ? 'Save it: tekening bewaren' : 'Draw your Shelter: teken op het logo');
+      if (window.lenis) on ? lenis.stop() : lenis.start(); // no page scroll under the marker (touch)
+    };
+    const click = (e) => {
+      e.preventDefault(); e.stopImmediatePropagation(); reveal();
+      if (!drawing) {
+        // Always draw on the outline logo (version 1), and show the saved drawing again
+        if (root._logoApi) { root._logoApi.stop(); root._logoApi.show(0); }
+        canvas.classList.remove('is-hidden'); size(); setDrawing(true);
+        return;
+      }
+      setDrawing(false); canvas.classList.add('is-hidden'); // save it: fades out, kept for the next round
+    };
+    const clear = (e) => { const c = e.target.closest('[data-draw-clear]'); if (!c) return; e.preventDefault(); e.stopImmediatePropagation(); strokes = []; live = null; redraw(); };
+    const key = (e) => { if (e.key === 'Escape' && drawing) { setDrawing(false); canvas.classList.add('is-hidden'); } };
+    toggle.addEventListener('click', click, true);
+    document.addEventListener('click', clear, true);
+    addEventListener('keydown', key);
+    const ro = new ResizeObserver(size); ro.observe(canvas); size();
+    toggle.setAttribute('role', 'button'); toggle.setAttribute('aria-pressed', 'false');
+    toggle._draw = () => {
+      if (drawing) setDrawing(false);
+      ro.disconnect(); toggle.removeEventListener('click', click, true); document.removeEventListener('click', clear, true); removeEventListener('keydown', key);
+      canvas.remove(); delete toggle._draw;
+    };
+  };
+
   /* ---------- Init ---------- */
   const init = (scope = document) => {
     const s = scope || document;
@@ -247,6 +344,7 @@
     s.querySelectorAll('[data-hover-grow]').forEach((el) => { const v = el.getAttribute('data-hover-grow'); if (v) el.style.setProperty('--sh-grow', v); });
     s.querySelectorAll('[data-ticker]').forEach(ticker);
     s.querySelectorAll('[data-logo]').forEach(logo);
+    s.querySelectorAll('[data-draw-toggle]').forEach(draw);
     document.querySelectorAll('[data-scroll-arrow]').forEach(arrow); // fixed UI lives outside #swup
     let saved = null; try { saved = sessionStorage.getItem(KEY); } catch (e) {}
     setTheme(html.getAttribute('data-theme') || saved || 'white');
@@ -254,6 +352,7 @@
   const destroy = () => {
     document.querySelectorAll('[data-logo]').forEach((r) => r._logo && r._logo());
     document.querySelectorAll('[data-ticker]').forEach((r) => r._ticker && r._ticker());
+    document.querySelectorAll('[data-draw-toggle]').forEach((r) => r._draw && r._draw());
   };
 
   if (App.register) App.register('Shelter', init, destroy);
