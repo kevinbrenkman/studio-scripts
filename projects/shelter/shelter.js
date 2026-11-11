@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.4.1 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.4.2 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -29,12 +29,13 @@
  * Draw your Shelter (prototype: red marker on the outline logo, kept in memory, a reload starts clean)
  *   [data-draw-toggle]          the balloon: draw / "save it" (the drawing fades out, drawing again brings it back)
  *     [data-draw-save]          its "save it" version, shown while drawing (hide it in the Designer)
- *   [data-draw-hint]            the hint at the bottom, gets .is-open while drawing (style the combo in Webflow)
+ *   [data-draw-hint]            the hint at the bottom, gets .is-shown while drawing (combo in Webflow, keep it on in the
+ *                               Designer: the site head hides the hint while not drawing)
  *     [data-draw-clear]         clears the drawing
  *   The canvas is added inside [data-logo]. Strokes are stored in logo coordinates (1512 x 520).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.4.1';
+  if (window.__shelter) return; window.__shelter = '0.4.2';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -312,7 +313,7 @@
       drawing = on;
       html.classList.toggle('is-drawing', on);
       root.classList.remove('is-building');
-      if (hint) hint.classList.toggle('is-open', on);
+      if (hint) hint.classList.toggle('is-shown', on);
       toggle.setAttribute('aria-pressed', String(on));
       toggle.setAttribute('aria-label', on ? 'Save it: tekening bewaren' : 'Draw your Shelter: teken op het logo');
       if (window.lenis) on ? lenis.stop() : lenis.start(); // no page scroll under the marker (touch)
