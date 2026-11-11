@@ -1,5 +1,5 @@
 /*!
- * hover-fx.js 1.0.0 (kevinbrenkman/studio-scripts/core)
+ * hover-fx.js 1.0.1 (kevinbrenkman/studio-scripts/core)
  * Small cursor effects with GSAP. Desktop (fine pointer) only, off with reduced motion. Needs GSAP (Webflow site setting).
  *
  * Magnetic  [data-magnetic]            pulled towards the cursor, springs back on leave (Paloma MailMagnet)
@@ -11,7 +11,7 @@
  *                                       Opt out: data-no-tilt. Inline links become inline-block so they can rotate.
  */
 (() => {
-  if (window.__studioHoverFx) return; window.__studioHoverFx = '1.0.0';
+  if (window.__studioHoverFx) return; window.__studioHoverFx = '1.0.1';
   window.App = window.App || { inits: [], destroys: [] };
   const ok = () => window.gsap && matchMedia('(hover: hover) and (pointer: fine)').matches && !matchMedia('(prefers-reduced-motion: reduce)').matches;
   const em = () => parseFloat(getComputedStyle(document.body).fontSize) || 16;
@@ -92,7 +92,8 @@
     if (!window.gsap) return;
     document.querySelectorAll('[data-magnetic]').forEach(magnet);
     document.querySelectorAll('[data-follow]').forEach(follow);
-    (scope || document).querySelectorAll('a[href]').forEach((a) => { if (isTextLink(a)) prep(a); }); // inline-block up front: no reflow on hover
+    // inline-block up front (no reflow on hover); desktop only, so phones keep their normal text wrapping
+    if (ok()) (scope || document).querySelectorAll('a[href]').forEach((a) => { if (isTextLink(a)) prep(a); });
   };
   const destroy = () => {
     magnets.forEach((a) => a._mag && a._mag()); magnets.clear();

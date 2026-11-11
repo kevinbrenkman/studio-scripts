@@ -1,5 +1,5 @@
 /*!
- * slider.js 1.5.3 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.6.0 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
  * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.9.0.
  *
@@ -23,7 +23,7 @@
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.5.3';
+  if (window.__studioSlider) return; window.__studioSlider = '1.6.0';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -43,6 +43,8 @@
       '[data-slider-list]>.w-dyn-list{flex:0 0 100%;min-width:0}' +
       // Finite sliders: the arrow at an end fades out (is-disabled), the other one stays
       '[data-slider-prev],[data-slider-next]{transition:opacity .3s ease,visibility 0s linear 0s}' +
+      // Phones without a slider (data-slider-mobile="false"): the list stacks, upcoming events only
+      '@media (max-width:767px){[data-slider][data-slider-mobile="false"] [data-slider-past]{display:none}}' +
       '[data-slider-prev].is-disabled,[data-slider-next].is-disabled{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .3s ease,visibility 0s linear .3s}' +
       '[data-slider].is-initialized .splide__list{display:flex;backface-visibility:hidden;margin:0!important;padding:0!important}' +
       '[data-slider].is-initialized .splide__slide{flex-shrink:0;position:relative;list-style:none}' +
@@ -103,6 +105,9 @@
     const slides = [...list.children].map((el, i) => ({ el, i, t: whenOf(el) }));
     slides.sort((a, b) => (a.t ? a.t.getTime() : Infinity) - (b.t ? b.t.getTime() : Infinity) || a.i - b.i);
     slides.forEach((x) => list.appendChild(x.el));
+    // Past events get data-slider-past (only when something is still coming): hidden on phones when there is no slider
+    const t = today0(), any = slides.some((x) => x.t && x.t >= t);
+    slides.forEach((x) => x.el.toggleAttribute('data-slider-past', any && !!x.t && x.t < t));
   };
 
   const readOptions = (root, list) => {
