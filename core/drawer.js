@@ -1,5 +1,5 @@
 /*!
- * drawer.js 1.1.0 (kevinbrenkman/studio-scripts/core)
+ * drawer.js 1.1.1 (kevinbrenkman/studio-scripts/core)
  * Side panel with its own URL, filled from a CMS template page. Ported from the Shelter prototype (Onkruid).
  *
  * How it works
@@ -25,7 +25,7 @@
  * State: html.is-drawer-open (scroll lock). Lenis stops while open. Works with core.js (Swup) and without it.
  */
 (() => {
-  if (window.__studioDrawer) return; window.__studioDrawer = '1.1.0';
+  if (window.__studioDrawer) return; window.__studioDrawer = '1.1.1';
   window.App = window.App || { inits: [], destroys: [] };
   const CFG = window.CORE_CONFIG || {};
   const html = document.documentElement;
@@ -133,9 +133,19 @@
       const sel = (drawer && drawer.getAttribute('data-drawer-anchor')) || CFG.DRAWER_ANCHOR;
       const anchor = sel && document.querySelector(sel);
       if (anchor) {
-        const fs = parseFloat(getComputedStyle(document.body).fontSize) || 16;
-        const y = anchor.getBoundingClientRect().top + scrollY - (parseFloat(CFG.DRAWER_OFFSET) || 0) * fs;
-        requestAnimationFrame(() => { if (window.lenis) { lenis.start(); lenis.scrollTo(y, { immediate: true, force: true }); lenis.stop(); } else scrollTo(0, y); });
+        // Lenis caches the page height (the template page was short), so resize first; images that load
+        // later move the anchor, so settle again while the drawer is still open (the page can't scroll then)
+        const go = () => {
+          if (!anchor.isConnected || !html.classList.contains('is-drawer-open')) return;
+          const fs = parseFloat(getComputedStyle(document.body).fontSize) || 16;
+          const y = Math.max(0, anchor.getBoundingClientRect().top + scrollY - (parseFloat(CFG.DRAWER_OFFSET) || 0) * fs);
+          if (window.lenis) { lenis.resize(); lenis.start(); lenis.scrollTo(y, { immediate: true, force: true }); lenis.stop(); }
+          else scrollTo(0, y);
+        };
+        requestAnimationFrame(go);
+        [250, 800, 1600].forEach((t) => setTimeout(go, t));
+        if (document.readyState !== 'complete') addEventListener('load', go, { once: true });
+        target.querySelectorAll('img').forEach((im) => { if (!im.complete) im.addEventListener('load', go, { once: true }); });
       }
       if (window.Webflow && Webflow.require) { try { Webflow.require('ix2') && Webflow.require('ix2').init(); } catch (e) {} }
     }).catch((e) => console.warn('[drawer] home did not load', e));
