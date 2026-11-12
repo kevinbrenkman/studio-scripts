@@ -241,6 +241,12 @@ No classes as JS hooks. Classes are for styling, attributes for behaviour, so a 
 8. **Late-loading script** (async, deferred): `App.register` inits it on the current page. Do not add your own `DOMContentLoaded` listener.
 9. **CMS links to unpublished items** 404 under Swup the same as anywhere. Check every CMS list link before launch (3 on Paloma).
 10. **Webflow Designer/Editor**: Lenis is off in the Editor. Do not test smooth scroll there.
+11. **Drawers and modals on iOS Safari 26** (Shelter): Safari tints its toolbars from `position: fixed` layers and from changes to the root `overflow`. What works (core/drawer.js 1.4.1):
+    - On touch the open drawer is `position: absolute`, pinned at `scrollY` with `height: innerHeight`, not fixed.
+    - Lock scrolling by blocking `touchmove` outside the panel, attached only while open (a permanent non-passive listener makes all scrolling lag). Never touch `overflow` on html/body on touch, and do not `lenis.stop()` there (it sets `overflow: clip`).
+    - Stretch the scrim 25vh past the top and bottom: `innerHeight` stops above the floating toolbar, so otherwise the page under the see-through bar stays undimmed.
+    - After it slides out, set the drawer to `display: none` (a closed fixed layer left in place keeps tinting the bars).
+    - Mouse devices keep the normal fixed layer + `overflow: hidden` + `lenis.stop()`.
 
 ---
 
