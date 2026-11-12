@@ -1,7 +1,7 @@
 /*!
- * slider.js 1.10.0 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.11.0 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
- * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.10.0.
+ * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.11.0.
  *
  * Works with core.js (Swup) and without it (plain Webflow site).
  * Loads Splide 4.1.4 itself, only on pages that have a slider. Splide's CSS is not needed.
@@ -12,6 +12,7 @@
  *       [data-slider-list]        Collection List (CMS) or any div. Fallback: .w-dyn-items. Its children are the slides.
  *     [data-slider-prev] / [data-slider-next]   optional arrow buttons, anywhere inside the root
  *
+ * Several Collection Lists in the slot are merged into one slider (data-slider-pin on a list wrapper pins its items).
  * Pinned: data-slider-pin="true" (on or in a slide, bound to a CMS switch) puts it first among the upcoming slides.
  * Dates (data-slider-start="upcoming"): each slide (or an element in it) has data-slider-date (Sort Date, any Webflow
  *   date format: 12/11/26 is read as day/month/year) and optionally data-slider-repeat ("Donderdag": a weekly event,
@@ -25,7 +26,7 @@
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.10.0';
+  if (window.__studioSlider) return; window.__studioSlider = '1.11.0';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -396,9 +397,22 @@
     if (root._slider) return;
     root._slider = true;
 
+    // Several Collection Lists in the slot (e.g. Featured / Upcoming / Past, each with its own Webflow filter):
+    // their items join the first list that has items, so they slide as one. Items from a list whose wrapper (or a parent
+    // inside the slider) has data-slider-pin get data-slider-pin="true" (first among the upcoming, see Dates).
+    // Lists that end up empty are hidden; so is a list wrapper the Designer hides (e.g. Past), its items show in the main list.
+    const dyns = [...root.querySelectorAll('.w-dyn-items')];
+    dyns.forEach((d) => { if (d.closest('[data-slider-pin]')) [...d.children].forEach((it) => it.setAttribute('data-slider-pin', 'true')); });
+    if (dyns.length > 1) {
+      const main = dyns[0];
+      dyns.slice(1).forEach((d) => { [...d.children].forEach((it) => main.appendChild(it)); const w = d.closest('.w-dyn-list'); if (w) w.style.display = 'none'; });
+    }
+    root.querySelectorAll('.w-dyn-list').forEach((w) => { if (!w.querySelector('.w-dyn-item')) w.style.display = 'none'; });
+    if (dyns.length > 1) { const mw = dyns[0].closest('.w-dyn-list'); if (mw && getComputedStyle(mw).display === 'none') mw.style.display = 'block'; } // the main list may be one the Designer hides
+
     // A Collection List inside the slider wins: its wrapper is the track, its list holds the slides.
     // So a Slider component (track > list > slot) works with static slides and with a CMS list dropped in its slot.
-    const dyn = root.querySelector('.w-dyn-items');
+    const dyn = dyns[0] || null;
     const track = dyn ? dyn.closest('.w-dyn-list') : root.querySelector('[data-slider-track]');
     const list = dyn || root.querySelector('[data-slider-list]');
     if (!track || !list) { console.warn('[slider] needs [data-slider-track] and [data-slider-list]', root); root.classList.add('is-slider-ready'); return; }
