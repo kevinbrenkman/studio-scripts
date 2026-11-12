@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.6.0 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.7.0 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -29,15 +29,16 @@
  * Draw your Shelter (prototype: red marker on the outline logo, under the logo's black line)
  *   [data-draw-toggle]          the balloon: draw / "save it" (the drawing fades out, drawing again brings it back)
  *     data-draw-mobile="false"  hidden under 768px (Global embed CSS, bound to the Header prop "Draw on mobile")
- *   Live only, built by this file: the canvas inside [data-logo], the "save it" balloon, the hint with "Wissen".
+ *   Drawing covers the whole screen and holds the page at the top. Live only, built by this file: the canvas inside [data-logo], the "save it" balloon, the hint with "Wissen".
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.6.0';
+  if (window.__shelter) return; window.__shelter = '0.7.0';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const MOBILE = matchMedia('(max-width: 767px)');
+  const FINE = matchMedia('(hover: hover) and (pointer: fine)').matches;
   const SPRING = 'cubic-bezier(.34,1.56,.64,1)';
   const INTRO_MS = 90, LOOP_MS = 130;
   const KEY = 'shelter-theme';
@@ -92,7 +93,8 @@
       '[data-scroll-arrow].is-up{transform:rotate(180deg)}',
       // Draw your Shelter
       '@keyframes sh-nudge{0%,100%{rotate:0deg}50%{rotate:-5deg}}',
-      '[data-draw-layer]{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;transition:opacity .45s ease}',
+      // Full screen while drawing (no lines cut off at the logo edge); the page is held at the top meanwhile
+      '[data-draw-layer]{position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:1;pointer-events:none;transition:opacity .45s ease}',
       '[data-draw-layer].is-hidden{opacity:0}',
       'html.is-drawing [data-draw-layer]{pointer-events:auto;touch-action:none;cursor:crosshair}',
       // The marker sits under the logo (the canvas comes first in [data-logo]); the logo lets the pointer through
@@ -136,12 +138,19 @@
   let seen = [], io = null;
   const playIn = () => {
     if (!revealed || !seen.length) return;
-    seen.forEach((p, i) => { p.style.setProperty('--sh-d', (i * 0.12) + 's'); p.classList.add('is-in'); }); // stagger the ones that come in together
+    // Stagger the ones that come in together. Wait for the photo (lazy images can land after the pop, then it just appears)
+    seen.forEach((p, i) => {
+      const img = p.querySelector('img:not([data-reveal-outline])');
+      const go = () => { p.style.setProperty('--sh-d', (i * 0.12) + 's'); requestAnimationFrame(() => p.classList.add('is-in')); };
+      if (!img || (img.complete && img.naturalWidth)) go();
+      else { let done = false; const once = () => { if (!done) { done = true; go(); } }; img.addEventListener('load', once, { once: true }); img.addEventListener('error', once, { once: true }); setTimeout(once, 2500); }
+    });
     seen = [];
   };
   document.addEventListener('shelter:reveal', playIn);
   const product = (p) => {
     if (p._in) return; p._in = true;
+    p.querySelectorAll('img').forEach((im) => { im.loading = 'eager'; }); // three photos: load them up front so the pop plays with the photo
     if (RM || !('IntersectionObserver' in window)) { p.classList.add('is-in'); return; }
     if (!io) io = new IntersectionObserver((entries) => {
       entries.forEach((en) => { if (en.isIntersecting) { io.unobserve(en.target); seen.push(en.target); } });
@@ -363,9 +372,12 @@
       if (pts.length > 1) ctx.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]);
       ctx.stroke();
     };
+    // The canvas covers the screen; strokes stay in logo coordinates (relative to [data-logo]), so they keep their place
+    const box = () => root.getBoundingClientRect();
     const redraw = () => {
-      ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
-      ctx.clearRect(0, 0, W, H);
+      const dpr = canvas.width / Math.max(1, canvas.getBoundingClientRect().width), b = box(), c = canvas.getBoundingClientRect();
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.setTransform(dpr * b.width / W, 0, 0, dpr * b.height / H, dpr * (b.left - c.left), dpr * (b.top - c.top));
       ctx.strokeStyle = INK; ctx.lineWidth = STROKE; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       strokes.forEach(strokePath);
     };
@@ -374,7 +386,7 @@
       canvas.width = Math.max(1, Math.round(r.width * dpr)); canvas.height = Math.max(1, Math.round(r.height * dpr));
       redraw();
     };
-    const toLogo = (e) => { const r = canvas.getBoundingClientRect(); return [Math.round((e.clientX - r.left) / r.width * W * 10) / 10, Math.round((e.clientY - r.top) / r.height * H * 10) / 10]; };
+    const toLogo = (e) => { const r = box(); return [Math.round((e.clientX - r.left) / r.width * W * 10) / 10, Math.round((e.clientY - r.top) / r.height * H * 10) / 10]; };
     const down = (e) => { if (!drawing) return; e.preventDefault(); e.stopPropagation(); canvas.setPointerCapture(e.pointerId); live = [toLogo(e)]; strokes.push(live); redraw(); };
     const move = (e) => { if (!live) return; (e.getCoalescedEvents ? e.getCoalescedEvents() : [e]).forEach((ev) => live.push(toLogo(ev))); redraw(); };
     const end = () => { if (live) { live = null; store(); } };
@@ -391,14 +403,17 @@
       root.classList.remove('is-building');
       toggle.setAttribute('aria-pressed', String(on));
       toggle.setAttribute('aria-label', on ? 'Save it: tekening bewaren' : 'Draw your Shelter: teken op het logo');
-      if (window.lenis) on ? lenis.stop() : lenis.start(); // no page scroll under the marker (touch)
+      // Hold the page at the top while drawing. Mouse: Lenis stops. Touch: the canvas covers the screen with touch-action:none,
+      // so nothing scrolls (no lenis.stop there: its overflow lock turns the iOS Safari toolbars into solid bars)
+      if (on) { if (window.lenis) lenis.scrollTo(0, { immediate: true, force: true }); else scrollTo(0, 0); }
+      if (window.lenis && FINE) on ? lenis.stop() : lenis.start();
     };
     const click = (e) => {
       e.preventDefault(); e.stopImmediatePropagation(); reveal();
       if (!drawing) {
         // Always draw on the outline logo (version 1), and show the saved drawing again
         if (root._logoApi) { root._logoApi.stop(); root._logoApi.show(0); }
-        canvas.classList.remove('is-hidden'); size(); setDrawing(true);
+        canvas.classList.remove('is-hidden'); setDrawing(true); size(); requestAnimationFrame(size);
         return;
       }
       setDrawing(false); canvas.classList.add('is-hidden'); store(); // save it: fades out, kept for the next round and the next visit

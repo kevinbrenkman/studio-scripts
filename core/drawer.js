@@ -1,5 +1,5 @@
 /*!
- * drawer.js 1.2.0 (kevinbrenkman/studio-scripts/core)
+ * drawer.js 1.3.0 (kevinbrenkman/studio-scripts/core)
  * Side panel with its own URL, filled from a CMS template page. Ported from the Shelter prototype (Onkruid).
  *
  * How it works
@@ -24,11 +24,13 @@
  * Direct entry: the homepage behind it scrolls to CORE_CONFIG.DRAWER_ANCHOR ('#radar'), minus DRAWER_OFFSET (em).
  * State: html.is-drawer-open. Scroll lock: mouse devices stop Lenis + overflow hidden; touch devices only block touch
  *   scrolling outside the panel (iOS Safari: changing the root overflow makes its toolbars turn into solid bars).
+ * Closed: once it has slid out the drawer gets display:none (inline, live only). iOS Safari 26 tints its toolbars
+ *   from fixed elements on screen, so a closed drawer left in place kept the bars in the drawer colour.
  * Focus: the close button gets focus (and the card gets it back) only for keyboard users, so no ring after a tap.
  * Works with core.js (Swup) and without it.
  */
 (() => {
-  if (window.__studioDrawer) return; window.__studioDrawer = '1.2.0';
+  if (window.__studioDrawer) return; window.__studioDrawer = '1.3.0';
   window.App = window.App || { inits: [], destroys: [] };
   const CFG = window.CORE_CONFIG || {};
   const html = document.documentElement;
@@ -78,10 +80,13 @@
     if (p) { p.setAttribute('data-lenis-prevent', ''); if (on) p.removeAttribute('inert'); else p.setAttribute('inert', ''); }
   };
   const tidy = () => {};
+  let parkT = 0;
+  const park = (d) => { clearTimeout(parkT); parkT = setTimeout(() => { if (d && !d.classList.contains('is-open')) d.style.display = 'none'; }, DUR + 60); };
+  const unpark = (d) => { clearTimeout(parkT); if (d) d.style.removeProperty('display'); };
 
   const open = (instant) => {
     if (!drawer) return;
-    tidy(drawer);
+    tidy(drawer); unpark(drawer);
     if (instant) html.classList.add('is-drawer-instant');
     void drawer.offsetWidth; // let the closed state paint first, so it slides in
     requestAnimationFrame(() => {
@@ -99,7 +104,7 @@
   const close = (fromPop) => {
     if (!html.classList.contains('is-drawer-open')) return;
     html.classList.remove('is-drawer-open');
-    if (drawer) setOpen(drawer, false);
+    if (drawer) { setOpen(drawer, false); park(drawer); }
     if (window.lenis) lenis.start();
     if (returnFocus && returnFocus.isConnected && kbd) returnFocus.focus({ preventScroll: true });
     else if (document.activeElement && drawer && drawer.contains(document.activeElement)) document.activeElement.blur();
