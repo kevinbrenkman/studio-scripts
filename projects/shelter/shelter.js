@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.7.1 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.8.0 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -29,11 +29,11 @@
  * Draw your Shelter (prototype: red marker on the outline logo, under the logo's black line)
  *   [data-draw-toggle]          the balloon: draw / "save it" (the drawing fades out, drawing again brings it back)
  *     data-draw-mobile="false"  hidden under 768px (Global embed CSS, bound to the Header prop "Draw on mobile")
- *   Drawing covers the whole screen and holds the page at the top. Live only, built by this file: the canvas inside [data-logo], the "save it" balloon, the hint with "Wissen".
+ *   Drawing covers the whole screen, under the page content, and holds the page at the top. Live only, built by this file: the canvas inside [data-logo], the "save it" balloon, the hint with "Wissen".
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.7.1';
+  if (window.__shelter) return; window.__shelter = '0.8.0';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -94,9 +94,13 @@
       // Draw your Shelter
       '@keyframes sh-nudge{0%,100%{rotate:0deg}50%{rotate:-5deg}}',
       // Full screen while drawing (no lines cut off at the logo edge); the page is held at the top meanwhile
-      '[data-draw-layer]{position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:1;pointer-events:none;transition:opacity .45s ease}',
+      // Under the whole page: a fixed canvas at z-index -1 (body made see-through while drawing; html carries the page colour).
+      // The pointer is read on the document, so it draws under text, images and the logo alike
+      '[data-draw-layer]{position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:-1;pointer-events:none;transition:opacity .45s ease}',
       '[data-draw-layer].is-hidden{opacity:0}',
-      'html.is-drawing [data-draw-layer]{pointer-events:auto;touch-action:none;cursor:crosshair}',
+      'html.is-drawing body{background-color:transparent!important}',
+      'html.is-drawing,html.is-drawing *{touch-action:none;-webkit-user-select:none;user-select:none}',
+      'html.is-drawing body{cursor:crosshair}',
       // The marker sits under the logo (the canvas comes first in [data-logo]); the logo lets the pointer through
       'html.is-drawing [data-logo] [data-logo-frame],html.is-drawing [data-logo] [data-logo-frames]{pointer-events:none}',
       // The coming soon sign hangs over the logo: let the marker draw under it
@@ -333,8 +337,8 @@
   const draw = (toggle) => {
     if (toggle._draw) return;
     const root = document.querySelector('[data-logo]'); if (!root) return;
-    let canvas = root.querySelector('[data-draw-layer]');
-    if (!canvas) { canvas = document.createElement('canvas'); canvas.setAttribute('data-draw-layer', ''); canvas.setAttribute('aria-hidden', 'true'); canvas.className = 'is-hidden'; root.prepend(canvas); }
+    let canvas = document.querySelector('[data-draw-layer]');
+    if (!canvas) { canvas = document.createElement('canvas'); canvas.setAttribute('data-draw-layer', ''); canvas.setAttribute('aria-hidden', 'true'); canvas.className = 'is-hidden'; document.body.prepend(canvas); }
     const ctx = canvas.getContext('2d');
     // Hint (copy from the prototype), live only
     let hint = document.querySelector('[data-draw-hint]');
@@ -387,15 +391,19 @@
       redraw();
     };
     const toLogo = (e) => { const r = box(); return [Math.round((e.clientX - r.left) / r.width * W * 10) / 10, Math.round((e.clientY - r.top) / r.height * H * 10) / 10]; };
-    const down = (e) => { if (!drawing) return; e.preventDefault(); e.stopPropagation(); canvas.setPointerCapture(e.pointerId); live = [toLogo(e)]; strokes.push(live); redraw(); };
-    const move = (e) => { if (!live) return; const co = e.getCoalescedEvents ? e.getCoalescedEvents() : []; (co.length ? co : [e]).forEach((ev) => live.push(toLogo(ev))); redraw(); };
+    // While drawing the whole document is the drawing surface; only the balloon and the hint stay clickable
+    const UI = '[data-draw-toggle],[data-draw-hint]';
+    const isUI = (e) => e.target.closest && e.target.closest(UI);
+    const down = (e) => { if (!drawing || isUI(e) || (e.button && e.button !== 0)) return; e.preventDefault(); e.stopPropagation(); live = [toLogo(e)]; strokes.push(live); redraw(); };
+    const move = (e) => { if (!live) return; e.preventDefault(); const co = e.getCoalescedEvents ? e.getCoalescedEvents() : []; (co.length ? co : [e]).forEach((ev) => live.push(toLogo(ev))); redraw(); };
     const end = () => { if (live) { live = null; store(); } };
-    const swallow = (e) => { if (drawing) { e.preventDefault(); e.stopPropagation(); } }; // no logo cycling while drawing
-    canvas.addEventListener('pointerdown', down);
-    canvas.addEventListener('pointermove', move);
-    canvas.addEventListener('pointerup', end);
-    canvas.addEventListener('pointercancel', end);
-    canvas.addEventListener('click', swallow);
+    const swallow = (e) => { if (drawing && !isUI(e)) { e.preventDefault(); e.stopPropagation(); } }; // no links, logo cycling, cards
+    document.addEventListener('pointerdown', down, true);
+    addEventListener('pointermove', move, { passive: false });
+    addEventListener('pointerup', end);
+    addEventListener('pointercancel', end);
+    document.addEventListener('click', swallow, true);
+    document.addEventListener('dragstart', swallow, true);
 
     const setDrawing = (on) => {
       drawing = on;
@@ -428,6 +436,8 @@
     toggle._draw = () => {
       if (drawing) setDrawing(false);
       ro.disconnect(); toggle.removeEventListener('click', click, true); document.removeEventListener('click', clear, true); removeEventListener('keydown', key);
+      document.removeEventListener('pointerdown', down, true); removeEventListener('pointermove', move); removeEventListener('pointerup', end); removeEventListener('pointercancel', end);
+      document.removeEventListener('click', swallow, true); document.removeEventListener('dragstart', swallow, true);
       canvas.remove(); hint.remove(); delete toggle._draw;
     };
   };

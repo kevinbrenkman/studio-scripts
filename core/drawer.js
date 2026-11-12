@@ -1,5 +1,5 @@
 /*!
- * drawer.js 1.3.0 (kevinbrenkman/studio-scripts/core)
+ * drawer.js 1.4.0 (kevinbrenkman/studio-scripts/core)
  * Side panel with its own URL, filled from a CMS template page. Ported from the Shelter prototype (Onkruid).
  *
  * How it works
@@ -24,13 +24,17 @@
  * Direct entry: the homepage behind it scrolls to CORE_CONFIG.DRAWER_ANCHOR ('#radar'), minus DRAWER_OFFSET (em).
  * State: html.is-drawer-open. Scroll lock: mouse devices stop Lenis + overflow hidden; touch devices only block touch
  *   scrolling outside the panel (iOS Safari: changing the root overflow makes its toolbars turn into solid bars).
+ * Touch devices: the open drawer is not position:fixed but absolute, pinned at the current scroll position (the page
+ *   cannot scroll meanwhile). iOS Safari 26 tints its toolbars after fixed layers; with an absolute layer it keeps its
+ *   see-through toolbars. The touchmove lock is only attached while the drawer is open (a permanent non-passive
+ *   touchmove listener makes all scrolling on iOS wait for JS).
  * Closed: once it has slid out the drawer gets display:none (inline, live only). iOS Safari 26 tints its toolbars
  *   from fixed elements on screen, so a closed drawer left in place kept the bars in the drawer colour.
  * Focus: the close button gets focus (and the card gets it back) only for keyboard users, so no ring after a tap.
  * Works with core.js (Swup) and without it.
  */
 (() => {
-  if (window.__studioDrawer) return; window.__studioDrawer = '1.3.0';
+  if (window.__studioDrawer) return; window.__studioDrawer = '1.4.0';
   window.App = window.App || { inits: [], destroys: [] };
   const CFG = window.CORE_CONFIG || {};
   const html = document.documentElement;
@@ -81,8 +85,13 @@
   };
   const tidy = () => {};
   let parkT = 0;
-  const park = (d) => { clearTimeout(parkT); parkT = setTimeout(() => { if (d && !d.classList.contains('is-open')) d.style.display = 'none'; }, DUR + 60); };
-  const unpark = (d) => { clearTimeout(parkT); if (d) d.style.removeProperty('display'); };
+  // Touch: pin the drawer as an absolute layer at the scroll position instead of a fixed one (see the header)
+  const pin = (d) => { if (FINE || !d) return; Object.assign(d.style, { position: 'absolute', top: scrollY + 'px', bottom: 'auto', height: innerHeight + 'px' }); };
+  const unpin = (d) => { if (d) ['position', 'top', 'bottom', 'height'].forEach((k) => d.style.removeProperty(k)); };
+  const blockTouch = (e) => { if (e.target.closest && e.target.closest('[data-drawer-panel]')) return; if (e.cancelable) e.preventDefault(); };
+  const touchLock = (on) => { if (FINE) return; if (on) document.addEventListener('touchmove', blockTouch, { passive: false }); else document.removeEventListener('touchmove', blockTouch); };
+  const park = (d) => { clearTimeout(parkT); touchLock(false); parkT = setTimeout(() => { if (d && !d.classList.contains('is-open')) { d.style.display = 'none'; unpin(d); } }, DUR + 60); };
+  const unpark = (d) => { clearTimeout(parkT); if (d) { d.style.removeProperty('display'); pin(d); } touchLock(true); };
 
   const open = (instant) => {
     if (!drawer) return;
@@ -157,6 +166,7 @@
           const y = Math.max(0, anchor.getBoundingClientRect().top + scrollY - (parseFloat(CFG.DRAWER_OFFSET) || 0) * fs);
           if (window.lenis) { lenis.resize(); lenis.start(); lenis.scrollTo(y, { immediate: true, force: true }); if (FINE) lenis.stop(); }
           else scrollTo(0, y);
+          if (!FINE && drawer) drawer.style.top = scrollY + 'px'; // touch: keep the pinned drawer on screen
         };
         requestAnimationFrame(go);
         [250, 800, 1600].forEach((t) => setTimeout(go, t));
@@ -183,11 +193,6 @@
     if (link) fetchDoc(urlFor(link)).catch(() => {});                                  // prefetch on hover
   }, true);
   addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
-  // Touch scroll lock: the page behind does not move, the panel scrolls (overscroll-behavior: contain on the panel)
-  document.addEventListener('touchmove', (e) => {
-    if (!html.classList.contains('is-drawer-open') || (e.target.closest && e.target.closest('[data-drawer-panel]'))) return;
-    if (e.cancelable) e.preventDefault();
-  }, { passive: false });
   addEventListener('popstate', (e) => {
     const st = e.state;
     if (st && st.source === 'drawer' && st.drawer) { pushed = false; show(st.drawer, { push: false }); }
