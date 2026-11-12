@@ -1,5 +1,5 @@
 /*!
- * slider.js 1.7.0 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.7.1 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
  * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.9.0.
  *
@@ -23,7 +23,7 @@
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.7.0';
+  if (window.__studioSlider) return; window.__studioSlider = '1.7.1';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -411,7 +411,6 @@
       const opts = readOptions(root, list);
       const gapCss = attr(root, 'gap') === 'css';
       const zeroGap = (z) => (z ? list.style.setProperty('gap', '0px', 'important') : list.style.removeProperty('gap'));
-      if (gapCss) zeroGap(true);
       const sp = new Splide(root, opts);
       const cleanups = [];
       const runCleanups = () => cleanups.splice(0).forEach((c) => { try { c(); } catch (e) {} });
@@ -421,9 +420,10 @@
       const wire = () => {
       sp.on('destroy', runCleanups);
       if (gapCss) {
-        // Breakpoint destroy gives the list its Webflow gap back; remount takes it again
+        // Breakpoint destroy gives the list its Webflow gap back; the remount takes it again, before Splide measures.
+        // (Not on 'mounted' + refresh: refresh rebuilds the list's style attribute and wipes the zero again.)
+        zeroGap(true);
         sp.on('destroy', () => zeroGap(false));
-        sp.on('mounted', () => { if (list.style.getPropertyValue('gap') !== '0px') { zeroGap(true); sp.refresh(); } });
       }
       // data-slider-drag="step": a swipe moves one slide, however far or fast you drag
       if (attr(root, 'drag') === 'step') sp.on('mounted', () => {
