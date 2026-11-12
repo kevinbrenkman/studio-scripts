@@ -1,5 +1,5 @@
 /*!
- * slider.js 1.6.0 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.7.0 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
  * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.9.0.
  *
@@ -18,12 +18,12 @@
  *   upcoming one. Past events fill the space on the left when there are not enough upcoming ones.
  *   data-slider-order="cms" keeps the CMS order.
  * data-slider-drag="step": one slide per swipe (touch, mouse and trackpad). "free": momentum. Default: follows the finger.
- * Add-ons (attributes on the root): data-slider-autoscroll, data-slider-reveal, data-slider-parallax.
+ * Add-ons (attributes on the root): data-slider-autoscroll, data-slider-reveal, data-slider-parallax, data-slider-edge="fade".
  * Trackpad drag is on by default (data-slider-trackpad="false" turns it off).
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.6.0';
+  if (window.__studioSlider) return; window.__studioSlider = '1.7.0';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -48,6 +48,9 @@
       '[data-slider-prev].is-disabled,[data-slider-next].is-disabled{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .3s ease,visibility 0s linear .3s}' +
       '[data-slider].is-initialized .splide__list{display:flex;backface-visibility:hidden;margin:0!important;padding:0!important}' +
       '[data-slider].is-initialized .splide__slide{flex-shrink:0;position:relative;list-style:none}' +
+      '[data-slider][data-slider-edge="fade"] .splide__slide>*{transition:opacity .45s ease}' +
+      '[data-slider][data-slider-edge="fade"] .splide__slide.is-edge-out>*{opacity:0}' +
+      '[data-slider][data-slider-edge="fade"] .splide__slide.is-edge-out{pointer-events:none}' +
       '[data-slider]:not(.is-slider-ready) [data-slider-list],[data-slider]:not(.is-slider-ready) .w-dyn-items{visibility:hidden}' +
       // Screen reader announcer shows "…" while sliding without Splide CSS: hide it visually only
       '.splide__sr{position:absolute!important;width:1px!important;height:1px!important;margin:-1px!important;padding:0!important;border:0!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;clip-path:inset(50%)!important;white-space:nowrap!important}';
@@ -314,6 +317,33 @@
     return () => { gsap.ticker.remove(tick); io.disconnect(); setters.forEach((_, el) => gsap.set(el, { clearProps: 'transform' })); };
   };
 
+  /* ---------- Add-on: edge fade ---------- */
+  // data-slider-edge="fade": only slides that fit inside the slider show; one that would peek in at an edge
+  // (data-slider-overflow="visible") waits at opacity 0 and fades in as it slides into place.
+  // The slide's children fade, not the slide itself, so interactions that animate the slide keep working.
+  const edge = (root, sp) => {
+    if (attr(root, 'edge') !== 'fade') return null;
+    const Move = sp.Components.Move, track = root.querySelector('.splide__track') || root;
+    const slides = () => [...root.querySelectorAll('.splide__slide')];
+    const update = (dest) => {
+      const t = track.getBoundingClientRect(), shift = dest == null ? 0 : Move.toPosition(dest) - Move.getPosition();
+      slides().forEach((s) => {
+        const r = s.getBoundingClientRect(), l = r.left + shift;
+        s.classList.toggle('is-edge-out', l < t.left - 2 || l + r.width > t.right + 2);
+      });
+    };
+    const onMove = (i) => update(i), now = () => update();
+    sp.on('move', onMove); sp.on('moved dragging dragged resized refresh', now);
+    addEventListener('resize', now);
+    // Trackpad swipes (add-on above) move the list without Splide events: follow each frame until it settles
+    let until = 0, raf = 0;
+    const follow = () => { update(); raf = performance.now() < until ? requestAnimationFrame(follow) : 0; };
+    const wheel = () => { until = performance.now() + 900; if (!raf) raf = requestAnimationFrame(follow); };
+    root.addEventListener('wheel', wheel, { passive: true });
+    now();
+    return () => { removeEventListener('resize', now); root.removeEventListener('wheel', wheel); cancelAnimationFrame(raf); slides().forEach((s) => s.classList.remove('is-edge-out')); };
+  };
+
   /* ---------- Arrows ---------- */
   const arrows = (root, sp) => {
     // Arrows inside the root, plus arrows anywhere on the page that name this slider: data-slider-next="radar" + data-slider-name="radar"
@@ -383,12 +413,18 @@
       const zeroGap = (z) => (z ? list.style.setProperty('gap', '0px', 'important') : list.style.removeProperty('gap'));
       if (gapCss) zeroGap(true);
       const sp = new Splide(root, opts);
+      const cleanups = [];
+      const runCleanups = () => cleanups.splice(0).forEach((c) => { try { c(); } catch (e) {} });
+      // Splide's destroy() also drops every sp.on() handler, and a breakpoint destroy (data-slider-mobile="false")
+      // remounts with sp.mount() when the screen grows again. So all handlers are (re)wired right before each mount,
+      // or after a resize across 767px the gap doubles and step drag, arrows and fit are gone.
+      const wire = () => {
+      sp.on('destroy', runCleanups);
       if (gapCss) {
-        // Breakpoint destroy (data-slider-mobile="false") gives the list its Webflow gap back; remount takes it again
+        // Breakpoint destroy gives the list its Webflow gap back; remount takes it again
         sp.on('destroy', () => zeroGap(false));
         sp.on('mounted', () => { if (list.style.getPropertyValue('gap') !== '0px') { zeroGap(true); sp.refresh(); } });
       }
-      const cleanups = [];
       // data-slider-drag="step": a swipe moves one slide, however far or fast you drag
       if (attr(root, 'drag') === 'step') sp.on('mounted', () => {
         const C = sp.Components.Controller, toDest = C.toDest; let from = null;
@@ -406,7 +442,7 @@
       // Opened on an upcoming event near the end: snap the index to the last position that still moves
       sp.on('mounted', () => { const C = sp.Components.Controller; if (!sp.is('loop') && C.getIndex() > C.getEnd()) C.setIndex(C.getEnd()); });
       sp.on('mounted', () => {
-        [arrows, trackpad, autoscroll, reveal, parallax].forEach((fn) => { try { const c = fn(root, sp); if (c) cleanups.push(c); } catch (e) { console.warn('[slider]', e); } });
+        [arrows, trackpad, autoscroll, reveal, parallax, edge].forEach((fn) => { try { const c = fn(root, sp); if (c) cleanups.push(c); } catch (e) { console.warn('[slider]', e); } });
         root.classList.add('is-slider-ready');
         // Loop clones are new elements: let other modules set up on them too (modules must be idempotent)
         App.inits.forEach((fn) => { if (fn !== init) { try { fn(root); } catch (e) {} } });
@@ -414,11 +450,14 @@
         if (window.ScrollTrigger) ScrollTrigger.refresh();
         root.dispatchEvent(new CustomEvent('slider:ready', { bubbles: true, detail: { splide: sp } }));
       });
+      };
+      const mount = sp.mount.bind(sp);
+      sp.mount = (...a) => { wire(); return mount(...a); };
       sp.mount();
       root.classList.add('is-slider-ready'); // also when a breakpoint destroyed it at mount (data-slider-mobile="false")
       root._sp = sp;
       root._sliderDestroy = () => {
-        cleanups.forEach((c) => { try { c(); } catch (e) {} });
+        runCleanups();
         try { sp.destroy(true); } catch (e) {}
         delete root._sp; delete root._sliderDestroy; root._slider = false;
       };

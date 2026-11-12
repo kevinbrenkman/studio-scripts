@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.8.8 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.8.9 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -33,7 +33,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.8.8';
+  if (window.__shelter) return; window.__shelter = '0.8.9';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -160,6 +160,25 @@
     const from = { autoAlpha: 0, scale: 0.3 }, to = { autoAlpha: 1, scale: 1, duration: 0.6, ease: 'back.out(2.2)', clearProps: 'transform,opacity,visibility' };
     gsap.timeline({ delay: 0.9 }).fromTo(dots, from, { ...to, stagger: 0.045 }, 0).fromTo(arrows, from, to, 0);
   }, { once: true });
+  // Footer (desktop): the colour dots scale out once [data-hide-dots] (the footer links under them) comes into view.
+  // The footer is inside #swup: init() re-observes the new one after a page swap
+  const wide = matchMedia('(min-width: 768px)');
+  let dotsIO = null, away = false;
+  const dotsSet = (a) => {
+    if (a === away || !window.gsap) return; away = a;
+    const dots = document.querySelectorAll('[data-theme-picker] [data-theme-set]');
+    gsap.to(dots, a
+      ? { scale: 0, autoAlpha: 0, duration: 0.35, ease: 'back.in(2)', stagger: { each: 0.04, from: 'end' }, overwrite: 'auto' }
+      : { scale: 1, autoAlpha: 1, duration: 0.5, ease: 'back.out(2)', stagger: 0.04, overwrite: 'auto', clearProps: 'transform,opacity,visibility' });
+  };
+  const dotsAway = () => {
+    if (dotsIO) dotsIO.disconnect();
+    const mark = document.querySelector('[data-hide-dots]');
+    if (!mark) { dotsSet(false); return; }
+    dotsIO = new IntersectionObserver((e) => dotsSet(e[0].isIntersecting && wide.matches));
+    dotsIO.observe(mark);
+  };
+  wide.addEventListener('change', () => { if (!wide.matches) dotsSet(false); });
   addEventListener('scroll', () => { if (scrollY > 4) reveal(); }, { passive: true });
   addEventListener('wheel', (e) => { if (e.deltaY > 0) reveal(); }, { passive: true });
   addEventListener('touchmove', reveal, { passive: true });
@@ -643,6 +662,7 @@
     s.querySelectorAll('[data-logo]').forEach(logo);
     s.querySelectorAll('[data-draw-toggle]').forEach(draw);
     document.querySelectorAll('[data-scroll-arrow]').forEach(arrow); // fixed UI lives outside #swup
+    dotsAway();
     let saved = null; try { saved = sessionStorage.getItem(KEY); } catch (e) {}
     setTheme(html.getAttribute('data-theme') || saved || 'white');
   };
