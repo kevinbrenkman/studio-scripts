@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.8.7 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.8.8 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -33,7 +33,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.8.7';
+  if (window.__shelter) return; window.__shelter = '0.8.8';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -75,12 +75,6 @@
       // replaying it when the mouse leaves. Only the swing is added and removed (prototype: entrance on load only).
       '@media (hover:hover){[data-reveal="sign"]:hover{animation:sh-swing 1.6s ease-in-out infinite}html.is-revealed [data-reveal="sign"]:hover{animation:sh-sign .65s ease-out .2s backwards,sh-swing 1.6s ease-in-out infinite}}',
       'html.is-revealed [data-reveal="pop"]{animation:sh-pop .7s ' + SPRING + ' .55s backwards}',
-      // Intro copy fades in with the sign; the colour dots (short stagger) and the scroll arrow pop in last, together
-      '@keyframes sh-fade{from{opacity:0;translate:0 .5em}}',
-      '@keyframes sh-in{from{opacity:0;scale:.3}}',
-      '[data-theme-picker]>:nth-child(2){--i:1}[data-theme-picker]>:nth-child(3){--i:2}[data-theme-picker]>:nth-child(4){--i:3}[data-theme-picker]>:nth-child(5){--i:4}',
-      'html.is-revealed [data-reveal="fade"]{animation:sh-fade .8s cubic-bezier(.22,1,.36,1) .1s backwards}',
-      'html.is-revealed [data-theme-picker] [data-theme-set],html.is-revealed [data-scroll-arrow]{animation:sh-in .6s ' + SPRING + ' calc(1s + var(--i,0) * 45ms) backwards}',
       '[data-reveal="product"]{transition:scale .5s ' + SPRING + ',rotate .5s ' + SPRING + '}',
       '[data-reveal="product"] img:not([data-reveal-outline]){will-change:opacity,transform;transition:opacity .3s ease var(--sh-d,0s),scale .7s ' + SPRING + ' var(--sh-d,0s),rotate .7s ' + SPRING + ' var(--sh-d,0s)}',
       '[data-reveal-outline]{will-change:opacity,transform;pointer-events:none;transition:opacity .3s ease var(--sh-d,0s),scale .45s ease var(--sh-d,0s)}',
@@ -103,9 +97,10 @@
       '[data-theme-set]{cursor:pointer;transition:scale .25s ' + SPRING + '}',
       '@media (hover:hover){[data-theme-set]:hover{scale:1.15}}',
       // Scroll arrow
-      '[data-scroll-arrow]{cursor:pointer;transition:transform .5s ' + SPRING + '}',
-      '@media (hover:hover){[data-scroll-arrow]:hover{transform:translateY(.375em)}[data-scroll-arrow].is-up:hover{transform:rotate(180deg) translateY(.375em)}}',
-      '[data-scroll-arrow].is-up{transform:rotate(180deg)}',
+      // translate/rotate (not transform), so the GSAP pop-in on transform never fights this transition
+      '[data-scroll-arrow]{cursor:pointer;transition:translate .5s ' + SPRING + ',rotate .5s ' + SPRING + '}',
+      '@media (hover:hover){[data-scroll-arrow]:hover{translate:0 .375em}[data-scroll-arrow].is-up:hover{translate:0 -.375em}}',
+      '[data-scroll-arrow].is-up{rotate:180deg}',
       // Draw your Shelter
       '@keyframes sh-nudge{0%,100%{rotate:0deg}50%{rotate:-5deg}}',
       // Full screen while drawing (no lines cut off at the logo edge); the page is held at the top meanwhile
@@ -145,7 +140,7 @@
       'html.is-drawing [data-draw-toggle]>:not([data-draw-save]){display:none!important}',
       'html.is-drawing [data-draw-toggle]>[data-draw-save]{display:block!important}',
       '@media (prefers-reduced-motion:reduce){html.is-drawing [data-draw-toggle]{animation:none!important}}',
-      '@media (prefers-reduced-motion:reduce){[data-bob],[data-ticker] [data-ticker-track],html.is-revealed [data-reveal],html.is-revealed [data-theme-set],html.is-revealed [data-scroll-arrow]{animation:none!important}}'
+      '@media (prefers-reduced-motion:reduce){[data-bob],[data-ticker] [data-ticker-track],html.is-revealed [data-reveal]{animation:none!important}}'
     ].join('');
     document.head.appendChild(st);
   }
@@ -157,6 +152,14 @@
     html.classList.add('is-revealed');
     document.dispatchEvent(new CustomEvent('shelter:reveal'));
   };
+  // Last of the intro (GSAP): the colour dots, in a short stagger, and the scroll arrow pop in together.
+  // The intro copy and the pillars are a native Webflow interaction (Intro on load: copy + pillars).
+  document.addEventListener('shelter:reveal', () => {
+    const dots = document.querySelectorAll('[data-theme-picker] [data-theme-set]'), arrows = document.querySelectorAll('[data-scroll-arrow]');
+    if (!window.gsap || RM) return;
+    const from = { autoAlpha: 0, scale: 0.3 }, to = { autoAlpha: 1, scale: 1, duration: 0.6, ease: 'back.out(2.2)', clearProps: 'transform,opacity,visibility' };
+    gsap.timeline({ delay: 0.9 }).fromTo(dots, from, { ...to, stagger: 0.045 }, 0).fromTo(arrows, from, to, 0);
+  }, { once: true });
   addEventListener('scroll', () => { if (scrollY > 4) reveal(); }, { passive: true });
   addEventListener('wheel', (e) => { if (e.deltaY > 0) reveal(); }, { passive: true });
   addEventListener('touchmove', reveal, { passive: true });
