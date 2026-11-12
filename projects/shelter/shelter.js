@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.8.1 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.8.2 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -33,7 +33,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.8.1';
+  if (window.__shelter) return; window.__shelter = '0.8.2';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -52,6 +52,8 @@
       'html.is-logo-ready [data-logo-frame]{visibility:hidden}',
       'html.is-logo-ready [data-logo-frame].is-on{visibility:visible}',
       '[data-logo]{cursor:pointer;-webkit-tap-highlight-color:transparent;outline-offset:4px}',
+      // Keyboard focus in the site's own style: a black ring with rounded corners (no blue, nothing after a click)
+      '[data-logo]:focus{outline:none}[data-logo]:focus-visible{outline:2px solid var(--_colors---ink);outline-offset:4px;border-radius:var(--_layout---radius)}',
       '[data-logo-building]{opacity:0;transition:opacity .3s ease;pointer-events:none}',
       '[data-logo].is-building [data-logo-building]{opacity:1}',
       'html.is-logo-ready [data-logo].is-building [data-logo-frame]{visibility:hidden}',
@@ -76,7 +78,8 @@
       // Idle + hover
       '[data-bob]{animation:sh-bob 3.4s ease-in-out infinite}',
       '[data-hover-grow]{transition:scale .45s ' + SPRING + '}',
-      '@media (hover:hover){[data-hover-grow]:hover{scale:var(--sh-grow,1.06)}}',
+      // !important: GSAP (follow/magnetic) writes an inline scale:none, which would cancel the hover scale
+      '@media (hover:hover){[data-hover-grow]:hover{scale:var(--sh-grow,1.06)!important}}',
       // Ticker (mobile)
       '@keyframes sh-ticker{to{transform:translateX(-50%)}}',
       '[data-ticker].is-ticking{overflow:hidden;white-space:nowrap}',
@@ -102,7 +105,12 @@
       'html.is-drawing,html.is-drawing *{touch-action:none;-webkit-user-select:none;user-select:none}',
       // Mouse: a red dot the size of the line instead of the arrow or link hand (set from JS, it follows the logo size)
       'html.is-drawing,html.is-drawing *{cursor:var(--sh-draw-cursor,crosshair)!important}',
-      'html.is-drawing [data-draw-toggle],html.is-drawing [data-draw-toggle] *,html.is-drawing [data-draw-hint] button{cursor:pointer!important}',
+      'html.is-drawing [data-draw-toggle],html.is-drawing [data-draw-toggle] *,html.is-drawing [data-draw-hint] button,html.is-drawing [data-theme-picker],html.is-drawing [data-theme-picker] *{cursor:pointer!important}',
+      // Colour picker while drawing: a halo in the page colour, so lines stop short of the dots (no drawing there)
+      '[data-theme-picker]::before{content:"";position:absolute;inset:-.75em;z-index:-1;border-radius:50em;background:var(--_colors---page);box-shadow:0 0 .75em .5em var(--_colors---page);opacity:0;pointer-events:none;transition:opacity .3s ease}',
+      'html.is-drawing [data-theme-picker]::before{opacity:1;pointer-events:auto}',
+      // The scroll arrow does nothing while drawing
+      'html.is-drawing [data-scroll-arrow]{pointer-events:none}',
       // The marker sits under the logo (the canvas comes first in [data-logo]); the logo lets the pointer through
       'html.is-drawing [data-logo] [data-logo-frame],html.is-drawing [data-logo] [data-logo-frames]{pointer-events:none}',
       // The coming soon sign hangs over the logo: let the marker draw under it
@@ -403,7 +411,7 @@
     };
     const toLogo = (e) => { const r = box(); return [Math.round((e.clientX - r.left) / r.width * W * 10) / 10, Math.round((e.clientY - r.top) / r.height * H * 10) / 10]; };
     // While drawing the whole document is the drawing surface; only the balloon and the hint stay clickable
-    const UI = '[data-draw-toggle],[data-draw-hint]';
+    const UI = '[data-draw-toggle],[data-draw-hint],[data-theme-picker]';
     const isUI = (e) => e.target.closest && e.target.closest(UI);
     const down = (e) => { if (!drawing || isUI(e) || (e.button && e.button !== 0)) return; e.preventDefault(); e.stopPropagation(); live = { w: e.pointerType === 'touch' ? Math.round(FINGER * W / Math.max(1, box().width)) : STROKE, p: [toLogo(e)] }; strokes.push(live); redraw(); };
     const move = (e) => { if (!live) return; e.preventDefault(); const co = e.getCoalescedEvents ? e.getCoalescedEvents() : []; (co.length ? co : [e]).forEach((ev) => live.p.push(toLogo(ev))); redraw(); };

@@ -1,5 +1,5 @@
 /*!
- * hover-fx.js 1.0.2 (kevinbrenkman/studio-scripts/core)
+ * hover-fx.js 1.0.3 (kevinbrenkman/studio-scripts/core)
  * Small cursor effects with GSAP. Desktop (fine pointer) only, off with reduced motion. Needs GSAP (Webflow site setting).
  *
  * Magnetic  [data-magnetic]            pulled towards the cursor, springs back on leave (Paloma MailMagnet)
@@ -11,7 +11,7 @@
  *                                       Opt out: data-no-tilt. Inline links become inline-block so they can rotate.
  */
 (() => {
-  if (window.__studioHoverFx) return; window.__studioHoverFx = '1.0.2';
+  if (window.__studioHoverFx) return; window.__studioHoverFx = '1.0.3';
   window.App = window.App || { inits: [], destroys: [] };
   const ok = () => window.gsap && matchMedia('(hover: hover) and (pointer: fine)').matches && !matchMedia('(prefers-reduced-motion: reduce)').matches;
   const em = () => parseFloat(getComputedStyle(document.body).fontSize) || 16;
@@ -64,7 +64,7 @@
     el._fx = {
       x: gsap.quickTo(el, 'x', { duration: 1.1, ease: 'power3.out' }),
       y: gsap.quickTo(el, 'y', { duration: 1.1, ease: 'power3.out' }),
-      r: gsap.quickTo(el, 'rotation', { duration: 1.4, ease: 'elastic.out(1, 0.5)' }),
+      r: gsap.quickTo(el, 'rotation', { duration: 1.2, ease: 'power3.out' }), // no elastic here: it restarts on every pointermove and jitters
       r0: gsap.getProperty(el, 'rotation') || 0
     };
     followers.add(el);
@@ -78,12 +78,17 @@
   const tiltIn = (e) => {
     const a = e.target.closest && e.target.closest('a'); if (!a || !ok() || (e.relatedTarget && a.contains(e.relatedTarget)) || !isTextLink(a)) return;
     prep(a);
-    const dir = Math.random() < 0.5 ? -1 : 1;
+    // Back in before the leave went through (the link or its parent moved under a still cursor): keep the tilt as it is
+    if (a._tOut) { clearTimeout(a._tOut); a._tOut = 0; return; }
+    // Same side as last time when it comes back quickly, so it does not flip left/right on every edge crossing
+    const dir = a._dir && performance.now() - (a._left || 0) < 900 ? a._dir : (Math.random() < 0.5 ? -1 : 1);
+    a._dir = dir;
     gsap.to(a, { rotation: dir * gsap.utils.random(2.5, 4.5), duration: 0.7, ease: 'elastic.out(1.1, 0.4)', overwrite: 'auto' });
   };
   const tiltOut = (e) => {
     const a = e.target.closest && e.target.closest('a'); if (!a || !a._tilt || (e.relatedTarget && a.contains(e.relatedTarget))) return;
-    gsap.to(a, { rotation: 0, duration: 0.8, ease: 'elastic.out(1, 0.35)', overwrite: 'auto' });
+    clearTimeout(a._tOut);
+    a._tOut = setTimeout(() => { a._tOut = 0; a._left = performance.now(); gsap.to(a, { rotation: 0, duration: 0.8, ease: 'elastic.out(1, 0.35)', overwrite: 'auto' }); }, 120);
   };
   // Delegated: works for links added later (CMS, drawer, Swup pages)
   document.addEventListener('pointerover', tiltIn, { passive: true });
