@@ -1,5 +1,5 @@
 /*!
- * slider.js 1.8.0 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.9.0 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
  * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.9.0.
  *
@@ -24,7 +24,7 @@
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.8.0';
+  if (window.__studioSlider) return; window.__studioSlider = '1.9.0';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -49,9 +49,6 @@
       '[data-slider-prev].is-disabled,[data-slider-next].is-disabled{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .3s ease,visibility 0s linear .3s}' +
       '[data-slider].is-initialized .splide__list{display:flex;backface-visibility:hidden;margin:0!important;padding:0!important}' +
       '[data-slider].is-initialized .splide__slide{flex-shrink:0;position:relative;list-style:none}' +
-      '[data-slider][data-slider-edge="fade"] .splide__slide>*{transition:opacity .45s ease}' +
-      '[data-slider][data-slider-edge="fade"] .splide__slide.is-edge-out>*{opacity:0}' +
-      '[data-slider][data-slider-edge="fade"] .splide__slide.is-edge-out{pointer-events:none}' +
       '[data-slider]:not(.is-slider-ready) [data-slider-list],[data-slider]:not(.is-slider-ready) .w-dyn-items{visibility:hidden}' +
       // Screen reader announcer shows "…" while sliding without Splide CSS: hide it visually only
       '.splide__sr{position:absolute!important;width:1px!important;height:1px!important;margin:-1px!important;padding:0!important;border:0!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;clip-path:inset(50%)!important;white-space:nowrap!important}';
@@ -319,36 +316,45 @@
   };
 
   /* ---------- Add-on: edge fade ---------- */
-  // data-slider-edge="fade": only slides that fit inside the slider show; one that would peek in at an edge
-  // (data-slider-overflow="visible") waits at opacity 0 and fades in as it slides into place.
-  // The slide's children fade, not the slide itself, so interactions that animate the slide keep working.
+  // data-slider-edge="fade": only slides inside the slider show. A slide fades with how much of it is inside, every frame,
+  // so one at an edge (data-slider-overflow="visible") is invisible at rest and fades in as it slides in, by arrow, drag
+  // or trackpad alike. No classes or CSS transitions that can lag behind. Its children fade, not the slide itself,
+  // so interactions that animate the slide keep working. Slide offsets are measured once (and on resize), not per frame.
   const edge = (root, sp) => {
-    if (attr(root, 'edge') !== 'fade') return null;
+    if (attr(root, 'edge') !== 'fade' || !window.gsap) return null;
     const Move = sp.Components.Move, track = root.querySelector('.splide__track') || root;
-    const slides = () => [...root.querySelectorAll('.splide__slide')];
-    // Where it is going (arrow, snap after a drag): only slides that will fit show. While dragging: a slide shows
-    // once more than half of it is inside, so the incoming one fades in as it comes, never an empty gap.
-    const update = (dest) => {
-      const t = track.getBoundingClientRect(), shift = dest == null ? 0 : Move.toPosition(dest) - Move.getPosition();
-      slides().forEach((s) => {
-        const r = s.getBoundingClientRect(), l = r.left + shift;
-        const out = dest == null
-          ? (Math.min(l + r.width, t.right) - Math.max(l, t.left)) < r.width * 0.5
-          : l < t.left - 2 || l + r.width > t.right + 2;
-        s.classList.toggle('is-edge-out', out);
+    let map = null, tw = 0, inView = true, last = null;
+    const measure = () => {
+      const t = track.getBoundingClientRect(), pos = Move.getPosition();
+      tw = t.width;
+      map = [...root.querySelectorAll('.splide__slide')].map((s) => {
+        const r = s.getBoundingClientRect();
+        return { s, kids: [...s.children], off: r.left - t.left - pos, w: r.width, o: -1 };
+      });
+      last = null;
+    };
+    const tick = () => {
+      if (!inView) return;
+      if (!map) measure();
+      const pos = Move.getPosition();
+      if (pos === last) return; last = pos;
+      map.forEach((m) => {
+        const l = m.off + pos, inside = Math.max(0, Math.min(l + m.w, tw) - Math.max(l, 0)) / m.w;
+        const o = Math.round(Math.min(1, Math.max(0, (inside - 0.2) / 0.75)) * 100) / 100; // fully in: 1, a sliver: 0
+        if (o === m.o) return; m.o = o;
+        m.kids.forEach((k) => { k.style.opacity = o === 1 ? '' : o; });
+        m.s.style.pointerEvents = o < 0.5 ? 'none' : '';
       });
     };
-    const onMove = (i) => update(i), now = () => update();
-    sp.on('move', onMove); sp.on('moved dragging dragged resized refresh', now);
-    addEventListener('resize', now);
-    // Trackpad swipes (add-on above) move the list without Splide events: follow each frame until it settles
-    let until = 0, raf = 0;
-    const follow = () => { update(); raf = performance.now() < until ? requestAnimationFrame(follow) : 0; };
-    const wheel = () => { until = performance.now() + 900; if (!raf) raf = requestAnimationFrame(follow); };
-    root.addEventListener('wheel', wheel, { passive: true });
-    // Splide puts the list on its start slide after 'mounted' without an event: check again once that has landed
-    now(); requestAnimationFrame(now); const t1 = setTimeout(now, 400);
-    return () => { clearTimeout(t1); removeEventListener('resize', now); root.removeEventListener('wheel', wheel); cancelAnimationFrame(raf); slides().forEach((s) => s.classList.remove('is-edge-out')); };
+    const io = new IntersectionObserver((e) => { inView = e[0].isIntersecting; last = null; });
+    io.observe(root);
+    const remeasure = () => { map = null; };
+    sp.on('resized refresh updated', remeasure); addEventListener('resize', remeasure);
+    gsap.ticker.add(tick);
+    return () => {
+      gsap.ticker.remove(tick); io.disconnect(); removeEventListener('resize', remeasure);
+      (map || []).forEach((m) => { m.kids.forEach((k) => { k.style.opacity = ''; }); m.s.style.pointerEvents = ''; });
+    };
   };
 
   /* ---------- Arrows ---------- */
