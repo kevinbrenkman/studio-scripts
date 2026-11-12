@@ -1,5 +1,5 @@
 /*!
- * hover-fx.js 1.0.4 (kevinbrenkman/studio-scripts/core)
+ * hover-fx.js 1.0.5 (kevinbrenkman/studio-scripts/core)
  * Small cursor effects with GSAP. Desktop (fine pointer) only, off with reduced motion. Needs GSAP (Webflow site setting).
  *
  * Magnetic  [data-magnetic]            pulled towards the cursor, springs back on leave (Paloma MailMagnet)
@@ -11,7 +11,7 @@
  *                                       Opt out: data-no-tilt. Inline links become inline-block so they can rotate.
  */
 (() => {
-  if (window.__studioHoverFx) return; window.__studioHoverFx = '1.0.4';
+  if (window.__studioHoverFx) return; window.__studioHoverFx = '1.0.5';
   window.App = window.App || { inits: [], destroys: [] };
   const ok = () => window.gsap && matchMedia('(hover: hover) and (pointer: fine)').matches && !matchMedia('(prefers-reduced-motion: reduce)').matches;
   const em = () => parseFloat(getComputedStyle(document.body).fontSize) || 16;
@@ -81,11 +81,11 @@
     prep(a);
     // Back in before the leave went through (the link or its parent moved under a still cursor): keep the tilt as it is
     if (a._tOut) { clearTimeout(a._tOut); a._tOut = 0; return; }
-    // Same side as last time when it comes back quickly, so it does not flip left/right on every edge crossing
-    // Otherwise random, but never the same side three times in a row (across all links): it varies, without a fixed rhythm
-    let dir = a._dir && performance.now() - (a._left || 0) < 900 ? a._dir : 0;
-    if (!dir) { dir = Math.random() < 0.5 ? -1 : 1; if (lastDirs[0] === dir && lastDirs[1] === dir) dir = -dir; lastDirs = [dir, lastDirs[0]]; }
-    a._dir = dir;
+    // Every hover picks a side at random, but never the same side three times in a row (across all links):
+    // it varies, without a fixed left/right rhythm. (Edge crossings are already caught by the _tOut check above.)
+    let dir = Math.random() < 0.5 ? -1 : 1;
+    if (lastDirs[0] === dir && lastDirs[1] === dir) dir = -dir;
+    lastDirs = [dir, lastDirs[0]];
     gsap.to(a, { rotation: dir * gsap.utils.random(2, 5), duration: 0.7, ease: 'elastic.out(1.1, 0.4)', overwrite: 'auto' });
   };
   const tiltOut = (e) => {

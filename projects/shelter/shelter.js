@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.0 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.1 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -33,7 +33,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.0';
+  if (window.__shelter) return; window.__shelter = '0.9.1';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -120,6 +120,11 @@
       'html.is-drawing [data-scroll-arrow]{pointer-events:none}',
       // The marker sits under the logo (the canvas comes first in [data-logo]); the logo lets the pointer through
       'html.is-drawing [data-logo] [data-logo-frame],html.is-drawing [data-logo] [data-logo-frames]{pointer-events:none}',
+      // ...and its click area too, so the draw cursor shows (not the hand) and a line can start on the logo
+      'html.is-drawing [data-logo]::before{pointer-events:none}',
+      // Saved drawing: stays on the outline logo (version 1), scrolls with it, hidden while another version shows or while drawing
+      '[data-draw-overlay]{position:absolute;z-index:1;pointer-events:none;transition:opacity .45s ease}',
+      'html:not(.is-revealed) [data-draw-overlay],html.is-drawing [data-draw-overlay],[data-draw-overlay].is-off{opacity:0}',
       // The coming soon sign hangs over the logo: let the marker draw under it
       'html.is-drawing [data-reveal="sign"]{pointer-events:none}',
       // Hint (prototype): fixed at the bottom while drawing. Same font and weight as the pills
@@ -382,7 +387,7 @@
     if (frames().length < 2) { reveal(); return; }
     html.classList.add('is-logo-ready');
     let cur = 0, timer = null;
-    const show = (i) => { const f = frames(); f[cur] && f[cur].classList.remove('is-on'); cur = (i + f.length) % f.length; f[cur].classList.add('is-on'); };
+    const show = (i) => { const f = frames(); f[cur] && f[cur].classList.remove('is-on'); cur = (i + f.length) % f.length; f[cur].classList.add('is-on'); root.dispatchEvent(new CustomEvent('logo:frame', { detail: cur })); };
     frames().forEach((f, i) => f.classList.toggle('is-on', i === 0));
     const stop = () => { clearTimeout(timer); timer = null; root.setAttribute('aria-pressed', 'false'); };
     const loop = () => {
@@ -590,12 +595,31 @@
       const r = canvas.getBoundingClientRect(), dpr = devicePixelRatio || 1;
       canvas.width = Math.max(1, Math.round(r.width * dpr)); canvas.height = Math.max(1, Math.round(r.height * dpr));
       if (FINE) { // the cursor dot matches the line width on screen
-        const d = Math.max(6, Math.min(64, Math.round(STROKE * box().width / W))), c = d / 2 + 1, n = d + 2;
-        const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + n + '" height="' + n + '"><circle cx="' + c + '" cy="' + c + '" r="' + (d / 2) + '" fill="' + INK + '" stroke="#fff" stroke-width="1"/></svg>';
+        const d = Math.max(6, Math.min(64, Math.round(STROKE * box().width / W))), c = d / 2, n = d;
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + n + '" height="' + n + '"><circle cx="' + c + '" cy="' + c + '" r="' + (d / 2) + '" fill="' + INK + '"/></svg>';
         document.documentElement.style.setProperty('--sh-draw-cursor', 'url("data:image/svg+xml,' + encodeURIComponent(svg) + '") ' + Math.round(c) + ' ' + Math.round(c) + ', crosshair');
       }
       redraw();
     };
+    // Saved drawing on top of the logo: a canvas inside [data-logo], only as big as the lines, so it scrolls with the logo
+    let overlay = root.querySelector('[data-draw-overlay]');
+    if (!overlay) { overlay = document.createElement('canvas'); overlay.setAttribute('data-draw-overlay', ''); overlay.setAttribute('aria-hidden', 'true'); root.appendChild(overlay); }
+    const octx = overlay.getContext('2d');
+    const paintOverlay = () => {
+      if (!strokes.length) { overlay.width = overlay.height = 1; overlay.style.display = 'none'; return; }
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, lw = 0;
+      strokes.forEach((st) => { const pts = Array.isArray(st) ? st : st.p; lw = Math.max(lw, Array.isArray(st) ? STROKE : st.w); pts.forEach(([x, y]) => { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }); });
+      x0 -= lw; y0 -= lw; x1 += lw; y1 += lw;
+      Object.assign(overlay.style, { display: 'block', left: (x0 / W * 100) + '%', top: (y0 / H * 100) + '%', width: ((x1 - x0) / W * 100) + '%', height: ((y1 - y0) / H * 100) + '%' });
+      const b = box(), dpr = Math.min(2, devicePixelRatio || 1);
+      overlay.width = Math.max(1, Math.round((x1 - x0) / W * b.width * dpr)); overlay.height = Math.max(1, Math.round((y1 - y0) / H * b.height * dpr));
+      const sx = overlay.width / (x1 - x0), sy = overlay.height / (y1 - y0);
+      octx.setTransform(sx, 0, 0, sy, -x0 * sx, -y0 * sy);
+      octx.strokeStyle = INK; octx.lineCap = 'round'; octx.lineJoin = 'round';
+      strokes.forEach((st) => { const pts = Array.isArray(st) ? st : st.p; octx.lineWidth = Array.isArray(st) ? STROKE : st.w; octx.beginPath(); octx.moveTo(pts[0][0], pts[0][1]); if (pts.length === 1) octx.lineTo(pts[0][0] + 0.01, pts[0][1]); for (let i = 1; i < pts.length - 1; i++) { const mx = (pts[i][0] + pts[i + 1][0]) / 2, my = (pts[i][1] + pts[i + 1][1]) / 2; octx.quadraticCurveTo(pts[i][0], pts[i][1], mx, my); } if (pts.length > 1) octx.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]); octx.stroke(); });
+    };
+    const onFrame = (e) => overlay.classList.toggle('is-off', e.detail !== 0);
+    root.addEventListener('logo:frame', onFrame);
     const toLogo = (e) => { const r = box(); return [Math.round((e.clientX - r.left) / r.width * W * 10) / 10, Math.round((e.clientY - r.top) / r.height * H * 10) / 10]; };
     // While drawing the whole document is the drawing surface; only the balloon and the hint stay clickable
     const UI = '[data-draw-toggle],[data-draw-hint],[data-theme-picker]';
@@ -630,18 +654,19 @@
         canvas.classList.remove('is-hidden'); setDrawing(true); size(); requestAnimationFrame(size);
         return;
       }
-      setDrawing(false); canvas.classList.add('is-hidden'); store(); // save it: fades out, kept for the next round and the next visit
+      setDrawing(false); canvas.classList.add('is-hidden'); store(); paintOverlay(); // save it: stays on the outline logo, also on the next visit
     };
-    const clear = (e) => { const c = e.target.closest('[data-draw-clear]'); if (!c) return; e.preventDefault(); e.stopImmediatePropagation(); strokes = []; live = null; redraw(); store(); };
-    const key = (e) => { if (e.key === 'Escape' && drawing) { setDrawing(false); canvas.classList.add('is-hidden'); } };
+    const clear = (e) => { const c = e.target.closest('[data-draw-clear]'); if (!c) return; e.preventDefault(); e.stopImmediatePropagation(); strokes = []; live = null; redraw(); store(); paintOverlay(); };
+    const key = (e) => { if (e.key === 'Escape' && drawing) { setDrawing(false); canvas.classList.add('is-hidden'); store(); paintOverlay(); } };
     toggle.addEventListener('click', click, true);
     document.addEventListener('click', clear, true);
     addEventListener('keydown', key);
     const ro = new ResizeObserver(size); ro.observe(canvas); size();
+    const ro2 = new ResizeObserver(() => paintOverlay()); ro2.observe(root); paintOverlay();
     toggle.setAttribute('role', 'button'); toggle.setAttribute('aria-pressed', 'false');
     toggle._draw = () => {
       if (drawing) setDrawing(false);
-      ro.disconnect(); toggle.removeEventListener('click', click, true); document.removeEventListener('click', clear, true); removeEventListener('keydown', key);
+      ro.disconnect(); ro2.disconnect(); root.removeEventListener('logo:frame', onFrame); toggle.removeEventListener('click', click, true); document.removeEventListener('click', clear, true); removeEventListener('keydown', key);
       document.removeEventListener('pointerdown', down, true); removeEventListener('pointermove', move); removeEventListener('pointerup', end); removeEventListener('pointercancel', end);
       document.removeEventListener('click', swallow, true); document.removeEventListener('dragstart', swallow, true);
       canvas.remove(); hint.remove(); delete toggle._draw;
