@@ -247,6 +247,8 @@ No classes as JS hooks. Classes are for styling, attributes for behaviour, so a 
     - Stretch the scrim 25vh past the top and bottom: `innerHeight` stops above the floating toolbar, so otherwise the page under the see-through bar stays undimmed.
     - After it slides out, set the drawer to `display: none` (a closed fixed layer left in place keeps tinting the bars).
     - Mouse devices keep the normal fixed layer + `overflow: hidden` + `lenis.stop()`.
+    - The touch lock must also block a swipe inside the panel when the panel is at its top or bottom (or its content fits): iOS hands that swipe to the page (drawer.js 1.5.0, tested in iPhone emulation).
+12. **SVG filters (feMorphology, blur) on anything that animates** (Shelter pillar outlines): Safari re-runs the filter every frame the element or an ancestor fades or scales, at 3x on a phone. Reveals stutter and seem to pop in late. Keep the filter for the Designer, but on the live site bake it once into a bitmap in JS (shelter.js `bakeOutline`), in idle time, in small steps.
 
 ---
 
