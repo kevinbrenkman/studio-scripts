@@ -1,7 +1,7 @@
 /*!
- * slider.js 1.9.1 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.10.0 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
- * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.9.1.
+ * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.10.0.
  *
  * Works with core.js (Swup) and without it (plain Webflow site).
  * Loads Splide 4.1.4 itself, only on pages that have a slider. Splide's CSS is not needed.
@@ -12,6 +12,7 @@
  *       [data-slider-list]        Collection List (CMS) or any div. Fallback: .w-dyn-items. Its children are the slides.
  *     [data-slider-prev] / [data-slider-next]   optional arrow buttons, anywhere inside the root
  *
+ * Pinned: data-slider-pin="true" (on or in a slide, bound to a CMS switch) puts it first among the upcoming slides.
  * Dates (data-slider-start="upcoming"): each slide (or an element in it) has data-slider-date (Sort Date, any Webflow
  *   date format: 12/11/26 is read as day/month/year) and optionally data-slider-repeat ("Donderdag": a weekly event,
  *   it counts as its next occurrence). Slides are put in date order, past ones first, and the slider opens on the first
@@ -24,7 +25,7 @@
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.9.1';
+  if (window.__studioSlider) return; window.__studioSlider = '1.10.0';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -97,14 +98,18 @@
   const today0 = () => { const t = new Date(); t.setHours(0, 0, 0, 0); return t; };
   const read = (s, k) => { const el = s.matches('[data-slider-' + k + ']') ? s : s.querySelector('[data-slider-' + k + ']'); return el ? el.getAttribute('data-slider-' + k) : ''; };
   // When a slide happens: its date, or for a weekly event the next time it's on (today counts)
+  // data-slider-pin (a CMS switch, e.g. "Elke week"): always first among the upcoming slides (counts as today and wins
+  // the tie with anything else today). "false", "0", "no" or empty = not pinned.
+  const pinned = (s) => /^(true|1|yes|on|ja)$/i.test((read(s, 'pin') || '').trim());
   const whenOf = (s) => {
+    if (pinned(s)) return today0();
     const wd = weekday(read(s, 'repeat'));
     if (wd > -1) { const t = today0(); t.setDate(t.getDate() + ((wd - t.getDay() + 7) % 7)); return t; }
     const d = parseDate(read(s, 'date')); if (d) d.setHours(0, 0, 0, 0); return d;
   };
   const orderByDate = (list) => {
-    const slides = [...list.children].map((el, i) => ({ el, i, t: whenOf(el) }));
-    slides.sort((a, b) => (a.t ? a.t.getTime() : Infinity) - (b.t ? b.t.getTime() : Infinity) || a.i - b.i);
+    const slides = [...list.children].map((el, i) => ({ el, i, t: whenOf(el), p: pinned(el) ? 0 : 1 }));
+    slides.sort((a, b) => (a.t ? a.t.getTime() : Infinity) - (b.t ? b.t.getTime() : Infinity) || a.p - b.p || a.i - b.i);
     slides.forEach((x) => list.appendChild(x.el));
     // Past events get data-slider-past (only when something is still coming): hidden on phones when there is no slider
     const t = today0(), any = slides.some((x) => x.t && x.t >= t);
