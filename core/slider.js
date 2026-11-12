@@ -1,7 +1,7 @@
 /*!
- * slider.js 1.9.0 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.9.1 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
- * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.9.0.
+ * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.9.1.
  *
  * Works with core.js (Swup) and without it (plain Webflow site).
  * Loads Splide 4.1.4 itself, only on pages that have a slider. Splide's CSS is not needed.
@@ -24,7 +24,7 @@
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.9.0';
+  if (window.__studioSlider) return; window.__studioSlider = '1.9.1';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -177,7 +177,8 @@
       flashed = false;
       const pos = Move.getPosition(), o = { p: pos };
       let i = Move.toIndex(pos);
-      if (step) i = range(Math.max(from - 1, Math.min(from + 1, i))); // one slide per swipe
+      if (step) i = Math.max(from - 1, Math.min(from + 1, i)); // one slide per swipe
+      if (!sp.is('loop')) i = range(i); // never past the last position that still shows a full row (no empty space)
       snapTw = gsap.to(o, { p: Move.toPosition(i), duration: RM ? 0 : 0.6, ease: 'power3.out', onUpdate: () => Move.translate(o.p), onComplete: () => { Ctrl.setIndex(i); snapTw = null; } });
     };
     const wheel = (e) => {
@@ -191,7 +192,9 @@
       if (sp.state.is(Splide.STATES.MOVING)) Move.cancel();
       if (!flashed && ax > 2) { flashed = true; flash(e.deltaX > 0 ? '[data-slider-next]' : '[data-slider-prev]'); }
       let p = Move.getPosition() - e.deltaX;
-      if (!sp.is('loop')) { const a = Move.getLimit(false), b = Move.getLimit(true); p = Math.min(Math.max(a, b), Math.max(Math.min(a, b), p)); } // no swiping into the void past the ends
+      // No swiping into the void past the ends: from the first slide to the last position that still moves
+      // (Move.getLimit ignores omitEnd, so with a few cards left it let the list run on into empty space)
+      if (!sp.is('loop')) { const a = Move.toPosition(0), b = Move.toPosition(Ctrl.getEnd()); p = Math.min(Math.max(a, b), Math.max(Math.min(a, b), p)); }
       if (step) { const a = Move.toPosition(range(from - 1)), b = Move.toPosition(range(from + 1)); p = Math.min(Math.max(a, b), Math.max(Math.min(a, b), p)); } // at most one slide
       Move.translate(p);
       clearTimeout(snapT); snapT = setTimeout(snap, 140);
