@@ -1,5 +1,5 @@
 /*!
- * slider.js 1.7.3 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.8.0 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
  * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.9.0.
  *
@@ -18,12 +18,13 @@
  *   upcoming one. Past events fill the space on the left when there are not enough upcoming ones.
  *   data-slider-order="cms" keeps the CMS order.
  * data-slider-drag="step": one slide per swipe (touch, mouse and trackpad). "free": momentum. Default: follows the finger.
+ * data-slider-min="4": fewer slides than that = no slider, the list keeps its Webflow layout (grid), arrows hidden.
  * Add-ons (attributes on the root): data-slider-autoscroll, data-slider-reveal, data-slider-parallax, data-slider-edge="fade".
  * Trackpad drag is on by default (data-slider-trackpad="false" turns it off).
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.7.3';
+  if (window.__studioSlider) return; window.__studioSlider = '1.8.0';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -400,6 +401,19 @@
     // Empty (CMS with no items): hide the whole slider unless data-slider-keep-empty
     if (!list.children.length || list.querySelector('.w-dyn-empty')) {
       if (!root.hasAttribute('data-slider-keep-empty')) root.style.display = 'none';
+      root.classList.add('is-slider-ready');
+      return;
+    }
+
+    // data-slider-min="4": with fewer slides it is no slider, the list keeps its own Webflow layout (a grid).
+    // Dated slides are still put in date order; the arrows (inside the root or named for it) are hidden.
+    const min = parseInt(attr(root, 'min'), 10) || 0;
+    if (min && list.children.length < min) {
+      if (attr(root, 'start') === 'upcoming' && attr(root, 'order') !== 'cms') orderByDate(list);
+      const name = attr(root, 'name');
+      [...root.querySelectorAll('[data-slider-prev],[data-slider-next]'), ...(name ? document.querySelectorAll('[data-slider-prev="' + name + '"],[data-slider-next="' + name + '"]') : [])]
+        .forEach((b) => b.classList.add('is-disabled'));
+      root.setAttribute('data-slider-static', '');
       root.classList.add('is-slider-ready');
       return;
     }
