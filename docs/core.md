@@ -275,6 +275,12 @@ No classes as JS hooks. Classes are for styling, attributes for behaviour, so a 
 10. Test: hard refresh on every page, then click through every page via Swup, back button, anchor links, every form,
     a missing URL (404) and the password page. On a real iPhone: Safari toolbars, fixed elements, modals.
 11. Pin the commit hash in the footer before handover (same hash for every studio-scripts file).
+12. Social links: never leave `#`. Look up whether the client's accounts already exist (Instagram, TikTok, Snapchat...)
+    and fill in the real URLs; if they don't exist yet, put them on the launch list for the client.
+13. SEO basics before launch: one H1 per page (a visually hidden `.sr-only` H1 in the header when the logo is an image,
+    its text a Header prop), Site settings > Localization primary language (sets `<html lang>`), a dynamic SEO title
+    on every CMS template, cards linking to their CMS page (not `#`, also when a script opens them in a drawer),
+    favicon and OG image, indexing and the auto sitemap on at launch.
 
 ---
 

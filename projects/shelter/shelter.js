@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.1 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.2 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -33,7 +33,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.1';
+  if (window.__shelter) return; window.__shelter = '0.9.2';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -122,9 +122,11 @@
       'html.is-drawing [data-logo] [data-logo-frame],html.is-drawing [data-logo] [data-logo-frames]{pointer-events:none}',
       // ...and its click area too, so the draw cursor shows (not the hand) and a line can start on the logo
       'html.is-drawing [data-logo]::before{pointer-events:none}',
-      // Saved drawing: stays on the outline logo (version 1), scrolls with it, hidden while another version shows or while drawing
-      '[data-draw-overlay]{position:absolute;z-index:1;pointer-events:none;transition:opacity .45s ease}',
-      'html:not(.is-revealed) [data-draw-overlay],html.is-drawing [data-draw-overlay],[data-draw-overlay].is-off{opacity:0}',
+      // Saved drawing: under the outline logo (version 1), as faint as the Header's "Drawing opacity" prop, scrolls with it,
+      // hidden while another logo version shows or while drawing. The logo box isolates, so z-index -1 stays inside it.
+      '[data-logo]{isolation:isolate}',
+      '[data-draw-overlay]{position:absolute;z-index:-1;pointer-events:none}',
+      'html:not(.is-revealed) [data-draw-overlay],html.is-drawing [data-draw-overlay],[data-draw-overlay].is-off{visibility:hidden}',
       // The coming soon sign hangs over the logo: let the marker draw under it
       'html.is-drawing [data-reveal="sign"]{pointer-events:none}',
       // Hint (prototype): fixed at the bottom while drawing. Same font and weight as the pills
@@ -595,8 +597,9 @@
       const r = canvas.getBoundingClientRect(), dpr = devicePixelRatio || 1;
       canvas.width = Math.max(1, Math.round(r.width * dpr)); canvas.height = Math.max(1, Math.round(r.height * dpr));
       if (FINE) { // the cursor dot matches the line width on screen
-        const d = Math.max(6, Math.min(64, Math.round(STROKE * box().width / W))), c = d / 2, n = d;
-        const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + n + '" height="' + n + '"><circle cx="' + c + '" cy="' + c + '" r="' + (d / 2) + '" fill="' + INK + '"/></svg>';
+        const d = Math.max(6, Math.min(64, Math.round(STROKE * box().width / W))), c = d / 2 + 1, n = d + 2;
+        // Thin black ring, so the dot still shows on top of lines already drawn in the same red
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + n + '" height="' + n + '"><circle cx="' + c + '" cy="' + c + '" r="' + (d / 2) + '" fill="' + INK + '" stroke="#000" stroke-width="1.5"/></svg>';
         document.documentElement.style.setProperty('--sh-draw-cursor', 'url("data:image/svg+xml,' + encodeURIComponent(svg) + '") ' + Math.round(c) + ' ' + Math.round(c) + ', crosshair');
       }
       redraw();
@@ -618,6 +621,9 @@
       octx.strokeStyle = INK; octx.lineCap = 'round'; octx.lineJoin = 'round';
       strokes.forEach((st) => { const pts = Array.isArray(st) ? st : st.p; octx.lineWidth = Array.isArray(st) ? STROKE : st.w; octx.beginPath(); octx.moveTo(pts[0][0], pts[0][1]); if (pts.length === 1) octx.lineTo(pts[0][0] + 0.01, pts[0][1]); for (let i = 1; i < pts.length - 1; i++) { const mx = (pts[i][0] + pts[i + 1][0]) / 2, my = (pts[i][1] + pts[i + 1][1]) / 2; octx.quadraticCurveTo(pts[i][0], pts[i][1], mx, my); } if (pts.length > 1) octx.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]); octx.stroke(); });
     };
+    // Header prop "Drawing opacity" (0 = off, 100 = full) via data-draw-saved on the toggle; 25 when it is not set
+    const savedOp = () => { const v = parseFloat(toggle.getAttribute('data-draw-saved')); return isNaN(v) ? 0.25 : Math.max(0, Math.min(1, v / 100)); };
+    overlay.style.opacity = String(savedOp());
     const onFrame = (e) => overlay.classList.toggle('is-off', e.detail !== 0);
     root.addEventListener('logo:frame', onFrame);
     const toLogo = (e) => { const r = box(); return [Math.round((e.clientX - r.left) / r.width * W * 10) / 10, Math.round((e.clientY - r.top) / r.height * H * 10) / 10]; };
@@ -651,13 +657,25 @@
       if (!drawing) {
         // Always draw on the outline logo (version 1), and show the saved drawing again
         if (root._logoApi) { root._logoApi.stop(); root._logoApi.show(0); }
-        canvas.classList.remove('is-hidden'); setDrawing(true); size(); requestAnimationFrame(size);
+        // The lines grow from their saved opacity to full (no dip to nothing first)
+        const from = strokes.length && overlay.style.display !== 'none' ? savedOp() : 0;
+        canvas.style.transition = 'none'; canvas.style.opacity = String(from); canvas.classList.remove('is-hidden');
+        setDrawing(true); size(); requestAnimationFrame(size);
+        void canvas.offsetWidth; canvas.style.transition = ''; canvas.style.opacity = '';
         return;
       }
-      setDrawing(false); canvas.classList.add('is-hidden'); store(); paintOverlay(); // save it: stays on the outline logo, also on the next visit
+      saveOut();
+    };
+    // Save it: the drawing stays where it is under the logo, at full strength, then fades to the saved opacity (no gap).
+    // Kept for the next round and the next visit.
+    const saveOut = () => {
+      store();
+      overlay.style.transition = 'none'; overlay.style.opacity = '1'; paintOverlay();
+      setDrawing(false); canvas.classList.add('is-hidden');
+      void overlay.offsetWidth; overlay.style.transition = 'opacity .8s ease'; overlay.style.opacity = String(savedOp());
     };
     const clear = (e) => { const c = e.target.closest('[data-draw-clear]'); if (!c) return; e.preventDefault(); e.stopImmediatePropagation(); strokes = []; live = null; redraw(); store(); paintOverlay(); };
-    const key = (e) => { if (e.key === 'Escape' && drawing) { setDrawing(false); canvas.classList.add('is-hidden'); store(); paintOverlay(); } };
+    const key = (e) => { if (e.key === 'Escape' && drawing) saveOut(); };
     toggle.addEventListener('click', click, true);
     document.addEventListener('click', clear, true);
     addEventListener('keydown', key);
