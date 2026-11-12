@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.8.3 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.8.4 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -33,14 +33,17 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.8.3';
+  if (window.__shelter) return; window.__shelter = '0.8.4';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const MOBILE = matchMedia('(max-width: 767px)');
   const FINE = matchMedia('(hover: hover) and (pointer: fine)').matches;
   const SPRING = 'cubic-bezier(.34,1.56,.64,1)';
-  const INTRO_MS = 90, LOOP_MS = 130;
+  // Logo versions: the load pass starts fast and slows towards the end; the click loop holds each version longer and
+  // also slows towards the end of every round (ms per version = from + (to - from) * position^curve)
+  const INTRO = { from: 70, to: 260, curve: 2.2 }, LOOP = { from: 160, to: 340, curve: 2 };
+  const dur = (t, i, n) => t.from + (t.to - t.from) * Math.pow(n > 1 ? i / (n - 1) : 1, t.curve);
   const KEY = 'shelter-theme';
   html.classList.add('is-shelter-js');
 
@@ -121,7 +124,7 @@
       // Hint (prototype): fixed at the bottom while drawing. Same font and weight as the pills
       '[data-draw-hint]{position:fixed;left:50%;bottom:calc(1.25em + env(safe-area-inset-bottom,0px));z-index:12;display:flex;gap:.375em;align-items:center;opacity:0;transform:translate(-50%,.75em);pointer-events:none;transition:opacity .25s ease,transform .35s ' + SPRING + '}',
       'html.is-drawing [data-draw-hint]{opacity:1;transform:translate(-50%,0);pointer-events:auto}',
-      '[data-draw-hint]>*{box-sizing:border-box;height:2em;margin:0;padding:0 .8em;display:inline-flex;align-items:center;border:2px solid var(--_colors---ink);border-radius:50em;font-family:var(--_typography---font-round);font-weight:400;font-size:1.25em;line-height:1;letter-spacing:-.03em;white-space:nowrap}',
+      '[data-draw-hint]>*{box-sizing:border-box;height:2em;margin:0;padding:0 .8em;display:inline-flex;align-items:center;border:1px solid var(--_colors---ink);border-radius:50em;font-family:var(--_typography---font-round);font-weight:400;font-size:1.25em;line-height:1;letter-spacing:-.03em;white-space:nowrap}',
       '[data-draw-hint]>span{background:var(--_colors---ink);color:var(--_colors---page)}',
       '[data-draw-hint]>button{background:var(--_colors---page);color:var(--_colors---ink);cursor:pointer;transition:transform .25s ' + SPRING + '}',
       '@media (hover:hover){[data-draw-hint]>button:hover{transform:scale(1.06)}}',
@@ -173,7 +176,7 @@
     if (!io) io = new IntersectionObserver((entries) => {
       entries.forEach((en) => { if (en.isIntersecting) { io.unobserve(en.target); seen.push(en.target); } });
       playIn();
-    }, { threshold: 0.5, rootMargin: '0px 0px -12% 0px' }); // well inside the screen, so the pop is seen (on a phone too)
+    }, FINE ? { threshold: 0.5, rootMargin: '0px 0px -12% 0px' } : { threshold: 0.2 }); // well inside the screen (phone: the first one is already in view at load)
     io.observe(p);
   };
 
@@ -182,9 +185,11 @@
   // The outline is an SVG filter (feMorphology) on the full-size product PNG (Global embed, so the Designer shows it).
   // Safari re-runs that filter on every frame the outline or its pillar animates (the fade, the pop, the 1.1 scale),
   // at 3x on a phone: the reveals stuttered and seemed to jump in late. Here the same steps run once per image in JS,
-  // at screen size, and the img gets the result as a plain bitmap (filter off). Theme change: only the fill is repainted.
+  // at screen size, and the img gets the result as a plain bitmap (filter off): a black line, see-through inside.
   // If the image can't be read (CORS) the live filter simply stays.
   const outlines = new Set();
+  // Outline shape (css px): drop specks, close small gaps, hug the photo, smooth; line width; room around the image
+  const OL = { open: 1, close: 4, back: 3, smooth: 1.6, line: 1.25, pad: 6 };
   // 1D running min/max in O(1) per pixel (van Herk / Gil-Werman), rectangle kernel like feMorphology, outside = transparent
   const run1 = (src, off, step, n, r, max, g, hh, dst) => {
     const k = 2 * r + 1, m = n + 2 * r;
@@ -228,22 +233,26 @@
     return a;
   };
   const rest = () => new Promise((r) => setTimeout(r, 0)); // let the page breathe between the steps
-  const cl = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
-  const pageRGB = () => {
-    const c = document.createElement('canvas').getContext('2d');
-    c.fillStyle = '#fff'; c.fillStyle = getComputedStyle(html).getPropertyValue('--_colors---page').trim() || '#fff';
-    const m = /^#([0-9a-f]{6})$/i.exec(c.fillStyle); if (m) { const n = parseInt(m[1], 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
-    const r = (c.fillStyle.match(/[\d.]+/g) || [255, 255, 255]).map(Number); return [r[0], r[1], r[2]];
+  // Holes inside the shape (gaps between the bricks, the sofa's armrest) become shape: only the outer line is drawn
+  const fillHoles = (a, w, h) => {
+    const seen = new Uint8Array(w * h), st = [];
+    const push = (i) => { if (!seen[i] && a[i] < 0.5) { seen[i] = 1; st.push(i); } };
+    for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); }
+    for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
+    while (st.length) { const i = st.pop(), x = i % w; if (x > 0) push(i - 1); if (x < w - 1) push(i + 1); if (i >= w) push(i - w); if (i < w * (h - 1)) push(i + w); }
+    for (let i = 0; i < a.length; i++) if (!seen[i] && a[i] < 0.5) a[i] = 1;
+    return a;
   };
+  const cl = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
   const paintOutline = async (o) => {
-    const [pr, pg, pb] = pageRGB(), { W, H, s, e } = o, job = (o.job = (o.job || 0) + 1);
+    const { W, H, s, e } = o, job = (o.job = (o.job || 0) + 1);
     const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
     const cx = cv.getContext('2d'), id = cx.createImageData(W, H), d = id.data;
     let t0 = performance.now();
     for (let i = 0, n = W * H; i < n; i++) {
       if ((i & 4095) === 0 && performance.now() - t0 > 8) { await rest(); if (job !== o.job) return; t0 = performance.now(); }
-      const f = e[i] / 255, l = (s[i] / 255) * (1 - f), a = f + l; if (a <= 0) continue;
-      const j = i * 4; d[j] = (pr * f) / a; d[j + 1] = (pg * f) / a; d[j + 2] = (pb * f) / a; d[j + 3] = a * 255; // page fill over a black line
+      const l = (s[i] / 255) * (1 - e[i] / 255); if (l <= 0) continue;
+      d[i * 4 + 3] = l * 255; // black line only, see-through inside (no page colour to repaint when the colour fades)
     }
     cx.putImageData(id, 0, 0);
     cv.toBlob((b) => {
@@ -251,6 +260,8 @@
       if (o.url) URL.revokeObjectURL(o.url);
       o.url = URL.createObjectURL(b);
       o.img.removeAttribute('srcset'); o.img.removeAttribute('sizes'); o.img.src = o.url; o.img.style.filter = 'none';
+      // the bitmap has room round the photo (the line never gets cut off at the image edge)
+      Object.assign(o.img.style, { left: -o.pad + 'px', top: -o.pad + 'px', width: 'calc(100% + ' + 2 * o.pad + 'px)', maxWidth: 'none' });
     }, 'image/png');
   };
   const bakeOutline = (img) => {
@@ -261,32 +272,32 @@
       const url = img.currentSrc || img.src; src.src = url + (url.includes('?') ? '&' : '?') + 'sh-outline=1'; // own request, with CORS
       src.decode().then(async () => {
         // 1. Silhouette steps at 1x (radii in css px, as the filter): alpha threshold, drop specks, close holes, step out, smooth
-        const q = 1, P = 14, iw = Math.round(w * q), ih = Math.round(h * q), w1 = iw + P * 2, h1 = ih + P * 2;
+        const q = 1, P = 14, iw = Math.round(w * q), ih = Math.round(h * q), w1 = iw + P * 2, h1 = ih + P * 2, pad = OL.pad;
         const c1 = document.createElement('canvas'); c1.width = w1; c1.height = h1;
         const x1 = c1.getContext('2d', { willReadFrequently: true }); x1.drawImage(src, P, P, iw, ih);
         const px = x1.getImageData(0, 0, w1, h1).data; // throws on a tainted canvas: then the live filter stays
         let a = new Float32Array(w1 * h1);
         for (let i = 0; i < a.length; i++) a[i] = cl((px[i * 4 + 3] / 255) * 20 - 8);
-        a = morph(a, w1, h1, 2 * q, false); await rest(); a = morph(a, w1, h1, 9 * q, true); await rest(); a = morph(a, w1, h1, 4 * q, false); await rest();
-        a = blur(a, w1, h1, 1.5 * q); await rest(); // the threshold (x10 - 5) comes after scaling up, so the edge stays smooth
+        a = morph(a, w1, h1, OL.open * q, false); await rest(); a = morph(a, w1, h1, OL.close * q, true); await rest(); a = morph(a, w1, h1, OL.back * q, false); fillHoles(a, w1, h1); await rest();
+        a = blur(a, w1, h1, OL.smooth * q); await rest(); // the threshold (x10 - 5) comes after scaling up, so the edge stays smooth
         // 2. Up to screen pixels (smooth edge), then the thin line: shape minus the shape eroded by the line width
-        const k = Math.min(devicePixelRatio || 1, 2), W = Math.round(w * k), H = Math.round(h * k), sx = iw / W;
+        const k = Math.min(devicePixelRatio || 1, 2), W = Math.round((w + 2 * pad) * k), H = Math.round((h + 2 * pad) * k), sx = (iw + 2 * pad * q) / W, P0 = P - pad * q;
         const sf = new Float32Array(W * H);
         let t0 = performance.now();
         for (let y = 0; y < H; y++) {
           if (performance.now() - t0 > 8) { await rest(); t0 = performance.now(); }
-          const fy = (y + 0.5) * sx - 0.5 + P, y0 = Math.floor(fy), ty = fy - y0;
+          const fy = (y + 0.5) * sx - 0.5 + P0, y0 = Math.floor(fy), ty = fy - y0;
           for (let x = 0; x < W; x++) {
-            const fx = (x + 0.5) * sx - 0.5 + P, x0 = Math.floor(fx), tx = fx - x0, i = y0 * w1 + x0;
+            const fx = (x + 0.5) * sx - 0.5 + P0, x0 = Math.floor(fx), tx = fx - x0, i = y0 * w1 + x0;
             const v = a[i] * (1 - tx) * (1 - ty) + a[i + 1] * tx * (1 - ty) + a[i + w1] * (1 - tx) * ty + a[i + w1 + 1] * tx * ty;
             sf[y * W + x] = cl(v * 10 - 5);
           }
         }
         await rest();
-        const ef = morph(sf, W, H, Math.max(1, Math.round(1.25 * k)), false); await rest();
+        const ef = morph(sf, W, H, Math.max(1, Math.round(OL.line * k)), false); await rest();
         const s8 = new Uint8ClampedArray(W * H), e8 = new Uint8ClampedArray(W * H);
         for (let i = 0; i < s8.length; i++) { s8[i] = sf[i] * 255; e8[i] = ef[i] * 255; }
-        const o = { img, W, H, s: s8, e: e8, w }; img._outline = o; outlines.add(o);
+        const o = { img, W, H, s: s8, e: e8, w, pad }; img._outline = o; outlines.add(o);
         paintOutline(o);
       }).catch(() => {}); // keep the live filter
     };
@@ -294,7 +305,6 @@
     // Idle time, one after the other, so it never lands on the logo intro or a scroll
     (window.requestIdleCallback || ((f) => setTimeout(f, 300)))(go, { timeout: 2500 });
   };
-  const repaintOutlines = () => outlines.forEach((o) => { if (o.img.isConnected) paintOutline(o); else outlines.delete(o); });
   // A new width (rotation, breakpoint): bake again at the new size
   let rebakeT = 0;
   addEventListener('resize', () => {
@@ -343,8 +353,12 @@
     let cur = 0, timer = null;
     const show = (i) => { const f = frames(); f[cur] && f[cur].classList.remove('is-on'); cur = (i + f.length) % f.length; f[cur].classList.add('is-on'); };
     frames().forEach((f, i) => f.classList.toggle('is-on', i === 0));
-    const stop = () => { clearInterval(timer); timer = null; root.setAttribute('aria-pressed', 'false'); };
-    const loop = () => { stop(); timer = setInterval(() => show(cur + 1), LOOP_MS); root.setAttribute('aria-pressed', 'true'); };
+    const stop = () => { clearTimeout(timer); timer = null; root.setAttribute('aria-pressed', 'false'); };
+    const loop = () => {
+      stop(); root.setAttribute('aria-pressed', 'true');
+      const next = () => { const n = frames().length; timer = setTimeout(() => { show(cur + 1); next(); }, dur(LOOP, cur, n)); };
+      next();
+    };
     const toggle = (e) => { if (html.classList.contains('is-drawing')) return; if (e) e.preventDefault(); timer ? stop() : loop(); };
     const key = (e) => { if (e.key === 'Enter' || e.key === ' ') toggle(e); };
     if (!root.hasAttribute('role')) root.setAttribute('role', 'button');
@@ -358,7 +372,8 @@
     else {
       let step = 0;
       const n = frames().length;
-      timer = setInterval(() => { step++; show(step); if (step >= n) { stop(); setTimeout(reveal, 150); } }, INTRO_MS);
+      const next = () => { timer = setTimeout(() => { step++; show(step); if (step >= n) { stop(); setTimeout(reveal, 150); } else next(); }, dur(INTRO, step, n)); };
+      next();
     }
 
     // Delegated, so it keeps working when the sign image is swapped for its inline SVG
@@ -422,10 +437,8 @@
       m.content = bg;
     });
     document.querySelectorAll('[data-theme-set]').forEach((b) => b.setAttribute('aria-pressed', b.getAttribute('data-theme-set') === name ? 'true' : 'false'));
-    if (outlines.size && name !== lastTheme) repaintOutlines();
-    lastTheme = name;
   };
-  let lastTheme = null;
+
   // Capture + stop: the dots are links with href="#", so nothing else (Swup, anchor scrolling) jumps to the top
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-theme-set]'); if (!b) return;
