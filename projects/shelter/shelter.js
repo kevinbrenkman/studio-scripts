@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.2 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.3 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -33,7 +33,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.2';
+  if (window.__shelter) return; window.__shelter = '0.9.3';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -624,7 +624,10 @@
     // Header prop "Drawing opacity" (0 = off, 100 = full) via data-draw-saved on the toggle; 25 when it is not set
     const savedOp = () => { const v = parseFloat(toggle.getAttribute('data-draw-saved')); return isNaN(v) ? 0.25 : Math.max(0, Math.min(1, v / 100)); };
     overlay.style.opacity = String(savedOp());
-    const onFrame = (e) => overlay.classList.toggle('is-off', e.detail !== 0);
+    // Header prop "Draw on any logo" (data-draw-any="True"): draw on whichever logo version shows, and the saved drawing
+    // stays on every version. Off (default): drawing always switches to the outline logo (version 1) and only shows there.
+    const anyLogo = () => /^true$/i.test(toggle.getAttribute('data-draw-any') || '');
+    const onFrame = (e) => overlay.classList.toggle('is-off', !anyLogo() && e.detail !== 0);
     root.addEventListener('logo:frame', onFrame);
     const toLogo = (e) => { const r = box(); return [Math.round((e.clientX - r.left) / r.width * W * 10) / 10, Math.round((e.clientY - r.top) / r.height * H * 10) / 10]; };
     // While drawing the whole document is the drawing surface; only the balloon and the hint stay clickable
@@ -655,8 +658,8 @@
     const click = (e) => {
       e.preventDefault(); e.stopImmediatePropagation(); reveal();
       if (!drawing) {
-        // Always draw on the outline logo (version 1), and show the saved drawing again
-        if (root._logoApi) { root._logoApi.stop(); root._logoApi.show(0); }
+        // Draw on the outline logo (version 1), or on the version that shows (Draw on any logo), and show the saved drawing again
+        if (root._logoApi) { root._logoApi.stop(); if (!anyLogo()) root._logoApi.show(0); }
         // The lines grow from their saved opacity to full (no dip to nothing first)
         const from = strokes.length && overlay.style.display !== 'none' ? savedOp() : 0;
         canvas.style.transition = 'none'; canvas.style.opacity = String(from); canvas.classList.remove('is-hidden');

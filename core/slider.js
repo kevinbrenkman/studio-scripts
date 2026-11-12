@@ -1,7 +1,7 @@
 /*!
- * slider.js 1.11.0 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.11.1 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
- * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.11.0.
+ * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.11.1.
  *
  * Works with core.js (Swup) and without it (plain Webflow site).
  * Loads Splide 4.1.4 itself, only on pages that have a slider. Splide's CSS is not needed.
@@ -26,7 +26,7 @@
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.11.0';
+  if (window.__studioSlider) return; window.__studioSlider = '1.11.1';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -109,8 +109,12 @@
     const d = parseDate(read(s, 'date')); if (d) d.setHours(0, 0, 0, 0); return d;
   };
   const orderByDate = (list) => {
-    const slides = [...list.children].map((el, i) => ({ el, i, t: whenOf(el), p: pinned(el) ? 0 : 1 }));
-    slides.sort((a, b) => (a.t ? a.t.getTime() : Infinity) - (b.t ? b.t.getTime() : Infinity) || a.p - b.p || a.i - b.i);
+    // Pinned slides count as today (first of the upcoming); among themselves they keep their own order: a weekly
+    // Monday + Thursday pair shows Thursday first on a Wednesday (data-slider-repeat), then by date.
+    const own = (el) => { const pin = el.hasAttribute('data-slider-pin') ? el.getAttribute('data-slider-pin') : null; if (pin !== null) el.setAttribute('data-slider-pin', 'false'); const t = whenOf(el); if (pin !== null) el.setAttribute('data-slider-pin', pin); return t; };
+    const ms = (t) => (t ? t.getTime() : Infinity);
+    const slides = [...list.children].map((el, i) => ({ el, i, t: whenOf(el), p: pinned(el) ? 0 : 1, o: pinned(el) ? own(el) : null }));
+    slides.sort((a, b) => ms(a.t) - ms(b.t) || a.p - b.p || ms(a.o) - ms(b.o) || a.i - b.i);
     slides.forEach((x) => list.appendChild(x.el));
     // Past events get data-slider-past (only when something is still coming): hidden on phones when there is no slider
     const t = today0(), any = slides.some((x) => x.t && x.t >= t);
