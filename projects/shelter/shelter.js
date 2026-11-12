@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.8.5 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.8.6 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -33,7 +33,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.8.5';
+  if (window.__shelter) return; window.__shelter = '0.8.6';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -112,9 +112,9 @@
       // Mouse: a red dot the size of the line instead of the arrow or link hand (set from JS, it follows the logo size)
       'html.is-drawing,html.is-drawing *{cursor:var(--sh-draw-cursor,crosshair)!important}',
       'html.is-drawing [data-draw-toggle],html.is-drawing [data-draw-toggle] *,html.is-drawing [data-draw-hint] button,html.is-drawing [data-theme-picker],html.is-drawing [data-theme-picker] *{cursor:pointer!important}',
-      // Colour picker while drawing: a halo in the page colour, so lines stop short of the dots (no drawing there)
-      '[data-theme-picker]::before{content:"";position:absolute;inset:-.75em;z-index:-1;border-radius:50em;background:var(--_colors---page);box-shadow:0 0 .75em .5em var(--_colors---page);opacity:0;pointer-events:none;transition:opacity .3s ease}',
-      'html.is-drawing [data-theme-picker]::before{opacity:1;pointer-events:auto}',
+      // Colour picker while drawing: an invisible zone around the dots, so a stroke can't start right next to them
+      '[data-theme-picker]::before{content:"";position:absolute;inset:-.75em;z-index:-1;border-radius:50em;pointer-events:none}',
+      'html.is-drawing [data-theme-picker]::before{pointer-events:auto}',
       // The scroll arrow does nothing while drawing
       'html.is-drawing [data-scroll-arrow]{pointer-events:none}',
       // The marker sits under the logo (the canvas comes first in [data-logo]); the logo lets the pointer through
