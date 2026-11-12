@@ -1,5 +1,5 @@
 /*!
- * slider.js 1.7.1 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.7.2 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
  * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.9.0.
  *
@@ -23,7 +23,7 @@
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.7.1';
+  if (window.__studioSlider) return; window.__studioSlider = '1.7.2';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -325,11 +325,16 @@
     if (attr(root, 'edge') !== 'fade') return null;
     const Move = sp.Components.Move, track = root.querySelector('.splide__track') || root;
     const slides = () => [...root.querySelectorAll('.splide__slide')];
+    // Where it is going (arrow, snap after a drag): only slides that will fit show. While dragging: a slide shows
+    // once more than half of it is inside, so the incoming one fades in as it comes, never an empty gap.
     const update = (dest) => {
       const t = track.getBoundingClientRect(), shift = dest == null ? 0 : Move.toPosition(dest) - Move.getPosition();
       slides().forEach((s) => {
         const r = s.getBoundingClientRect(), l = r.left + shift;
-        s.classList.toggle('is-edge-out', l < t.left - 2 || l + r.width > t.right + 2);
+        const out = dest == null
+          ? (Math.min(l + r.width, t.right) - Math.max(l, t.left)) < r.width * 0.5
+          : l < t.left - 2 || l + r.width > t.right + 2;
+        s.classList.toggle('is-edge-out', out);
       });
     };
     const onMove = (i) => update(i), now = () => update();
