@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.8.0 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.8.1 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -33,7 +33,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.8.0';
+  if (window.__shelter) return; window.__shelter = '0.8.1';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -100,7 +100,9 @@
       '[data-draw-layer].is-hidden{opacity:0}',
       'html.is-drawing body{background-color:transparent!important}',
       'html.is-drawing,html.is-drawing *{touch-action:none;-webkit-user-select:none;user-select:none}',
-      'html.is-drawing body{cursor:crosshair}',
+      // Mouse: a red dot the size of the line instead of the arrow or link hand (set from JS, it follows the logo size)
+      'html.is-drawing,html.is-drawing *{cursor:var(--sh-draw-cursor,crosshair)!important}',
+      'html.is-drawing [data-draw-toggle],html.is-drawing [data-draw-toggle] *,html.is-drawing [data-draw-hint] button{cursor:pointer!important}',
       // The marker sits under the logo (the canvas comes first in [data-logo]); the logo lets the pointer through
       'html.is-drawing [data-logo] [data-logo-frame],html.is-drawing [data-logo] [data-logo-frames]{pointer-events:none}',
       // The coming soon sign hangs over the logo: let the marker draw under it
@@ -332,7 +334,8 @@
   });
 
   /* ---------- Draw your Shelter ---------- */
-  const STROKE = 26, INK = '#ff0000', W = 1512, H = 520; // prototype: line width in logo px, red marker
+  const STROKE = 26, INK = '#ff0000', W = 1512, H = 520; // prototype: line width in logo px (mouse), red marker
+  const FINGER = 22; // touch: line width in screen px, about a fingertip
   const SAVE_SVG = 'https://cdn.jsdelivr.net/gh/kevinbrenkman/studio-scripts@7c00808/projects/shelter/assets/balloon-save.svg';
   const draw = (toggle) => {
     if (toggle._draw) return;
@@ -357,7 +360,7 @@
     let strokes = [], drawing = false, live = null;
     // Kept in this browser (localStorage), so the drawing is still there after a reload or another visit
     const DKEY = 'shelter-drawing', MAX = 400000;
-    try { const v = JSON.parse(localStorage.getItem(DKEY) || '[]'); if (Array.isArray(v)) strokes = v.filter((st) => Array.isArray(st) && st.length); } catch (e) {}
+    try { const v = JSON.parse(localStorage.getItem(DKEY) || '[]'); if (Array.isArray(v)) strokes = v.filter((st) => (Array.isArray(st) ? st : st && st.p) && (Array.isArray(st) ? st : st.p).length); } catch (e) {}
     const store = () => {
       try {
         let txt = JSON.stringify(strokes);
@@ -366,7 +369,10 @@
       } catch (e) {}
     };
 
-    const strokePath = (pts) => {
+    // A line is { w: width in logo px, p: points } (older saved lines are a bare points array at the mouse width)
+    const strokePath = (st) => {
+      const pts = Array.isArray(st) ? st : st.p;
+      ctx.lineWidth = Array.isArray(st) ? STROKE : st.w;
       ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
       if (pts.length === 1) ctx.lineTo(pts[0][0] + 0.01, pts[0][1]);
       for (let i = 1; i < pts.length - 1; i++) { // smooth through the midpoints
@@ -382,20 +388,25 @@
       const dpr = canvas.width / Math.max(1, canvas.getBoundingClientRect().width), b = box(), c = canvas.getBoundingClientRect();
       ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.setTransform(dpr * b.width / W, 0, 0, dpr * b.height / H, dpr * (b.left - c.left), dpr * (b.top - c.top));
-      ctx.strokeStyle = INK; ctx.lineWidth = STROKE; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.strokeStyle = INK; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       strokes.forEach(strokePath);
     };
     const size = () => {
       const r = canvas.getBoundingClientRect(), dpr = devicePixelRatio || 1;
       canvas.width = Math.max(1, Math.round(r.width * dpr)); canvas.height = Math.max(1, Math.round(r.height * dpr));
+      if (FINE) { // the cursor dot matches the line width on screen
+        const d = Math.max(6, Math.min(64, Math.round(STROKE * box().width / W))), c = d / 2 + 1, n = d + 2;
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + n + '" height="' + n + '"><circle cx="' + c + '" cy="' + c + '" r="' + (d / 2) + '" fill="' + INK + '" stroke="#fff" stroke-width="1"/></svg>';
+        document.documentElement.style.setProperty('--sh-draw-cursor', 'url("data:image/svg+xml,' + encodeURIComponent(svg) + '") ' + Math.round(c) + ' ' + Math.round(c) + ', crosshair');
+      }
       redraw();
     };
     const toLogo = (e) => { const r = box(); return [Math.round((e.clientX - r.left) / r.width * W * 10) / 10, Math.round((e.clientY - r.top) / r.height * H * 10) / 10]; };
     // While drawing the whole document is the drawing surface; only the balloon and the hint stay clickable
     const UI = '[data-draw-toggle],[data-draw-hint]';
     const isUI = (e) => e.target.closest && e.target.closest(UI);
-    const down = (e) => { if (!drawing || isUI(e) || (e.button && e.button !== 0)) return; e.preventDefault(); e.stopPropagation(); live = [toLogo(e)]; strokes.push(live); redraw(); };
-    const move = (e) => { if (!live) return; e.preventDefault(); const co = e.getCoalescedEvents ? e.getCoalescedEvents() : []; (co.length ? co : [e]).forEach((ev) => live.push(toLogo(ev))); redraw(); };
+    const down = (e) => { if (!drawing || isUI(e) || (e.button && e.button !== 0)) return; e.preventDefault(); e.stopPropagation(); live = { w: e.pointerType === 'touch' ? Math.round(FINGER * W / Math.max(1, box().width)) : STROKE, p: [toLogo(e)] }; strokes.push(live); redraw(); };
+    const move = (e) => { if (!live) return; e.preventDefault(); const co = e.getCoalescedEvents ? e.getCoalescedEvents() : []; (co.length ? co : [e]).forEach((ev) => live.p.push(toLogo(ev))); redraw(); };
     const end = () => { if (live) { live = null; store(); } };
     const swallow = (e) => { if (drawing && !isUI(e)) { e.preventDefault(); e.stopPropagation(); } }; // no links, logo cycling, cards
     document.addEventListener('pointerdown', down, true);

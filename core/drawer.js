@@ -1,5 +1,5 @@
 /*!
- * drawer.js 1.4.0 (kevinbrenkman/studio-scripts/core)
+ * drawer.js 1.4.1 (kevinbrenkman/studio-scripts/core)
  * Side panel with its own URL, filled from a CMS template page. Ported from the Shelter prototype (Onkruid).
  *
  * How it works
@@ -28,13 +28,14 @@
  *   cannot scroll meanwhile). iOS Safari 26 tints its toolbars after fixed layers; with an absolute layer it keeps its
  *   see-through toolbars. The touchmove lock is only attached while the drawer is open (a permanent non-passive
  *   touchmove listener makes all scrolling on iOS wait for JS).
+ *   The scrim is stretched 25vh past the top and bottom, so the page under Safari's see-through bars is dimmed too.
  * Closed: once it has slid out the drawer gets display:none (inline, live only). iOS Safari 26 tints its toolbars
  *   from fixed elements on screen, so a closed drawer left in place kept the bars in the drawer colour.
  * Focus: the close button gets focus (and the card gets it back) only for keyboard users, so no ring after a tap.
  * Works with core.js (Swup) and without it.
  */
 (() => {
-  if (window.__studioDrawer) return; window.__studioDrawer = '1.4.0';
+  if (window.__studioDrawer) return; window.__studioDrawer = '1.4.1';
   window.App = window.App || { inits: [], destroys: [] };
   const CFG = window.CORE_CONFIG || {};
   const html = document.documentElement;
@@ -86,8 +87,19 @@
   const tidy = () => {};
   let parkT = 0;
   // Touch: pin the drawer as an absolute layer at the scroll position instead of a fixed one (see the header)
-  const pin = (d) => { if (FINE || !d) return; Object.assign(d.style, { position: 'absolute', top: scrollY + 'px', bottom: 'auto', height: innerHeight + 'px' }); };
-  const unpin = (d) => { if (d) ['position', 'top', 'bottom', 'height'].forEach((k) => d.style.removeProperty(k)); };
+  // innerHeight stops above Safari's floating toolbar, so the scrim is stretched past both edges: the page that shows
+  // through the see-through bars is dimmed too (one tone instead of a light strip under the bar)
+  const scrimOf = (d) => d && d.querySelector(':scope > [data-drawer-close]');
+  const pin = (d) => {
+    if (FINE || !d) return;
+    Object.assign(d.style, { position: 'absolute', top: scrollY + 'px', bottom: 'auto', height: innerHeight + 'px' });
+    const s = scrimOf(d); if (s) Object.assign(s.style, { top: '-25vh', bottom: '-25vh' });
+  };
+  const unpin = (d) => {
+    if (!d) return;
+    ['position', 'top', 'bottom', 'height'].forEach((k) => d.style.removeProperty(k));
+    const s = scrimOf(d); if (s) ['top', 'bottom'].forEach((k) => s.style.removeProperty(k));
+  };
   const blockTouch = (e) => { if (e.target.closest && e.target.closest('[data-drawer-panel]')) return; if (e.cancelable) e.preventDefault(); };
   const touchLock = (on) => { if (FINE) return; if (on) document.addEventListener('touchmove', blockTouch, { passive: false }); else document.removeEventListener('touchmove', blockTouch); };
   const park = (d) => { clearTimeout(parkT); touchLock(false); parkT = setTimeout(() => { if (d && !d.classList.contains('is-open')) { d.style.display = 'none'; unpin(d); } }, DUR + 60); };
