@@ -1,5 +1,5 @@
 /*!
- * drawer.js 1.1.2 (kevinbrenkman/studio-scripts/core)
+ * drawer.js 1.2.0 (kevinbrenkman/studio-scripts/core)
  * Side panel with its own URL, filled from a CMS template page. Ported from the Shelter prototype (Onkruid).
  *
  * How it works
@@ -22,15 +22,22 @@
  * [data-drawer-panel] and its scrim ([data-drawer] > [data-drawer-close]). Style the closed state on the base
  * classes and the open state on the .is-open combos (with their transitions). Keep .is-open on in the Designer.
  * Direct entry: the homepage behind it scrolls to CORE_CONFIG.DRAWER_ANCHOR ('#radar'), minus DRAWER_OFFSET (em).
- * State: html.is-drawer-open (scroll lock). Lenis stops while open. Works with core.js (Swup) and without it.
+ * State: html.is-drawer-open. Scroll lock: mouse devices stop Lenis + overflow hidden; touch devices only block touch
+ *   scrolling outside the panel (iOS Safari: changing the root overflow makes its toolbars turn into solid bars).
+ * Focus: the close button gets focus (and the card gets it back) only for keyboard users, so no ring after a tap.
+ * Works with core.js (Swup) and without it.
  */
 (() => {
-  if (window.__studioDrawer) return; window.__studioDrawer = '1.1.2';
+  if (window.__studioDrawer) return; window.__studioDrawer = '1.2.0';
   window.App = window.App || { inits: [], destroys: [] };
   const CFG = window.CORE_CONFIG || {};
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const DUR = RM ? 0 : 550;
+  const FINE = matchMedia('(hover: hover) and (pointer: fine)').matches; // mouse: Lenis + overflow lock; touch: touchmove lock
+  let kbd = false; // last input was the keyboard
+  addEventListener('keydown', (e) => { if (e.key === 'Tab' || e.key === 'Enter' || e.key === ' ') kbd = true; }, true);
+  addEventListener('pointerdown', () => { kbd = false; }, true);
   const cache = new Map();
 
   if (!document.getElementById('studio-drawer-css')) {
@@ -39,7 +46,8 @@
     st.textContent =
       // Only behaviour here; every visual state is a Webflow class (.is-open combos)
       'html.is-drawer-instant [data-drawer],html.is-drawer-instant [data-drawer] *{transition:none!important}' +
-      'html.is-drawer-open{overflow:hidden}';
+      '@media (hover:hover) and (pointer:fine){html.is-drawer-open{overflow:hidden}}' +
+      '[data-drawer-panel]:focus{outline:none}';
     document.head.appendChild(st);
   }
 
@@ -80,9 +88,11 @@
       html.classList.add('is-drawer-open');
       setOpen(drawer, true);
       const panel = drawer.querySelector('[data-drawer-panel]'); if (panel) panel.scrollTop = 0;
+      // Keyboard: focus the close button. Touch/mouse: focus the panel itself (screen readers land in it, no ring)
       const btn = drawer.querySelector('[data-drawer-panel] [data-drawer-close]');
-      if (btn) btn.focus({ preventScroll: true });
-      if (window.lenis) lenis.stop();
+      if (kbd && btn) btn.focus({ preventScroll: true });
+      else if (panel) { if (!panel.hasAttribute('tabindex')) panel.setAttribute('tabindex', '-1'); panel.focus({ preventScroll: true }); }
+      if (window.lenis && FINE) lenis.stop();
       if (instant) requestAnimationFrame(() => html.classList.remove('is-drawer-instant'));
     });
   };
@@ -91,7 +101,8 @@
     html.classList.remove('is-drawer-open');
     if (drawer) setOpen(drawer, false);
     if (window.lenis) lenis.start();
-    if (returnFocus && returnFocus.isConnected) returnFocus.focus({ preventScroll: true });
+    if (returnFocus && returnFocus.isConnected && kbd) returnFocus.focus({ preventScroll: true });
+    else if (document.activeElement && drawer && drawer.contains(document.activeElement)) document.activeElement.blur();
     returnFocus = null;
     document.title = homeTitle;
     if (fromPop) return;
@@ -139,7 +150,7 @@
           if (!anchor.isConnected || !html.classList.contains('is-drawer-open')) return;
           const fs = parseFloat(getComputedStyle(document.body).fontSize) || 16;
           const y = Math.max(0, anchor.getBoundingClientRect().top + scrollY - (parseFloat(CFG.DRAWER_OFFSET) || 0) * fs);
-          if (window.lenis) { lenis.resize(); lenis.start(); lenis.scrollTo(y, { immediate: true, force: true }); lenis.stop(); }
+          if (window.lenis) { lenis.resize(); lenis.start(); lenis.scrollTo(y, { immediate: true, force: true }); if (FINE) lenis.stop(); }
           else scrollTo(0, y);
         };
         requestAnimationFrame(go);
@@ -167,6 +178,11 @@
     if (link) fetchDoc(urlFor(link)).catch(() => {});                                  // prefetch on hover
   }, true);
   addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  // Touch scroll lock: the page behind does not move, the panel scrolls (overscroll-behavior: contain on the panel)
+  document.addEventListener('touchmove', (e) => {
+    if (!html.classList.contains('is-drawer-open') || (e.target.closest && e.target.closest('[data-drawer-panel]'))) return;
+    if (e.cancelable) e.preventDefault();
+  }, { passive: false });
   addEventListener('popstate', (e) => {
     const st = e.state;
     if (st && st.source === 'drawer' && st.drawer) { pushed = false; show(st.drawer, { push: false }); }

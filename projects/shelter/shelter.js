@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.5.1 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.6.0 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -11,7 +11,7 @@
  * Reveal (after the logo intro, or as soon as you scroll): html.is-revealed + 'shelter:reveal' on document
  *   [data-reveal="sign"]        grows from its nail, swings on hover
  *   [data-reveal="pop"]         pops in (the draw balloon)
- *   [data-reveal="product"]     outline drawing first, then the photo pops in (staggered in DOM order)
+ *   [data-reveal="product"]     outline drawing first, then the photo pops in, when it scrolls into view (.is-in)
  *     [data-reveal-outline]     the outline drawing inside it
  *   data-hover-tilt="-4"        on a product: scale + rotate (deg) on hover
  * Idle + hover
@@ -28,11 +28,12 @@
  *   [data-scroll-arrow]         scrolls down one screen, flips up at the bottom and goes to the top
  * Draw your Shelter (prototype: red marker on the outline logo, under the logo's black line)
  *   [data-draw-toggle]          the balloon: draw / "save it" (the drawing fades out, drawing again brings it back)
+ *     data-draw-mobile="false"  hidden under 768px (Global embed CSS, bound to the Header prop "Draw on mobile")
  *   Live only, built by this file: the canvas inside [data-logo], the "save it" balloon, the hint with "Wissen".
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.5.1';
+  if (window.__shelter) return; window.__shelter = '0.6.0';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -68,8 +69,9 @@
       '[data-reveal="product"]{transition:scale .5s ' + SPRING + ',rotate .5s ' + SPRING + '}',
       '[data-reveal="product"] img:not([data-reveal-outline]){transition:opacity .3s ease var(--sh-d,0s),scale .7s ' + SPRING + ' var(--sh-d,0s),rotate .7s ' + SPRING + ' var(--sh-d,0s)}',
       '[data-reveal-outline]{pointer-events:none;transition:opacity .3s ease var(--sh-d,0s),scale .45s ease var(--sh-d,0s)}',
-      'html.is-revealed [data-reveal-outline]{opacity:0;scale:1.1}',
-      '@media (hover:hover){html.is-revealed [data-hover-tilt]:hover{scale:1.08;rotate:var(--sh-tilt,0deg)}}',
+      // Products play in when they scroll into view (.is-in), not all at once on load
+      '[data-reveal="product"].is-in [data-reveal-outline]{opacity:0;scale:1.1}',
+      '@media (hover:hover){[data-reveal="product"].is-in[data-hover-tilt]:hover{scale:1.08;rotate:var(--sh-tilt,0deg)}}',
       // Idle + hover
       '[data-bob]{animation:sh-bob 3.4s ease-in-out infinite}',
       '[data-hover-grow]{transition:scale .45s ' + SPRING + '}',
@@ -78,7 +80,7 @@
       '@keyframes sh-ticker{to{transform:translateX(-50%)}}',
       '[data-ticker].is-ticking{overflow:hidden;white-space:nowrap}',
       '[data-ticker] [data-ticker-track]{display:inline-flex;animation:sh-ticker 18s linear infinite}',
-      '[data-ticker] [data-ticker-track]>span{padding-right:1.75em}',
+      '[data-ticker] [data-ticker-track]>span{padding-right:1em}',
       // Inline SVG: white fill follows the page colour
       '[data-inline-svg-done]{color:var(--_colors---page)}',
       // Colour dots
@@ -129,6 +131,24 @@
   addEventListener('wheel', (e) => { if (e.deltaY > 0) reveal(); }, { passive: true });
   addEventListener('touchmove', reveal, { passive: true });
   addEventListener('keydown', (e) => { if (['ArrowDown', 'PageDown', ' ', 'End'].includes(e.key)) reveal(); });
+
+  /* ---------- Products: play in on scroll into view (after the logo intro) ---------- */
+  let seen = [], io = null;
+  const playIn = () => {
+    if (!revealed || !seen.length) return;
+    seen.forEach((p, i) => { p.style.setProperty('--sh-d', (i * 0.12) + 's'); p.classList.add('is-in'); }); // stagger the ones that come in together
+    seen = [];
+  };
+  document.addEventListener('shelter:reveal', playIn);
+  const product = (p) => {
+    if (p._in) return; p._in = true;
+    if (RM || !('IntersectionObserver' in window)) { p.classList.add('is-in'); return; }
+    if (!io) io = new IntersectionObserver((entries) => {
+      entries.forEach((en) => { if (en.isIntersecting) { io.unobserve(en.target); seen.push(en.target); } });
+      playIn();
+    }, { threshold: 0.25, rootMargin: '0px 0px -8% 0px' });
+    io.observe(p);
+  };
 
   /* ---------- Inline SVG ---------- */
   const svgCache = new Map();
@@ -402,9 +422,9 @@
     const s = scope || document;
     document.querySelectorAll('img[data-inline-svg]').forEach(inline); // also the fixed UI outside #swup
     s.querySelectorAll('[data-outline-text]').forEach(splitWords);
-    s.querySelectorAll('[data-reveal="product"]').forEach((p, i) => {
-      p.style.setProperty('--sh-d', (i * 0.12) + 's');
+    s.querySelectorAll('[data-reveal="product"]').forEach((p) => {
       const t = p.getAttribute('data-hover-tilt'); if (t) p.style.setProperty('--sh-tilt', t + 'deg');
+      product(p);
     });
     s.querySelectorAll('[data-hover-grow]').forEach((el) => { const v = el.getAttribute('data-hover-grow'); if (v) el.style.setProperty('--sh-grow', v); });
     s.querySelectorAll('[data-ticker]').forEach(ticker);
