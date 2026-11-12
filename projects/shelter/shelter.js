@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.7.0 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.7.1 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -33,7 +33,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.7.0';
+  if (window.__shelter) return; window.__shelter = '0.7.1';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -155,7 +155,7 @@
     if (!io) io = new IntersectionObserver((entries) => {
       entries.forEach((en) => { if (en.isIntersecting) { io.unobserve(en.target); seen.push(en.target); } });
       playIn();
-    }, { threshold: 0.25, rootMargin: '0px 0px -8% 0px' });
+    }, { threshold: 0.5, rootMargin: '0px 0px -12% 0px' }); // well inside the screen, so the pop is seen (on a phone too)
     io.observe(p);
   };
 

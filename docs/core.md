@@ -258,8 +258,15 @@ No classes as JS hooks. Classes are for styling, attributes for behaviour, so a 
    @media (max-width: 767px) { input, select, textarea { font-size: 16px !important; } }   /* iOS: no zoom on focus */
    ```
 7. Create `studio-scripts/projects/<project>/<project>.js`, add modules with `App.register`.
-8. Test: hard refresh on every page, then click through every page via Swup, back button, anchor links, every form.
-9. Pin the commit hash in the footer before handover (same hash for every studio-scripts file).
+8. Utility pages, in the project's design language (same type, colours, Global component, top-left layout like Shelter):
+   - **404** (Pages > Utility Pages > 404): a short "page not found" line, a link back home, the footer line and button.
+   - **Password** (Pages > Utility Pages > Password): the same layout with Webflow's password form, styled with the project's classes.
+   Build them on the utility pages themselves (open them in the Designer), never as a static page with slug `404`.
+9. Designer = live: after every change, compare the Designer and the live site at every breakpoint. Script-only layout
+   (marquees, tickers, inlined SVGs) needs a Webflow class or a canvas embed so the Designer shows the same thing.
+10. Test: hard refresh on every page, then click through every page via Swup, back button, anchor links, every form,
+    a missing URL (404) and the password page. On a real iPhone: Safari toolbars, fixed elements, modals.
+11. Pin the commit hash in the footer before handover (same hash for every studio-scripts file).
 
 ---
 
