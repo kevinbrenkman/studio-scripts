@@ -1,5 +1,5 @@
 /*!
- * slider.js 1.7.2 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.7.3 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
  * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.9.0.
  *
@@ -23,7 +23,7 @@
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.7.2';
+  if (window.__studioSlider) return; window.__studioSlider = '1.7.3';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -345,8 +345,9 @@
     const follow = () => { update(); raf = performance.now() < until ? requestAnimationFrame(follow) : 0; };
     const wheel = () => { until = performance.now() + 900; if (!raf) raf = requestAnimationFrame(follow); };
     root.addEventListener('wheel', wheel, { passive: true });
-    now();
-    return () => { removeEventListener('resize', now); root.removeEventListener('wheel', wheel); cancelAnimationFrame(raf); slides().forEach((s) => s.classList.remove('is-edge-out')); };
+    // Splide puts the list on its start slide after 'mounted' without an event: check again once that has landed
+    now(); requestAnimationFrame(now); const t1 = setTimeout(now, 400);
+    return () => { clearTimeout(t1); removeEventListener('resize', now); root.removeEventListener('wheel', wheel); cancelAnimationFrame(raf); slides().forEach((s) => s.classList.remove('is-edge-out')); };
   };
 
   /* ---------- Arrows ---------- */
