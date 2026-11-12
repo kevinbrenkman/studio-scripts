@@ -1,7 +1,7 @@
 /*!
- * slider.js 1.11.1 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.12.0 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
- * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.11.1.
+ * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.12.0.
  *
  * Works with core.js (Swup) and without it (plain Webflow site).
  * Loads Splide 4.1.4 itself, only on pages that have a slider. Splide's CSS is not needed.
@@ -26,7 +26,7 @@
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.11.1';
+  if (window.__studioSlider) return; window.__studioSlider = '1.12.0';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -95,7 +95,17 @@
     }
     const t = new Date(v); return isNaN(t) ? null : t;
   };
-  const weekday = (v) => { v = (v || '').trim().toLowerCase(); if (!v) return -1; return DAYS.findIndex((k) => new RegExp('^(' + k + ')').test(v.replace(/^elke\s+|^every\s+/, ''))); };
+  // Weekly days from a label: "Donderdag", "Elke donderdag", "Elke maandag en donderdag", "Every Thursday".
+  // Only a bare day list or one that starts with elke/iedere/every counts, so "Zaterdag 21 november" stays a one-off.
+  const weekdays = (v) => {
+    v = (v || '').trim().toLowerCase(); if (!v) return [];
+    const every = /^(elke|iedere|every)\s+/.test(v), rest = v.replace(/^(elke|iedere|every)\s+/, '');
+    const words = rest.split(/\s*(?:,|&|\+|\ben\b|\band\b)\s*/).filter(Boolean);
+    const idx = words.map((w) => DAYS.findIndex((k) => new RegExp('^(' + k + ')[a-z]*$').test(w)));
+    if (!idx.length || idx.some((i) => i < 0)) return every ? idx.filter((i) => i > -1) : [];
+    return idx;
+  };
+  const weekday = (v) => { const d = weekdays(v); return d.length ? d[0] : -1; };
   const today0 = () => { const t = new Date(); t.setHours(0, 0, 0, 0); return t; };
   const read = (s, k) => { const el = s.matches('[data-slider-' + k + ']') ? s : s.querySelector('[data-slider-' + k + ']'); return el ? el.getAttribute('data-slider-' + k) : ''; };
   // When a slide happens: its date, or for a weekly event the next time it's on (today counts)
@@ -104,8 +114,8 @@
   const pinned = (s) => /^(true|1|yes|on|ja)$/i.test((read(s, 'pin') || '').trim());
   const whenOf = (s) => {
     if (pinned(s)) return today0();
-    const wd = weekday(read(s, 'repeat'));
-    if (wd > -1) { const t = today0(); t.setDate(t.getDate() + ((wd - t.getDay() + 7) % 7)); return t; }
+    const wds = weekdays(read(s, 'repeat'));
+    if (wds.length) { const t0 = today0(), ahead = Math.min(...wds.map((wd) => (wd - t0.getDay() + 7) % 7)); t0.setDate(t0.getDate() + ahead); return t0; }
     const d = parseDate(read(s, 'date')); if (d) d.setHours(0, 0, 0, 0); return d;
   };
   const orderByDate = (list) => {
