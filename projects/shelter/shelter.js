@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.8.9 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.0 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -33,7 +33,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.8.9';
+  if (window.__shelter) return; window.__shelter = '0.9.0';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -364,7 +364,7 @@
       if (img.alt) { svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', img.alt); } else svg.setAttribute('aria-hidden', 'true');
       if (img.classList.contains('is-on')) svg.classList.add('is-on');
       img.replaceWith(document.importNode(svg, true));
-    }).catch(() => {});
+    }).catch(() => { img.setAttribute('data-inline-svg-failed', ''); }); // the site head shows the plain image again
   };
 
   /* ---------- Logo ---------- */
