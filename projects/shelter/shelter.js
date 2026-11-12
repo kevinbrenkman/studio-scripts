@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.8.4 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.8.5 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -33,7 +33,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.8.4';
+  if (window.__shelter) return; window.__shelter = '0.8.5';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -42,7 +42,7 @@
   const SPRING = 'cubic-bezier(.34,1.56,.64,1)';
   // Logo versions: the load pass starts fast and slows towards the end; the click loop holds each version longer and
   // also slows towards the end of every round (ms per version = from + (to - from) * position^curve)
-  const INTRO = { from: 70, to: 260, curve: 2.2 }, LOOP = { from: 160, to: 340, curve: 2 };
+  const INTRO = { from: 60, to: 220, curve: 2.2 }, LOOP = { from: 130, to: 280, curve: 2 };
   const dur = (t, i, n) => t.from + (t.to - t.from) * Math.pow(n > 1 ? i / (n - 1) : 1, t.curve);
   const KEY = 'shelter-theme';
   html.classList.add('is-shelter-js');
@@ -124,7 +124,9 @@
       // Hint (prototype): fixed at the bottom while drawing. Same font and weight as the pills
       '[data-draw-hint]{position:fixed;left:50%;bottom:calc(1.25em + env(safe-area-inset-bottom,0px));z-index:12;display:flex;gap:.375em;align-items:center;opacity:0;transform:translate(-50%,.75em);pointer-events:none;transition:opacity .25s ease,transform .35s ' + SPRING + '}',
       'html.is-drawing [data-draw-hint]{opacity:1;transform:translate(-50%,0);pointer-events:auto}',
-      '[data-draw-hint]>*{box-sizing:border-box;height:2em;margin:0;padding:0 .8em;display:inline-flex;align-items:center;border:1px solid var(--_colors---ink);border-radius:50em;font-family:var(--_typography---font-round);font-weight:400;font-size:1.25em;line-height:1;letter-spacing:-.03em;white-space:nowrap}',
+      '[data-outline-text].is-words-wait [data-outline-word]{display:inline-block;transition:transform .75s ' + SPRING + ',opacity .3s ease;transition-delay:calc(var(--i,0) * 70ms)}',
+      '[data-outline-text].is-words-wait:not(.is-words-in) [data-outline-word]{opacity:0;transform:translateY(.3em) scale(.7)}',
+      '[data-draw-hint]>*{box-sizing:border-box;height:2em;margin:0;padding:0 .8em;display:inline-flex;align-items:center;border:2px solid var(--_colors---ink);border-radius:50em;font-family:var(--_typography---font-round);font-weight:400;font-size:1.25em;line-height:1;letter-spacing:-.03em;white-space:nowrap}',
       '[data-draw-hint]>span{background:var(--_colors---ink);color:var(--_colors---page)}',
       '[data-draw-hint]>button{background:var(--_colors---page);color:var(--_colors---ink);cursor:pointer;transition:transform .25s ' + SPRING + '}',
       '@media (hover:hover){[data-draw-hint]>button:hover{transform:scale(1.06)}}',
@@ -266,6 +268,7 @@
   };
   const bakeOutline = (img) => {
     if (img._bake) return; img._bake = 1;
+    if (/\.svg(\?|$)/i.test(img.currentSrc || img.src)) return; // a drawn outline from the design (Outline prop): nothing to bake
     const run = () => {
       const w = img.offsetWidth, h = img.offsetHeight; if (!w || !h) { img._bake = 0; return; }
       const src = new Image(); src.crossOrigin = 'anonymous';
@@ -405,7 +408,14 @@
       });
       t.replaceWith(frag);
     });
+    el.querySelectorAll('[data-outline-word]').forEach((w, i) => w.style.setProperty('--i', i));
+    wordsIn(el);
   };
+  // Outline headings: the words spring up one after the other when the heading comes into view (live only)
+  const wordsIO = 'IntersectionObserver' in window && !RM ? new IntersectionObserver((es) => es.forEach((e) => {
+    if (e.isIntersecting) { e.target.classList.add('is-words-in'); wordsIO.unobserve(e.target); }
+  }), { threshold: 0.35 }) : null;
+  const wordsIn = (el) => { if (wordsIO) { el.classList.add('is-words-wait'); wordsIO.observe(el); } };
 
   /* ---------- Ticker (mobile) ---------- */
   const ticker = (el) => {
