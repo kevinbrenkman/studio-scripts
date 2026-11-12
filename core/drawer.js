@@ -1,5 +1,5 @@
 /*!
- * drawer.js 1.4.1 (kevinbrenkman/studio-scripts/core)
+ * drawer.js 1.5.0 (kevinbrenkman/studio-scripts/core)
  * Side panel with its own URL, filled from a CMS template page. Ported from the Shelter prototype (Onkruid).
  *
  * How it works
@@ -22,8 +22,9 @@
  * [data-drawer-panel] and its scrim ([data-drawer] > [data-drawer-close]). Style the closed state on the base
  * classes and the open state on the .is-open combos (with their transitions). Keep .is-open on in the Designer.
  * Direct entry: the homepage behind it scrolls to CORE_CONFIG.DRAWER_ANCHOR ('#radar'), minus DRAWER_OFFSET (em).
- * State: html.is-drawer-open. Scroll lock: mouse devices stop Lenis + overflow hidden; touch devices only block touch
- *   scrolling outside the panel (iOS Safari: changing the root overflow makes its toolbars turn into solid bars).
+ * State: html.is-drawer-open. Scroll lock: mouse devices stop Lenis + overflow hidden; touch devices block touch
+ *   scrolling outside the panel, and inside it at its top or bottom (else iOS hands the swipe to the page). No root
+ *   overflow change (iOS Safari: that turns its toolbars into solid bars).
  * Touch devices: the open drawer is not position:fixed but absolute, pinned at the current scroll position (the page
  *   cannot scroll meanwhile). iOS Safari 26 tints its toolbars after fixed layers; with an absolute layer it keeps its
  *   see-through toolbars. The touchmove lock is only attached while the drawer is open (a permanent non-passive
@@ -35,7 +36,7 @@
  * Works with core.js (Swup) and without it.
  */
 (() => {
-  if (window.__studioDrawer) return; window.__studioDrawer = '1.4.1';
+  if (window.__studioDrawer) return; window.__studioDrawer = '1.5.0';
   window.App = window.App || { inits: [], destroys: [] };
   const CFG = window.CORE_CONFIG || {};
   const html = document.documentElement;
@@ -100,8 +101,24 @@
     ['position', 'top', 'bottom', 'height'].forEach((k) => d.style.removeProperty(k));
     const s = scrimOf(d); if (s) ['top', 'bottom'].forEach((k) => s.style.removeProperty(k));
   };
-  const blockTouch = (e) => { if (e.target.closest && e.target.closest('[data-drawer-panel]')) return; if (e.cancelable) e.preventDefault(); };
-  const touchLock = (on) => { if (FINE) return; if (on) document.addEventListener('touchmove', blockTouch, { passive: false }); else document.removeEventListener('touchmove', blockTouch); };
+  // Touch lock: no page scroll while open. Inside the panel a swipe only goes through while the panel itself can still
+  // scroll that way; at its top or bottom (or when it all fits) iOS would otherwise hand the swipe to the page
+  let touchY = 0;
+  const touchStart = (e) => { touchY = e.touches[0] ? e.touches[0].clientY : 0; };
+  const blockTouch = (e) => {
+    const p = e.target.closest && e.target.closest('[data-drawer-panel]');
+    if (p && e.touches.length === 1) {
+      const dy = e.touches[0].clientY - touchY;
+      const top = p.scrollTop <= 0, end = p.scrollTop + p.clientHeight >= p.scrollHeight - 1;
+      if (!((dy > 0 && top) || (dy < 0 && end))) return; // the panel scrolls itself
+    }
+    if (e.cancelable) e.preventDefault();
+  };
+  const touchLock = (on) => {
+    if (FINE) return;
+    if (on) { document.addEventListener('touchstart', touchStart, { passive: true }); document.addEventListener('touchmove', blockTouch, { passive: false }); }
+    else { document.removeEventListener('touchstart', touchStart); document.removeEventListener('touchmove', blockTouch); }
+  };
   const park = (d) => { clearTimeout(parkT); touchLock(false); parkT = setTimeout(() => { if (d && !d.classList.contains('is-open')) { d.style.display = 'none'; unpin(d); } }, DUR + 60); };
   const unpark = (d) => { clearTimeout(parkT); if (d) { d.style.removeProperty('display'); pin(d); } touchLock(true); };
 
@@ -132,16 +149,24 @@
     returnFocus = null;
     document.title = homeTitle;
     if (fromPop) return;
-    if (pushed) { pushed = false; history.back(); }                                   // opened from the home: go back
+    if (pushed) { pushed = false; goingBack(); history.back(); }                      // opened from the home: go back
     else history.replaceState({ source: 'drawer', home: true }, '', homeUrl(drawer)); // opened directly: become the home
   };
 
+  // history.back() lands a moment later (popstate). A card tapped in that moment would be closed again by that popstate,
+  // or its new entry popped: wait for the back to land first, then open
+  let backDone = null, backing = null;
+  const goingBack = () => {
+    backing = new Promise((res) => { backDone = () => { backDone = null; backing = null; res(); }; });
+    setTimeout(() => backDone && backDone(), 500); // safety: a back that never fires
+  };
   const place = (fresh) => {
     if (drawer && drawer !== fresh) drawer.replaceWith(fresh); else if (!drawer) document.body.appendChild(fresh);
     drawer = fresh;
   };
 
-  const show = (url, { push = true, from = null } = {}) => fetchDoc(url).then((doc) => {
+  const show = (url, opts = {}) => (backing && opts.push !== false ? backing.then(() => show(url, opts)) : showNow(url, opts));
+  const showNow = (url, { push = true, from = null } = {}) => fetchDoc(url).then((doc) => {
     const d = doc.querySelector('[data-drawer]'); if (!d) { location.href = url; return; }
     const wasOpen = html.classList.contains('is-drawer-open');
     const fresh = document.importNode(d, true);
@@ -200,18 +225,27 @@
     }
     if (e.target.closest('[data-drawer-close]') && drawer && drawer.contains(e.target)) { e.preventDefault(); e.stopImmediatePropagation(); close(); }
   }, true);
-  document.addEventListener('pointerenter', (e) => {
+  const prefetch = (e) => {
     const link = e.target.closest && e.target.closest('[data-drawer-link]');
-    if (link) fetchDoc(urlFor(link)).catch(() => {});                                  // prefetch on hover
-  }, true);
+    if (link) fetchDoc(urlFor(link)).catch(() => {});
+  };
+  document.addEventListener('pointerenter', prefetch, true);                           // prefetch on hover
+  document.addEventListener('touchstart', prefetch, { passive: true, capture: true }); // and on the finger going down
+  // Phones: fetch the cards that come near the screen in idle time, so a tap opens at once (no wait, no second tap)
+  const near = !FINE && 'IntersectionObserver' in window ? new IntersectionObserver((es) => es.forEach((en) => {
+    if (!en.isIntersecting) return; near.unobserve(en.target);
+    (window.requestIdleCallback || ((f) => setTimeout(f, 200)))(() => fetchDoc(urlFor(en.target)).catch(() => {}));
+  }), { rootMargin: '400px 0px' }) : null;
   addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
   addEventListener('popstate', (e) => {
+    if (backDone) { backDone(); return; } // our own close
     const st = e.state;
     if (st && st.source === 'drawer' && st.drawer) { pushed = false; show(st.drawer, { push: false }); }
     else if (html.classList.contains('is-drawer-open')) { pushed = false; close(true); }
   });
 
-  const init = () => {
+  const init = (scope = document) => {
+    if (near) (scope || document).querySelectorAll('[data-drawer-link]').forEach((l) => near.observe(l));
     const d = document.querySelector('[data-drawer]');
     if (d && !drawer) {
       drawer = d;

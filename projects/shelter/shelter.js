@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.8.2 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.8.3 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -33,7 +33,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.8.2';
+  if (window.__shelter) return; window.__shelter = '0.8.3';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -51,9 +51,12 @@
       // Logo: one version at a time (the Designer shows the first, see the Global embed)
       'html.is-logo-ready [data-logo-frame]{visibility:hidden}',
       'html.is-logo-ready [data-logo-frame].is-on{visibility:visible}',
-      '[data-logo]{cursor:pointer;-webkit-tap-highlight-color:transparent;outline-offset:4px}',
-      // Keyboard focus in the site's own style: a black ring with rounded corners (no blue, nothing after a click)
-      '[data-logo]:focus{outline:none}[data-logo]:focus-visible{outline:2px solid var(--_colors---ink);outline-offset:4px;border-radius:var(--_layout---radius)}',
+      // Click area: only the letters (the logo box runs on under the intro copy, its bottom margin is negative).
+      // The box lets the pointer through; a ::before over the letters (logo 01: x 19-1493, y 40-446 of 1512 x 520) takes it.
+      '[data-logo]{pointer-events:none;-webkit-tap-highlight-color:transparent}',
+      '[data-logo]::before{content:"";position:absolute;left:1.3%;right:1.3%;top:7.7%;bottom:14.2%;z-index:2;pointer-events:auto;cursor:pointer;border-radius:var(--_layout---radius)}',
+      // Focus in the site's own style: a black ring with rounded corners round the letters, keyboard only (no blue)
+      '[data-logo]:focus{outline:none}[data-logo]:focus-visible::before{outline:2px solid var(--_colors---ink);outline-offset:4px}',
       '[data-logo-building]{opacity:0;transition:opacity .3s ease;pointer-events:none}',
       '[data-logo].is-building [data-logo-building]{opacity:1}',
       'html.is-logo-ready [data-logo].is-building [data-logo-frame]{visibility:hidden}',
@@ -70,8 +73,8 @@
       '@media (hover:hover){[data-reveal="sign"]:hover{animation:sh-swing 1.6s ease-in-out infinite}html.is-revealed [data-reveal="sign"]:hover{animation:sh-sign .65s ease-out .2s backwards,sh-swing 1.6s ease-in-out infinite}}',
       'html.is-revealed [data-reveal="pop"]{animation:sh-pop .7s ' + SPRING + ' .55s backwards}',
       '[data-reveal="product"]{transition:scale .5s ' + SPRING + ',rotate .5s ' + SPRING + '}',
-      '[data-reveal="product"] img:not([data-reveal-outline]){transition:opacity .3s ease var(--sh-d,0s),scale .7s ' + SPRING + ' var(--sh-d,0s),rotate .7s ' + SPRING + ' var(--sh-d,0s)}',
-      '[data-reveal-outline]{pointer-events:none;transition:opacity .3s ease var(--sh-d,0s),scale .45s ease var(--sh-d,0s)}',
+      '[data-reveal="product"] img:not([data-reveal-outline]){will-change:opacity,transform;transition:opacity .3s ease var(--sh-d,0s),scale .7s ' + SPRING + ' var(--sh-d,0s),rotate .7s ' + SPRING + ' var(--sh-d,0s)}',
+      '[data-reveal-outline]{will-change:opacity,transform;pointer-events:none;transition:opacity .3s ease var(--sh-d,0s),scale .45s ease var(--sh-d,0s)}',
       // Products play in when they scroll into view (.is-in), not all at once on load
       '[data-reveal="product"].is-in [data-reveal-outline]{opacity:0;scale:1.1}',
       '@media (hover:hover){[data-reveal="product"].is-in[data-hover-tilt]:hover{scale:1.08;rotate:var(--sh-tilt,0deg)}}',
@@ -165,6 +168,7 @@
   const product = (p) => {
     if (p._in) return; p._in = true;
     p.querySelectorAll('img').forEach((im) => { im.loading = 'eager'; }); // three photos: load them up front so the pop plays with the photo
+    p.querySelectorAll('img[data-reveal-outline]').forEach(bakeOutline);
     if (RM || !('IntersectionObserver' in window)) { p.classList.add('is-in'); return; }
     if (!io) io = new IntersectionObserver((entries) => {
       entries.forEach((en) => { if (en.isIntersecting) { io.unobserve(en.target); seen.push(en.target); } });
@@ -172,6 +176,134 @@
     }, { threshold: 0.5, rootMargin: '0px 0px -12% 0px' }); // well inside the screen, so the pop is seen (on a phone too)
     io.observe(p);
   };
+
+
+  /* ---------- Pillar outlines: the SVG filter baked into a bitmap, once ---------- */
+  // The outline is an SVG filter (feMorphology) on the full-size product PNG (Global embed, so the Designer shows it).
+  // Safari re-runs that filter on every frame the outline or its pillar animates (the fade, the pop, the 1.1 scale),
+  // at 3x on a phone: the reveals stuttered and seemed to jump in late. Here the same steps run once per image in JS,
+  // at screen size, and the img gets the result as a plain bitmap (filter off). Theme change: only the fill is repainted.
+  // If the image can't be read (CORS) the live filter simply stays.
+  const outlines = new Set();
+  // 1D running min/max in O(1) per pixel (van Herk / Gil-Werman), rectangle kernel like feMorphology, outside = transparent
+  const run1 = (src, off, step, n, r, max, g, hh, dst) => {
+    const k = 2 * r + 1, m = n + 2 * r;
+    for (let i = 0; i < m; i++) {
+      const v = i < r || i >= n + r ? 0 : src[off + (i - r) * step];
+      g[i] = i % k === 0 ? v : max ? (v > g[i - 1] ? v : g[i - 1]) : (v < g[i - 1] ? v : g[i - 1]);
+    }
+    for (let i = m - 1; i >= 0; i--) {
+      const v = i < r || i >= n + r ? 0 : src[off + (i - r) * step];
+      hh[i] = i === m - 1 || (i + 1) % k === 0 ? v : max ? (v > hh[i + 1] ? v : hh[i + 1]) : (v < hh[i + 1] ? v : hh[i + 1]);
+    }
+    for (let x = 0; x < n; x++) { const a = hh[x], b = g[x + 2 * r]; dst[off + x * step] = max ? (a > b ? a : b) : (a < b ? a : b); }
+  };
+  const morph = (src, w, h, r, max) => {
+    if (r < 1) return src;
+    const t = new Float32Array(w * h), o = new Float32Array(w * h), L = Math.max(w, h) + 2 * r, g = new Float32Array(L), hh = new Float32Array(L);
+    for (let y = 0; y < h; y++) run1(src, y * w, 1, w, r, max, g, hh, t);
+    for (let x = 0; x < w; x++) run1(t, x, w, h, r, max, g, hh, o);
+    return o;
+  };
+  // Gaussian as three box blurs (running sums), close enough for the edge smoothing
+  const box1 = (src, off, step, n, r, dst) => {
+    const d = 2 * r + 1; let acc = 0;
+    for (let i = 0; i <= r && i < n; i++) acc += src[off + i * step];
+    for (let x = 0; x < n; x++) {
+      dst[off + x * step] = acc / d;
+      const b = x + r + 1, a = x - r;
+      if (b < n) acc += src[off + b * step];
+      if (a >= 0) acc -= src[off + a * step];
+    }
+  };
+  const blur = (src, w, h, sd) => {
+    const r = Math.max(1, Math.round((Math.sqrt(4 * sd * sd + 1) - 1) / 2)); // box radius for 3 passes ~ sd
+    let a = src;
+    for (let pass = 0; pass < 3; pass++) {
+      const t = new Float32Array(w * h), o = new Float32Array(w * h);
+      for (let y = 0; y < h; y++) box1(a, y * w, 1, w, r, t);
+      for (let x = 0; x < w; x++) box1(t, x, w, h, r, o);
+      a = o;
+    }
+    return a;
+  };
+  const rest = () => new Promise((r) => setTimeout(r, 0)); // let the page breathe between the steps
+  const cl = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+  const pageRGB = () => {
+    const c = document.createElement('canvas').getContext('2d');
+    c.fillStyle = '#fff'; c.fillStyle = getComputedStyle(html).getPropertyValue('--_colors---page').trim() || '#fff';
+    const m = /^#([0-9a-f]{6})$/i.exec(c.fillStyle); if (m) { const n = parseInt(m[1], 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
+    const r = (c.fillStyle.match(/[\d.]+/g) || [255, 255, 255]).map(Number); return [r[0], r[1], r[2]];
+  };
+  const paintOutline = async (o) => {
+    const [pr, pg, pb] = pageRGB(), { W, H, s, e } = o, job = (o.job = (o.job || 0) + 1);
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const cx = cv.getContext('2d'), id = cx.createImageData(W, H), d = id.data;
+    let t0 = performance.now();
+    for (let i = 0, n = W * H; i < n; i++) {
+      if ((i & 4095) === 0 && performance.now() - t0 > 8) { await rest(); if (job !== o.job) return; t0 = performance.now(); }
+      const f = e[i] / 255, l = (s[i] / 255) * (1 - f), a = f + l; if (a <= 0) continue;
+      const j = i * 4; d[j] = (pr * f) / a; d[j + 1] = (pg * f) / a; d[j + 2] = (pb * f) / a; d[j + 3] = a * 255; // page fill over a black line
+    }
+    cx.putImageData(id, 0, 0);
+    cv.toBlob((b) => {
+      if (!b || !o.img.isConnected) return;
+      if (o.url) URL.revokeObjectURL(o.url);
+      o.url = URL.createObjectURL(b);
+      o.img.removeAttribute('srcset'); o.img.removeAttribute('sizes'); o.img.src = o.url; o.img.style.filter = 'none';
+    }, 'image/png');
+  };
+  const bakeOutline = (img) => {
+    if (img._bake) return; img._bake = 1;
+    const run = () => {
+      const w = img.offsetWidth, h = img.offsetHeight; if (!w || !h) { img._bake = 0; return; }
+      const src = new Image(); src.crossOrigin = 'anonymous';
+      const url = img.currentSrc || img.src; src.src = url + (url.includes('?') ? '&' : '?') + 'sh-outline=1'; // own request, with CORS
+      src.decode().then(async () => {
+        // 1. Silhouette steps at 1x (radii in css px, as the filter): alpha threshold, drop specks, close holes, step out, smooth
+        const q = 1, P = 14, iw = Math.round(w * q), ih = Math.round(h * q), w1 = iw + P * 2, h1 = ih + P * 2;
+        const c1 = document.createElement('canvas'); c1.width = w1; c1.height = h1;
+        const x1 = c1.getContext('2d', { willReadFrequently: true }); x1.drawImage(src, P, P, iw, ih);
+        const px = x1.getImageData(0, 0, w1, h1).data; // throws on a tainted canvas: then the live filter stays
+        let a = new Float32Array(w1 * h1);
+        for (let i = 0; i < a.length; i++) a[i] = cl((px[i * 4 + 3] / 255) * 20 - 8);
+        a = morph(a, w1, h1, 2 * q, false); await rest(); a = morph(a, w1, h1, 9 * q, true); await rest(); a = morph(a, w1, h1, 4 * q, false); await rest();
+        a = blur(a, w1, h1, 1.5 * q); await rest(); // the threshold (x10 - 5) comes after scaling up, so the edge stays smooth
+        // 2. Up to screen pixels (smooth edge), then the thin line: shape minus the shape eroded by the line width
+        const k = Math.min(devicePixelRatio || 1, 2), W = Math.round(w * k), H = Math.round(h * k), sx = iw / W;
+        const sf = new Float32Array(W * H);
+        let t0 = performance.now();
+        for (let y = 0; y < H; y++) {
+          if (performance.now() - t0 > 8) { await rest(); t0 = performance.now(); }
+          const fy = (y + 0.5) * sx - 0.5 + P, y0 = Math.floor(fy), ty = fy - y0;
+          for (let x = 0; x < W; x++) {
+            const fx = (x + 0.5) * sx - 0.5 + P, x0 = Math.floor(fx), tx = fx - x0, i = y0 * w1 + x0;
+            const v = a[i] * (1 - tx) * (1 - ty) + a[i + 1] * tx * (1 - ty) + a[i + w1] * (1 - tx) * ty + a[i + w1 + 1] * tx * ty;
+            sf[y * W + x] = cl(v * 10 - 5);
+          }
+        }
+        await rest();
+        const ef = morph(sf, W, H, Math.max(1, Math.round(1.25 * k)), false); await rest();
+        const s8 = new Uint8ClampedArray(W * H), e8 = new Uint8ClampedArray(W * H);
+        for (let i = 0; i < s8.length; i++) { s8[i] = sf[i] * 255; e8[i] = ef[i] * 255; }
+        const o = { img, W, H, s: s8, e: e8, w }; img._outline = o; outlines.add(o);
+        paintOutline(o);
+      }).catch(() => {}); // keep the live filter
+    };
+    const go = () => (img.complete && img.naturalWidth ? run() : img.addEventListener('load', run, { once: true }));
+    // Idle time, one after the other, so it never lands on the logo intro or a scroll
+    (window.requestIdleCallback || ((f) => setTimeout(f, 300)))(go, { timeout: 2500 });
+  };
+  const repaintOutlines = () => outlines.forEach((o) => { if (o.img.isConnected) paintOutline(o); else outlines.delete(o); });
+  // A new width (rotation, breakpoint): bake again at the new size
+  let rebakeT = 0;
+  addEventListener('resize', () => {
+    clearTimeout(rebakeT);
+    rebakeT = setTimeout(() => outlines.forEach((o) => {
+      if (!o.img.isConnected) { outlines.delete(o); return; }
+      if (Math.abs(o.img.offsetWidth - o.w) > o.w * 0.15) { outlines.delete(o); o.img._bake = 0; bakeOutline(o.img); }
+    }), 400);
+  });
 
   /* ---------- Inline SVG ---------- */
   const svgCache = new Map();
@@ -290,7 +422,10 @@
       m.content = bg;
     });
     document.querySelectorAll('[data-theme-set]').forEach((b) => b.setAttribute('aria-pressed', b.getAttribute('data-theme-set') === name ? 'true' : 'false'));
+    if (outlines.size && name !== lastTheme) repaintOutlines();
+    lastTheme = name;
   };
+  let lastTheme = null;
   // Capture + stop: the dots are links with href="#", so nothing else (Swup, anchor scrolling) jumps to the top
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-theme-set]'); if (!b) return;
@@ -308,7 +443,8 @@
       if (window.lenis && !RM) lenis.scrollTo(to, { duration: 1.1 }); else scrollTo({ top: to, behavior: RM ? 'auto' : 'smooth' });
     };
     btn.addEventListener('click', (e) => { e.stopImmediatePropagation(); click(e); }, true);
-    addEventListener('scroll', update, { passive: true }); addEventListener('resize', update); update();
+    let qd = 0; const queue = () => { if (!qd) qd = requestAnimationFrame(() => { qd = 0; update(); }); }; // once per frame, not per scroll event
+    addEventListener('scroll', queue, { passive: true }); addEventListener('resize', queue); update();
     btn._arrow = true;
   };
 
@@ -355,7 +491,7 @@
     let hint = document.querySelector('[data-draw-hint]');
     if (!hint) {
       hint = document.createElement('div'); hint.setAttribute('data-draw-hint', ''); hint.setAttribute('role', 'status');
-      hint.innerHTML = '<span>Teken op het logo \u00b7 klik \u2018save it\u2019 om te bewaren</span><button type="button" data-draw-clear>Wissen</button>';
+      hint.innerHTML = '<span>Teken op het logo \u00b7 ' + (FINE ? 'klik' : 'tap') + ' \u2018save it\u2019 om te bewaren</span><button type="button" data-draw-clear>Wissen</button>';
       document.body.appendChild(hint);
     }
     // No "save it" image in the Designer yet: add the prototype's (pinned), styled like the draw image
