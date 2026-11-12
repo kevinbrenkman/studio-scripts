@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.4 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.5 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -33,7 +33,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.4';
+  if (window.__shelter) return; window.__shelter = '0.9.5';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -126,7 +126,7 @@
       // hidden while another logo version shows or while drawing. The logo box isolates, so z-index -1 stays inside it.
       '[data-logo]{isolation:isolate}',
       '[data-draw-overlay]{position:absolute;z-index:-1;pointer-events:none}',
-      'html:not(.is-revealed) [data-draw-overlay],html.is-drawing [data-draw-overlay],[data-draw-overlay].is-off{visibility:hidden}',
+      'html.is-drawing [data-draw-overlay],[data-draw-overlay].is-off{visibility:hidden}',
       // The coming soon sign hangs over the logo: let the marker draw under it
       'html.is-drawing [data-reveal="sign"]{pointer-events:none}',
       // Hint (prototype): fixed at the bottom while drawing. Same font and weight as the pills
@@ -623,7 +623,10 @@
     };
     // Header prop "Drawing opacity" (0 = off, 100 = full) via data-draw-saved on the toggle; 25 when it is not set
     const savedOp = () => { const v = parseFloat(toggle.getAttribute('data-draw-saved')); return isNaN(v) ? 0.25 : Math.max(0, Math.min(1, v / 100)); };
-    overlay.style.opacity = String(savedOp());
+    // On load the saved drawing waits (opacity 0) and fades in with the rest of the intro, once the logo sequence is done
+    overlay.style.opacity = '0';
+    const fadeIn = () => { overlay.style.transition = 'opacity 1s ease'; overlay.style.opacity = String(savedOp()); };
+    if (html.classList.contains('is-revealed')) requestAnimationFrame(fadeIn); else document.addEventListener('shelter:reveal', fadeIn, { once: true });
     // Header prop "Draw on any logo" (data-draw-any="True"): draw on whichever logo version shows, and the saved drawing
     // stays on every version. Off (default): drawing always switches to the outline logo (version 1) and only shows there.
     const anyLogo = () => /^true$/i.test(toggle.getAttribute('data-draw-any') || '');
