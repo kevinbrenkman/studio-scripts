@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.3 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.4 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -33,7 +33,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.3';
+  if (window.__shelter) return; window.__shelter = '0.9.4';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -682,12 +682,15 @@
     toggle.addEventListener('click', click, true);
     document.addEventListener('click', clear, true);
     addEventListener('keydown', key);
+    // Desktop: scrolling down while drawing saves the drawing and leaves draw mode, then the page scrolls on as usual
+    const wheel = (e) => { if (drawing && FINE && e.deltaY > 4) saveOut(); };
+    addEventListener('wheel', wheel, { passive: true });
     const ro = new ResizeObserver(size); ro.observe(canvas); size();
     const ro2 = new ResizeObserver(() => paintOverlay()); ro2.observe(root); paintOverlay();
     toggle.setAttribute('role', 'button'); toggle.setAttribute('aria-pressed', 'false');
     toggle._draw = () => {
       if (drawing) setDrawing(false);
-      ro.disconnect(); ro2.disconnect(); root.removeEventListener('logo:frame', onFrame); toggle.removeEventListener('click', click, true); document.removeEventListener('click', clear, true); removeEventListener('keydown', key);
+      ro.disconnect(); ro2.disconnect(); root.removeEventListener('logo:frame', onFrame); toggle.removeEventListener('click', click, true); document.removeEventListener('click', clear, true); removeEventListener('keydown', key); removeEventListener('wheel', wheel);
       document.removeEventListener('pointerdown', down, true); removeEventListener('pointermove', move); removeEventListener('pointerup', end); removeEventListener('pointercancel', end);
       document.removeEventListener('click', swallow, true); document.removeEventListener('dragstart', swallow, true);
       canvas.remove(); hint.remove(); delete toggle._draw;
