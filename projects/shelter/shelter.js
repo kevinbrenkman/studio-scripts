@@ -388,7 +388,7 @@
     };
     const toLogo = (e) => { const r = box(); return [Math.round((e.clientX - r.left) / r.width * W * 10) / 10, Math.round((e.clientY - r.top) / r.height * H * 10) / 10]; };
     const down = (e) => { if (!drawing) return; e.preventDefault(); e.stopPropagation(); canvas.setPointerCapture(e.pointerId); live = [toLogo(e)]; strokes.push(live); redraw(); };
-    const move = (e) => { if (!live) return; (e.getCoalescedEvents ? e.getCoalescedEvents() : [e]).forEach((ev) => live.push(toLogo(ev))); redraw(); };
+    const move = (e) => { if (!live) return; const co = e.getCoalescedEvents ? e.getCoalescedEvents() : []; (co.length ? co : [e]).forEach((ev) => live.push(toLogo(ev))); redraw(); };
     const end = () => { if (live) { live = null; store(); } };
     const swallow = (e) => { if (drawing) { e.preventDefault(); e.stopPropagation(); } }; // no logo cycling while drawing
     canvas.addEventListener('pointerdown', down);
