@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.5 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.6 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -33,7 +33,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.5';
+  if (window.__shelter) return; window.__shelter = '0.9.6';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -174,6 +174,8 @@
   const dotsSet = (a) => {
     if (a === away || !window.gsap) return; away = a;
     const dots = document.querySelectorAll('[data-theme-picker] [data-theme-set]');
+    // The picker box stays over the footer links: let clicks through while the dots are away
+    document.querySelectorAll('[data-theme-picker]').forEach((p) => { p.style.pointerEvents = a ? 'none' : ''; });
     gsap.to(dots, a
       ? { scale: 0, autoAlpha: 0, duration: 0.35, ease: 'back.in(2)', stagger: { each: 0.04, from: 'end' }, overwrite: 'auto' }
       : { scale: 1, autoAlpha: 1, duration: 0.5, ease: 'back.out(2)', stagger: 0.04, overwrite: 'auto', clearProps: 'transform,opacity,visibility' });
