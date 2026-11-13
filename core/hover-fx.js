@@ -1,5 +1,5 @@
 /*!
- * hover-fx.js 1.0.5 (kevinbrenkman/studio-scripts/core)
+ * hover-fx.js 1.0.6 (kevinbrenkman/studio-scripts/core)
  * Small cursor effects with GSAP. Desktop (fine pointer) only, off with reduced motion. Needs GSAP (Webflow site setting).
  *
  * Magnetic  [data-magnetic]            pulled towards the cursor, springs back on leave (Paloma MailMagnet)
@@ -9,12 +9,17 @@
  * LinkTilt  text links                 tilt a few degrees with a bouncy ease on hover, randomly left or right.
  *                                       Every <a> with only text in it, except UI links (cards, arrows, dots, buttons...).
  *                                       Opt out: data-no-tilt. Inline links become inline-block so they can rotate.
+ * Press     GSAP writes an inline `scale: none` the first time it moves an element. This file removes it again, so a
+ *           native Webflow pressed state (CSS `scale` in the :active state of the class) keeps working on magnetic
+ *           buttons and tilting links.
  */
 (() => {
-  if (window.__studioHoverFx) return; window.__studioHoverFx = '1.0.5';
+  if (window.__studioHoverFx) return; window.__studioHoverFx = '1.0.6';
   window.App = window.App || { inits: [], destroys: [] };
   const ok = () => window.gsap && matchMedia('(hover: hover) and (pointer: fine)').matches && !matchMedia('(prefers-reduced-motion: reduce)').matches;
   const em = () => parseFloat(getComputedStyle(document.body).fontSize) || 16;
+  // Keep the class's own CSS `scale` (pressed state) alive: GSAP sets an inline scale:none when it parses the transform
+  const free = function () { const t = this.targets(); for (let i = 0; i < t.length; i++) if (t[i].style.scale === 'none') t[i].style.removeProperty('scale'); };
 
   /* ---------- Magnetic ---------- */
   const magnets = new Set();
@@ -23,14 +28,14 @@
     const n = (k, d) => { const v = parseFloat(a.getAttribute('data-magnetic-' + k)); return isNaN(v) ? d : v; };
     const fx = n('x', 0.3), fy = n('y', 0.35), m = n('margin', 40);
     let on = false;
-    const leave = () => { on = false; gsap.to(a, { x: 0, y: 0, duration: 1.2, ease: 'elastic.out(1, 0.45)', overwrite: 'auto' }); };
+    const leave = () => { on = false; gsap.to(a, { x: 0, y: 0, duration: 1.2, ease: 'elastic.out(1, 0.45)', overwrite: 'auto', onStart: free }); };
     const move = (e) => {
       const r = a.getBoundingClientRect(), ox = gsap.getProperty(a, 'x'), oy = gsap.getProperty(a, 'y');
       const L = r.left - ox, T = r.top - oy; // resting box, so it never runs away from the cursor
       const inside = e.clientX > L - m && e.clientX < L + r.width + m && e.clientY > T - m && e.clientY < T + r.height + m;
       if (!inside) { if (on) leave(); return; }
       on = true;
-      gsap.to(a, { x: (e.clientX - (L + r.width / 2)) * fx, y: (e.clientY - (T + r.height / 2)) * fy, duration: 0.8, ease: 'power3', overwrite: 'auto' });
+      gsap.to(a, { x: (e.clientX - (L + r.width / 2)) * fx, y: (e.clientY - (T + r.height / 2)) * fy, duration: 0.8, ease: 'power3', overwrite: 'auto', onStart: free });
     };
     const out = () => on && leave();
     document.addEventListener('pointermove', move, { passive: true });
@@ -86,12 +91,12 @@
     let dir = Math.random() < 0.5 ? -1 : 1;
     if (lastDirs[0] === dir && lastDirs[1] === dir) dir = -dir;
     lastDirs = [dir, lastDirs[0]];
-    gsap.to(a, { rotation: dir * gsap.utils.random(2, 5), duration: 0.7, ease: 'elastic.out(1.1, 0.4)', overwrite: 'auto' });
+    gsap.to(a, { rotation: dir * gsap.utils.random(2, 5), duration: 0.7, ease: 'elastic.out(1.1, 0.4)', overwrite: 'auto', onStart: free });
   };
   const tiltOut = (e) => {
     const a = e.target.closest && e.target.closest('a'); if (!a || !a._tilt || (e.relatedTarget && a.contains(e.relatedTarget))) return;
     clearTimeout(a._tOut);
-    a._tOut = setTimeout(() => { a._tOut = 0; a._left = performance.now(); gsap.to(a, { rotation: 0, duration: 0.8, ease: 'elastic.out(1, 0.35)', overwrite: 'auto' }); }, 120);
+    a._tOut = setTimeout(() => { a._tOut = 0; a._left = performance.now(); gsap.to(a, { rotation: 0, duration: 0.8, ease: 'elastic.out(1, 0.35)', overwrite: 'auto', onStart: free }); }, 120);
   };
   // Delegated: works for links added later (CMS, drawer, Swup pages)
   document.addEventListener('pointerover', tiltIn, { passive: true });

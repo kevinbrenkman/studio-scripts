@@ -1,5 +1,5 @@
 /*!
- * slider.js 1.12.0 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.12.1 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
  * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.12.0.
  *
@@ -26,7 +26,7 @@
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.12.0';
+  if (window.__studioSlider) return; window.__studioSlider = '1.12.1';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -45,7 +45,7 @@
       // CMS list in the slot of a static list wrapper: let it take the full width
       '[data-slider-list]>.w-dyn-list{flex:0 0 100%;min-width:0}' +
       // Finite sliders: the arrow at an end fades out (is-disabled), the other one stays
-      '[data-slider-prev],[data-slider-next]{transition:opacity .3s ease,visibility 0s linear 0s}' +
+      '[data-slider-prev],[data-slider-next]{transition:opacity .3s ease,visibility 0s linear 0s,scale .2s cubic-bezier(.77,0,.175,1)}' +
       // Phones without a slider (data-slider-mobile="false"): the list stacks, upcoming events only
       '@media (max-width:767px){[data-slider][data-slider-mobile="false"] [data-slider-past]{display:none}}' +
       '[data-slider-prev].is-disabled,[data-slider-next].is-disabled{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .3s ease,visibility 0s linear .3s}' +
