@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.9 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.10 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -39,7 +39,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.9';
+  if (window.__shelter) return; window.__shelter = '0.9.10';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -726,17 +726,26 @@
     tallyJs().then(() => window.Tally && Tally.openPopup(id, o)).catch(() => { location.href = 'https://tally.so/r/' + id; });
   }, true);
 
-  /* ---------- Cookie preferences from a plain link (a Rich Text link can't carry fs-cc) ---------- */
+  /* ---------- Cookie links: no Swup, no jump to the top ---------- */
+  // Finsweet's buttons are links to "#": Swup took them as an anchor visit and scrolled to the top (Paloma had the same).
+  // data-no-swup makes Swup skip them; preventDefault stops the browser's own jump to "#". Re-marked after each page change.
+  const ccMark = () => document.querySelectorAll('a[fs-cc], [fs-cc] a[href="#"]').forEach((a) => a.setAttribute('data-no-swup', ''));
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('a[fs-cc][href="#"], [fs-cc] a[href="#"]');
+    if (a) e.preventDefault();
+  }, true);
+  // Cookie preferences from a plain link (a Rich Text link can't carry fs-cc): a[href="#cookievoorkeuren"]
   document.addEventListener('click', (e) => {
     const a = e.target.closest && e.target.closest('a[href$="#cookievoorkeuren"]'); if (!a) return;
     e.preventDefault(); e.stopImmediatePropagation(); // before Swup and Lenis: no jump, no hash
     const btn = document.querySelector('[fs-cc="open-preferences"]');
-    if (btn) btn.click();
+    if (btn) { ccMark(); btn.click(); }
   }, true);
 
   /* ---------- Init ---------- */
   const init = (scope = document) => {
     const s = scope || document;
+    ccMark();
     document.querySelectorAll('img[data-inline-svg]').forEach(inline); // also the fixed UI outside #swup
     s.querySelectorAll('[data-outline-text]').forEach(splitWords);
     s.querySelectorAll('[data-reveal="product"]').forEach((p) => {
