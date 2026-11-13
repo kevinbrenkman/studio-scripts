@@ -224,6 +224,7 @@ const canHover = matchMedia('(hover: hover) and (pointer: fine)').matches;
 | `data-page-shell` | Page Theme component (outside `#swup`). |
 | `data-lenis-prevent` | Scrollable element inside the page (modal, menu) that Lenis must not hijack. |
 | `data-intro` | Element hidden until the intro interaction plays it in. |
+| `data-spread="20"` | `core/spread.js`: section parallax (Paloma GridFX spread). px at the screen edge, half on phone. Not on the footer or the last block. Uses CSS `translate`, so it stacks on IX3 scroll reveals. |
 
 No classes as JS hooks. Classes are for styling, attributes for behaviour, so a client renaming a class never breaks a script.
 
