@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.7 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.8 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -26,6 +26,10 @@
  *   img[data-inline-svg]        inlined so its white fill follows the page colour (also every logo version)
  * Fixed UI
  *   [data-scroll-arrow]         scrolls down one screen, flips up at the bottom and goes to the top
+ * Tally
+ *   a[href="#tally-open=ID"]    opens that Tally form as a centred popup (Onkruid's forms). Works in a Rich Text too: only
+ *                               the link URL. Extra options as in Tally's own hash (&tally-width=560 ...). embed.js loads
+ *                               on the first click; no page jump, no hash left in the URL.
  * Draw your Shelter (prototype: red marker on the outline logo, under the logo's black line)
  *   [data-draw-toggle]          the balloon: draw / "save it" (the drawing fades out, drawing again brings it back)
  *     data-draw-mobile="false"  hidden under 768px (Global embed CSS, bound to the Header prop "Draw on mobile")
@@ -33,7 +37,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.7';
+  if (window.__shelter) return; window.__shelter = '0.9.8';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -701,6 +705,24 @@
       canvas.remove(); hint.remove(); delete toggle._draw;
     };
   };
+
+  /* ---------- Tally popups ---------- */
+  let tallyLoad = null;
+  const tallyJs = () => tallyLoad || (tallyLoad = new Promise((ok, no) => {
+    if (window.Tally) return ok();
+    const sc = document.createElement('script'); sc.src = 'https://tally.so/widgets/embed.js'; sc.async = true;
+    sc.onload = ok; sc.onerror = () => { tallyLoad = null; no(); }; document.head.appendChild(sc);
+  }));
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('a[href*="#tally-open="]'); if (!a) return;
+    e.preventDefault(); e.stopImmediatePropagation(); // before Swup and Lenis: no scroll to the top, no hash in the URL
+    const q = new URLSearchParams(a.getAttribute('href').split('#')[1]);
+    const id = q.get('tally-open'); if (!id) return;
+    const o = { layout: 'modal', overlay: true };
+    q.forEach((v, k) => { if (k === 'tally-open' || !k.startsWith('tally-')) return;
+      o[k.slice(6).replace(/-(\w)/g, (m, c) => c.toUpperCase())] = /^\d+$/.test(v) ? +v : v === 'true' ? true : v === 'false' ? false : v; });
+    tallyJs().then(() => window.Tally && Tally.openPopup(id, o)).catch(() => { location.href = 'https://tally.so/r/' + id; });
+  }, true);
 
   /* ---------- Init ---------- */
   const init = (scope = document) => {
