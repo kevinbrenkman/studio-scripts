@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.8 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.9 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -26,6 +26,8 @@
  *   img[data-inline-svg]        inlined so its white fill follows the page colour (also every logo version)
  * Fixed UI
  *   [data-scroll-arrow]         scrolls down one screen, flips up at the bottom and goes to the top
+ * Cookies
+ *   a[href="#cookievoorkeuren"] opens the cookie preferences (Finsweet), e.g. a link in the Cookiebeleid Rich Text
  * Tally
  *   a[href="#tally-open=ID"]    opens that Tally form as a centred popup (Onkruid's forms). Works in a Rich Text too: only
  *                               the link URL. Extra options as in Tally's own hash (&tally-width=560 ...). embed.js loads
@@ -37,7 +39,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.8';
+  if (window.__shelter) return; window.__shelter = '0.9.9';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -722,6 +724,14 @@
     q.forEach((v, k) => { if (k === 'tally-open' || !k.startsWith('tally-')) return;
       o[k.slice(6).replace(/-(\w)/g, (m, c) => c.toUpperCase())] = /^\d+$/.test(v) ? +v : v === 'true' ? true : v === 'false' ? false : v; });
     tallyJs().then(() => window.Tally && Tally.openPopup(id, o)).catch(() => { location.href = 'https://tally.so/r/' + id; });
+  }, true);
+
+  /* ---------- Cookie preferences from a plain link (a Rich Text link can't carry fs-cc) ---------- */
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('a[href$="#cookievoorkeuren"]'); if (!a) return;
+    e.preventDefault(); e.stopImmediatePropagation(); // before Swup and Lenis: no jump, no hash
+    const btn = document.querySelector('[fs-cc="open-preferences"]');
+    if (btn) btn.click();
   }, true);
 
   /* ---------- Init ---------- */
