@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.6 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.7 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -21,7 +21,7 @@
  *   [data-outline-text]         split into [data-outline-word] spans (letters merge within a word only)
  *   [data-ticker]               under 768px: scrolls as one line (its text, plus [data-ticker-add] texts)
  * Colour
- *   [data-theme-set="pink"]     sets html[data-theme], kept in sessionStorage, iOS Safari toolbar follows
+ *   [data-theme-set="pink"]     sets html[data-theme], kept in localStorage (like the drawing), iOS Safari toolbar follows
  * SVG
  *   img[data-inline-svg]        inlined so its white fill follows the page colour (also every logo version)
  * Fixed UI
@@ -33,7 +33,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.6';
+  if (window.__shelter) return; window.__shelter = '0.9.7';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -475,7 +475,7 @@
   const setTheme = (name) => {
     if (!name) return;
     html.setAttribute('data-theme', name);
-    try { sessionStorage.setItem(KEY, name); } catch (e) {}
+    try { localStorage.setItem(KEY, name); } catch (e) {}
     // iOS Safari tints its toolbar from the page background / theme-color
     requestAnimationFrame(() => {
       const bg = getComputedStyle(document.body).backgroundColor;
@@ -717,7 +717,7 @@
     s.querySelectorAll('[data-draw-toggle]').forEach(draw);
     document.querySelectorAll('[data-scroll-arrow]').forEach(arrow); // fixed UI lives outside #swup
     dotsAway();
-    let saved = null; try { saved = sessionStorage.getItem(KEY); } catch (e) {}
+    let saved = null; try { saved = localStorage.getItem(KEY) || sessionStorage.getItem(KEY); } catch (e) {}
     setTheme(html.getAttribute('data-theme') || saved || 'white');
   };
   const destroy = () => {
