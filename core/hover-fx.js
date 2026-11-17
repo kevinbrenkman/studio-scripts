@@ -1,5 +1,5 @@
 /*!
- * hover-fx.js 1.0.6 (kevinbrenkman/studio-scripts/core)
+ * hover-fx.js 1.0.7 (kevinbrenkman/studio-scripts/core)
  * Small cursor effects with GSAP. Desktop (fine pointer) only, off with reduced motion. Needs GSAP (Webflow site setting).
  *
  * Magnetic  [data-magnetic]            pulled towards the cursor, springs back on leave (Paloma MailMagnet)
@@ -8,13 +8,13 @@
  * Follow    [data-follow="1"]          leans and drifts a little towards the cursor, wherever it is (the value = strength)
  * LinkTilt  text links                 tilt a few degrees with a bouncy ease on hover, randomly left or right.
  *                                       Every <a> with only text in it, except UI links (cards, arrows, dots, buttons...).
- *                                       Opt out: data-no-tilt. Inline links become inline-block so they can rotate.
+ *                                       Opt out: data-no-tilt on the link or any parent (e.g. a Rich Text of long text). Inline links become inline-block so they can rotate.
  * Press     GSAP writes an inline `scale: none` the first time it moves an element. This file removes it again, so a
  *           native Webflow pressed state (CSS `scale` in the :active state of the class) keeps working on magnetic
  *           buttons and tilting links.
  */
 (() => {
-  if (window.__studioHoverFx) return; window.__studioHoverFx = '1.0.6';
+  if (window.__studioHoverFx) return; window.__studioHoverFx = '1.0.7';
   window.App = window.App || { inits: [], destroys: [] };
   const ok = () => window.gsap && matchMedia('(hover: hover) and (pointer: fine)').matches && !matchMedia('(prefers-reduced-motion: reduce)').matches;
   const em = () => parseFloat(getComputedStyle(document.body).fontSize) || 16;
@@ -78,7 +78,7 @@
 
   /* ---------- LinkTilt ---------- */
   const SKIP = '[data-no-tilt],[data-drawer-link],[data-drawer-close],[data-drawer-ticket],[data-theme-set],[data-scroll-arrow],[data-slider-prev],[data-slider-next],[data-draw-toggle],[data-magnetic],[data-logo]';
-  const isTextLink = (a) => a.matches('a[href]') && !a.matches(SKIP) && !a.querySelector('img,svg,video,picture,div,canvas') && a.textContent.trim();
+  const isTextLink = (a) => a.matches('a[href]') && !a.matches(SKIP) && !a.closest('[data-no-tilt]') && !a.querySelector('img,svg,video,picture,div,canvas') && a.textContent.trim();
   const prep = (a) => { if (a._tilt) return; a._tilt = 1; if (getComputedStyle(a).display === 'inline') a.style.display = 'inline-block'; };
   let lastDirs = [0, 0];
   const tiltIn = (e) => {
