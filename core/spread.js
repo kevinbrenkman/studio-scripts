@@ -1,5 +1,5 @@
 /*!
- * spread.js 1.0.0 (kevinbrenkman/studio-scripts/core)
+ * spread.js 1.1.0 (kevinbrenkman/studio-scripts/core)
  * Scroll parallax between blocks (Paloma GridFX "spread"): each block drifts away from the middle of the screen,
  * 0 in the centre, the full amount at the top and bottom edge. Neighbouring sections open up a little as they
  * pass the edges and close again in the middle. Off with reduced motion.
@@ -9,13 +9,15 @@
  * Uses the CSS `translate` property, not `transform`: it stacks on top of Webflow (IX3) scroll reveals on the same
  * element instead of fighting them. Runs on the GSAP ticker (or rAF), only when the page actually scrolled.
  * Do not put it on the footer or the last block of a page: pushed down at the bottom edge it makes the page taller.
+ * 1.1.0: nothing moves on load. The effect fades in over the first part of a scroll (35% of the screen height from
+ * where the page opened), so blocks no longer jump into place while the page and its fonts/images settle.
  */
 (() => {
-  if (window.__studioSpread) return; window.__studioSpread = '1.0.0';
+  if (window.__studioSpread) return; window.__studioSpread = '1.1.0';
   window.App = window.App || { inits: [], destroys: [] };
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const DEF = 20;
-  let els = [], ys = new Map(), tick = null, raf = 0, lastY = null, lastW = 0, frames = 0;
+  let els = [], ys = new Map(), tick = null, raf = 0, lastY = null, lastW = 0, frames = 0, startY = 0;
 
   const amount = (el) => { const v = parseFloat(el.getAttribute('data-spread')); return isNaN(v) ? DEF : v; };
   const scrollPos = () => (window.lenis ? window.lenis.scroll : window.scrollY);
@@ -25,7 +27,9 @@
     // Only work when the page scrolled or resized (plus a re-check twice a second for late images / layout shifts)
     if (sy === lastY && w === lastW && ++frames % 30) return;
     lastY = sy; lastW = w;
-    const vh = innerHeight, mid = vh / 2, k = w < 768 ? 0.5 : 1;
+    const vh = innerHeight, mid = vh / 2;
+    const amp = Math.min(1, Math.abs(sy - startY) / (vh * 0.35)); // 0 on load, full strength after a short scroll
+    const k = (w < 768 ? 0.5 : 1) * amp;
     els.forEach((el) => {
       if (!el.isConnected) return;
       const cur = ys.get(el) || 0, r = el.getBoundingClientRect();
@@ -44,7 +48,7 @@
     tick = null; raf = 0;
   };
   const start = () => {
-    stop(); lastY = null;
+    stop(); lastY = null; startY = scrollPos();
     if (window.gsap) { tick = update; gsap.ticker.add(tick); }
     else { const loop = () => { update(); raf = requestAnimationFrame(loop); }; raf = requestAnimationFrame(loop); }
   };
