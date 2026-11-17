@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.12 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.13 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -9,7 +9,7 @@
  *     [data-logo-building]      photo inside the letters of version 1 while a [data-logo-hover] is hovered
  *   [data-logo-hover]           hovering it (mouse) shows the building (the "coming soon" sign)
  * Reveal (after the logo intro, or as soon as you scroll): html.is-revealed + 'shelter:reveal' on document
- *   [data-reveal="sign"]        grows from its nail (no hover swing)
+ *   [data-reveal="sign"]        grows from its nail. data-sign-swing="true": swings on hover (Header prop Sign swing)
  *   [data-reveal="pop"]         pops in (the draw balloon)
  *   [data-reveal="product"]     outline drawing first, then the photo pops in, when it scrolls into view (.is-in)
  *     [data-reveal-outline]     the outline drawing inside it
@@ -39,7 +39,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.12';
+  if (window.__shelter) return; window.__shelter = '0.9.13';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -77,7 +77,9 @@
       '@keyframes sh-bob{0%,100%{translate:0 0;rotate:0deg}50%{translate:0 -.25em;rotate:-1.2deg}}',
       '[data-reveal="sign"]{transform-origin:41.4% 5.3%}',
       'html.is-revealed [data-reveal="sign"]{animation:sh-sign .65s ease-out .2s backwards}',
-      // No swing on hover (client feedback 17 Nov: the sign does not need to keep wiggling)
+      // Swing on hover only when the Header prop Sign swing is on (data-sign-swing="true"; off since client feedback 17 Nov).
+      // Hover keeps sh-sign first in the list so the finished entrance is not replayed when the mouse leaves.
+      '@media (hover:hover){[data-reveal="sign"][data-sign-swing="true" i]:hover{animation:sh-swing 1.6s ease-in-out infinite}html.is-revealed [data-reveal="sign"][data-sign-swing="true" i]:hover{animation:sh-sign .65s ease-out .2s backwards,sh-swing 1.6s ease-in-out infinite}}',
       'html.is-revealed [data-reveal="pop"]{animation:sh-pop .7s ' + SPRING + ' .55s backwards}',
       '[data-reveal="product"]{transition:scale .5s ' + SPRING + ',rotate .5s ' + SPRING + '}',
       '[data-reveal="product"] img:not([data-reveal-outline]){will-change:opacity,transform;transition:opacity .3s ease var(--sh-d,0s),scale .7s ' + SPRING + ' var(--sh-d,0s),rotate .7s ' + SPRING + ' var(--sh-d,0s)}',
@@ -511,6 +513,35 @@
     addEventListener('scroll', queue, { passive: true }); addEventListener('resize', queue); update();
     btn._arrow = true;
   };
+
+  /* ---------- Sign: optional swing on hover, settles after (Header prop Sign swing, data-sign-swing) ---------- */
+  // While hovered the CSS swing runs (1.6s: 0, 4deg, -3deg, 0). On leave it would stop dead, so this picks up the angle
+  // it was at and lets it swing out in smaller and smaller arcs.
+  const SWING = [[0, 0], [0.25, 4], [0.75, -3], [1, 0]];
+  const swingAt = (t) => { // eased angle at 0..1 of the CSS swing
+    for (let i = 1; i < SWING.length; i++) {
+      const [t1, a1] = SWING[i], [t0, a0] = SWING[i - 1];
+      if (t <= t1) { const k = (t - t0) / (t1 - t0), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; return a0 + (a1 - a0) * e; }
+    }
+    return 0;
+  };
+  let swingFrom = 0;
+  document.addEventListener('pointerover', (e) => {
+    const s = e.target.closest && e.target.closest('[data-reveal="sign"][data-sign-swing="true" i]');
+    if (!s || (e.relatedTarget && s.contains(e.relatedTarget)) || e.pointerType !== 'mouse') return;
+    if (s._settle) { s._settle.cancel(); s._settle = null; }
+    swingFrom = performance.now();
+  });
+  document.addEventListener('pointerout', (e) => {
+    const s = e.target.closest && e.target.closest('[data-reveal="sign"][data-sign-swing="true" i]');
+    if (!s || (e.relatedTarget && s.contains(e.relatedTarget)) || e.pointerType !== 'mouse' || RM || !s.animate) return;
+    const t = ((performance.now() - swingFrom) % 1600) / 1600, a = swingAt(t);
+    const dir = t < 0.25 || t > 0.75 ? 1 : -1; // where it was heading
+    const amp = Math.max(Math.abs(a), 2.5);
+    const peaks = [a, dir * amp * 0.8, -dir * amp * 0.5, dir * amp * 0.28, -dir * amp * 0.12, 0];
+    s._settle = s.animate(peaks.map((deg, i) => ({ rotate: deg + 'deg', offset: i / (peaks.length - 1), easing: 'ease-in-out' })), { duration: 2000 });
+    s._settle.onfinish = () => { s._settle = null; };
+  });
 
   /* ---------- Draw your Shelter ---------- */
   const STROKE = 26, INK = '#ff0000', W = 1512, H = 520; // prototype: line width in logo px (mouse), red marker
