@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.11 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.12 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -9,7 +9,7 @@
  *     [data-logo-building]      photo inside the letters of version 1 while a [data-logo-hover] is hovered
  *   [data-logo-hover]           hovering it (mouse) shows the building (the "coming soon" sign)
  * Reveal (after the logo intro, or as soon as you scroll): html.is-revealed + 'shelter:reveal' on document
- *   [data-reveal="sign"]        grows from its nail, swings on hover
+ *   [data-reveal="sign"]        grows from its nail (no hover swing)
  *   [data-reveal="pop"]         pops in (the draw balloon)
  *   [data-reveal="product"]     outline drawing first, then the photo pops in, when it scrolls into view (.is-in)
  *     [data-reveal-outline]     the outline drawing inside it
@@ -29,7 +29,7 @@
  * Cookies
  *   a[href="#cookievoorkeuren"] opens the cookie preferences (Finsweet), e.g. a link in the Cookiebeleid Rich Text
  * Tally
- *   a[href="#tally-open=ID"]    opens that Tally form as a centred popup (Onkruid's forms). Works in a Rich Text too: only
+ *   a[href="#tally-open=ID"]    opens that Tally form as Tally's popup (bottom right, waving hand) (Onkruid's forms). Works in a Rich Text too: only
  *                               the link URL. Extra options as in Tally's own hash (&tally-width=560 ...). embed.js loads
  *                               on the first click; no page jump, no hash left in the URL.
  * Draw your Shelter (prototype: red marker on the outline logo, under the logo's black line)
@@ -39,7 +39,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.11';
+  if (window.__shelter) return; window.__shelter = '0.9.12';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -77,9 +77,7 @@
       '@keyframes sh-bob{0%,100%{translate:0 0;rotate:0deg}50%{translate:0 -.25em;rotate:-1.2deg}}',
       '[data-reveal="sign"]{transform-origin:41.4% 5.3%}',
       'html.is-revealed [data-reveal="sign"]{animation:sh-sign .65s ease-out .2s backwards}',
-      // Hover keeps sh-sign first in the list: the browser then keeps that (finished) entrance as is instead of
-      // replaying it when the mouse leaves. Only the swing is added and removed (prototype: entrance on load only).
-      '@media (hover:hover){[data-reveal="sign"]:hover{animation:sh-swing 1.6s ease-in-out infinite}html.is-revealed [data-reveal="sign"]:hover{animation:sh-sign .65s ease-out .2s backwards,sh-swing 1.6s ease-in-out infinite}}',
+      // No swing on hover (client feedback 17 Nov: the sign does not need to keep wiggling)
       'html.is-revealed [data-reveal="pop"]{animation:sh-pop .7s ' + SPRING + ' .55s backwards}',
       '[data-reveal="product"]{transition:scale .5s ' + SPRING + ',rotate .5s ' + SPRING + '}',
       '[data-reveal="product"] img:not([data-reveal-outline]){will-change:opacity,transform;transition:opacity .3s ease var(--sh-d,0s),scale .7s ' + SPRING + ' var(--sh-d,0s),rotate .7s ' + SPRING + ' var(--sh-d,0s)}',
@@ -514,35 +512,6 @@
     btn._arrow = true;
   };
 
-  /* ---------- Sign: keeps swinging after the hover and settles ---------- */
-  // While hovered the CSS swing runs (1.6s: 0, 4deg, -3deg, 0). On leave it would stop dead, so this picks up the angle
-  // it was at and lets it swing out in smaller and smaller arcs.
-  const SWING = [[0, 0], [0.25, 4], [0.75, -3], [1, 0]];
-  const swingAt = (t) => { // eased angle at 0..1 of the CSS swing
-    for (let i = 1; i < SWING.length; i++) {
-      const [t1, a1] = SWING[i], [t0, a0] = SWING[i - 1];
-      if (t <= t1) { const k = (t - t0) / (t1 - t0), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; return a0 + (a1 - a0) * e; }
-    }
-    return 0;
-  };
-  let swingFrom = 0;
-  document.addEventListener('pointerover', (e) => {
-    const s = e.target.closest && e.target.closest('[data-reveal="sign"]');
-    if (!s || (e.relatedTarget && s.contains(e.relatedTarget)) || e.pointerType !== 'mouse') return;
-    if (s._settle) { s._settle.cancel(); s._settle = null; }
-    swingFrom = performance.now();
-  });
-  document.addEventListener('pointerout', (e) => {
-    const s = e.target.closest && e.target.closest('[data-reveal="sign"]');
-    if (!s || (e.relatedTarget && s.contains(e.relatedTarget)) || e.pointerType !== 'mouse' || RM || !s.animate) return;
-    const t = ((performance.now() - swingFrom) % 1600) / 1600, a = swingAt(t);
-    const dir = t < 0.25 || t > 0.75 ? 1 : -1; // where it was heading
-    const amp = Math.max(Math.abs(a), 2.5);
-    const peaks = [a, dir * amp * 0.8, -dir * amp * 0.5, dir * amp * 0.28, -dir * amp * 0.12, 0];
-    s._settle = s.animate(peaks.map((deg, i) => ({ rotate: deg + 'deg', offset: i / (peaks.length - 1), easing: 'ease-in-out' })), { duration: 2000 });
-    s._settle.onfinish = () => { s._settle = null; };
-  });
-
   /* ---------- Draw your Shelter ---------- */
   const STROKE = 26, INK = '#ff0000', W = 1512, H = 520; // prototype: line width in logo px (mouse), red marker
   const FINGER = 22; // touch: line width in screen px, about a fingertip
@@ -720,7 +689,7 @@
     e.preventDefault(); e.stopImmediatePropagation(); // before Swup and Lenis: no scroll to the top, no hash in the URL
     const q = new URLSearchParams(a.getAttribute('href').split('#')[1]);
     const id = q.get('tally-open'); if (!id) return;
-    const o = { layout: 'modal', overlay: true };
+    const o = { emoji: { text: '\u{1F44B}', animation: 'wave' } }; // Tally's own popup: bottom right, waving hand (client feedback)
     q.forEach((v, k) => { if (k === 'tally-open' || !k.startsWith('tally-')) return;
       o[k.slice(6).replace(/-(\w)/g, (m, c) => c.toUpperCase())] = /^\d+$/.test(v) ? +v : v === 'true' ? true : v === 'false' ? false : v; });
     tallyJs().then(() => window.Tally && Tally.openPopup(id, o)).catch(() => { location.href = 'https://tally.so/r/' + id; });
