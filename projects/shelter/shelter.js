@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.19 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.20 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -42,14 +42,15 @@
  *     data-draw-mobile="false"  hidden under 768px (Global embed CSS, bound to the Header prop "Draw on mobile")
  *   Drawing covers the whole screen, under the page content, and holds the page at the top. Live only, built by this file: the canvas inside [data-logo], the "save it" balloon, the hint with "Wissen".
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
- *   [data-draw-form]            hidden Webflow form (Header): "Save it" sends the drawing to Shelter as a form submission,
- *     [data-draw-lines]         once per new drawing. The textarea gets the lines in logo coordinates, simplified:
- *                               "width:x,y dx,dy dx,dy;width:..." (first point absolute, then steps). Nothing personal.
+ *   [data-draw-form]            Webflow form (Header, visually hidden but on screen: Turnstile only starts for a form in
+ *                               view): "Save it" sends the drawing to Shelter as a form submission, once per new drawing.
  *     [data-draw-file]          the File upload input (Premium plan): gets a PNG of the drawing (1512 x 520, only the red
- *                               lines, transparent background), uploaded by Webflow before the submit. Lines are the fallback.
+ *                               lines, transparent background), uploaded by Webflow before the submit.
+ *     [data-draw-lines]         optional textarea: the lines as text ("width:x,y dx,dy;..."), then also the fallback when
+ *                               the upload fails. Not on Shelter (Kevin: PNG only).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.19';
+  if (window.__shelter) return; window.__shelter = '0.9.20';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -758,19 +759,19 @@
     // when Webflow shows its success state; the form is reset for the next drawing.
     let sending = false;
     const send = () => {
-      const form = document.querySelector('[data-draw-form] form'), field = form && form.querySelector('[data-draw-lines]');
-      if (!field || !strokes.length || sending) return;
+      const form = document.querySelector('[data-draw-form] form'), field = form && form.querySelector('[data-draw-lines]'),
+        fileIn = form && form.querySelector('[data-draw-file]');
+      if (!form || (!field && !fileIn) || !strokes.length || sending) return;
       const data = encode();
       let last = ''; try { last = localStorage.getItem(SENT) || ''; } catch (e) {}
       if (data === last) return; // this drawing went out already
       sending = true;
       const done = form.parentNode.querySelector('.w-form-done'), fail = form.parentNode.querySelector('.w-form-fail');
       form.style.display = ''; if (done) done.style.display = 'none'; if (fail) fail.style.display = 'none';
-      field.removeAttribute('maxlength'); field.value = data;
-      // The PNG goes into the native File upload ([data-draw-file]) first; Webflow uploads it on 'change'. The lines
-      // above are the fallback: if the upload fails or takes too long, the form still goes out with them.
-      const fileIn = form.querySelector('[data-draw-file]');
-      const ready = fileIn ? attachPng(fileIn).catch(() => {}) : Promise.resolve();
+      if (field) { field.removeAttribute('maxlength'); field.value = data; } // optional: the lines as text
+      // The PNG goes into the native File upload ([data-draw-file]) first; Webflow uploads it on 'change'. With a lines
+      // field the form still goes out if the upload fails; without one, a failed upload sends nothing (tried again next save).
+      const ready = fileIn ? attachPng(fileIn).catch((e) => { if (!field) throw e; }) : Promise.resolve();
       let tries = 0;
       const go = () => {
         const btn = form.querySelector('[type="submit"]');
@@ -788,7 +789,7 @@
         };
         check();
       };
-      ready.then(go);
+      ready.then(go, () => { sending = false; });
     };
     const clear = (e) => { const c = e.target.closest('[data-draw-clear]'); if (!c) return; e.preventDefault(); e.stopImmediatePropagation(); strokes = []; live = null; redraw(); store(); paintOverlay(); };
     const key = (e) => { if (e.key === 'Escape' && drawing) saveOut(); };
