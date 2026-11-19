@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.24 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.25 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -50,7 +50,7 @@
  *                               the upload fails. Not on Shelter (Kevin: PNG only).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.24';
+  if (window.__shelter) return; window.__shelter = '0.9.25';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -568,7 +568,8 @@
     let hint = document.querySelector('[data-draw-hint]');
     if (!hint) {
       hint = document.createElement('div'); hint.setAttribute('data-draw-hint', ''); hint.setAttribute('role', 'status');
-      hint.innerHTML = '<span>Teken op het logo \u00b7 ' + (FINE ? 'klik' : 'tap') + ' \u2018save it\u2019 om te bewaren</span><button type="button" data-draw-clear>Wissen</button>';
+      // "save it" in the hint saves too (people tap it because it says so); a plain inline button, looks like the text
+      hint.innerHTML = '<span>Teken op het logo \u00b7 ' + (FINE ? 'klik' : 'tap') + ' <button type="button" data-draw-save-now style="all:unset;cursor:pointer;text-decoration:underline;text-underline-offset:.15em">\u2018save it\u2019</button> om te bewaren</span><button type="button" data-draw-clear>Wissen</button>';
       document.body.appendChild(hint);
     }
     // No "save it" image in the Designer yet: add the prototype's (pinned), styled like the draw image
@@ -806,7 +807,7 @@
       };
       ready.then(go, () => { console.warn('[shelter] drawing not sent: the PNG upload failed'); sending = false; });
     };
-    const clear = (e) => { const c = e.target.closest('[data-draw-clear]'); if (!c) return; e.preventDefault(); e.stopImmediatePropagation(); strokes = []; live = null; redraw(); store(); paintOverlay(); };
+    const clear = (e) => { if (e.target.closest('[data-draw-save-now]')) { e.preventDefault(); e.stopImmediatePropagation(); if (drawing) saveOut(); return; } const c = e.target.closest('[data-draw-clear]'); if (!c) return; e.preventDefault(); e.stopImmediatePropagation(); strokes = []; live = null; redraw(); store(); paintOverlay(); };
     const key = (e) => { if (e.key === 'Escape' && drawing) saveOut(); };
     toggle.addEventListener('click', click, true);
     document.addEventListener('click', clear, true);

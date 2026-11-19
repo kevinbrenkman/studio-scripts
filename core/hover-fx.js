@@ -1,5 +1,5 @@
 /*!
- * hover-fx.js 1.0.7 (kevinbrenkman/studio-scripts/core)
+ * hover-fx.js 1.0.8 (kevinbrenkman/studio-scripts/core)
  * Small cursor effects with GSAP. Desktop (fine pointer) only, off with reduced motion. Needs GSAP (Webflow site setting).
  *
  * Magnetic  [data-magnetic]            pulled towards the cursor, springs back on leave (Paloma MailMagnet)
@@ -14,7 +14,7 @@
  *           buttons and tilting links.
  */
 (() => {
-  if (window.__studioHoverFx) return; window.__studioHoverFx = '1.0.7';
+  if (window.__studioHoverFx) return; window.__studioHoverFx = '1.0.8';
   window.App = window.App || { inits: [], destroys: [] };
   const ok = () => window.gsap && matchMedia('(hover: hover) and (pointer: fine)').matches && !matchMedia('(prefers-reduced-motion: reduce)').matches;
   const em = () => parseFloat(getComputedStyle(document.body).fontSize) || 16;
@@ -63,6 +63,19 @@
   };
   const onMove = (e) => { mx = e.clientX; my = e.clientY; if (!raf) raf = requestAnimationFrame(followTick); };
   const onOut = () => { mx = null; followers.forEach((el) => { el._fx.x(0); el._fx.y(0); el._fx.r(el._fx.r0 || 0); }); };
+  // Resize (window drag, or a breakpoint with its own rotation): the cursor is gone and the resting rotation may have
+  // changed, so let go, clear the inline transform and read the resting state again (else it stays tilted)
+  let resizeT = 0;
+  addEventListener('resize', () => {
+    mx = null; clearTimeout(resizeT);
+    resizeT = setTimeout(() => {
+      followers.forEach((el) => {
+        if (!el.isConnected) return;
+        gsap.killTweensOf(el); gsap.set(el, { clearProps: 'x,y,rotation' });
+        delete el._fx; followers.delete(el); follow(el);
+      });
+    }, 150);
+  });
   let followOn = false;
   const follow = (el) => {
     if (el._fx || !ok()) return;
