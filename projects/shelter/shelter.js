@@ -28,6 +28,9 @@
  *   [data-scroll-arrow]         scrolls down one screen, flips up at the bottom and goes to the top
  * Cookies
  *   a[href="#cookievoorkeuren"] opens the cookie preferences (Finsweet), e.g. a link in the Cookiebeleid Rich Text
+ * Dates
+ *   [data-date-nl]              English day and month names inside it (Webflow CMS dates) become Dutch, short forms too
+ *                               (Tuesday > dinsdag, Nov > nov). Keeps a capital if the original had one. Also in the drawer.
  * Tally
  *   a[href="#tally-open=ID"]    opens that Tally form as Tally's popup (bottom right, waving hand) (Onkruid's forms). Works in a Rich Text too: only
  *                               the link URL. Extra options as in Tally's own hash (&tally-width=560 ...). embed.js loads
@@ -39,7 +42,7 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.13';
+  if (window.__shelter) return; window.__shelter = '0.9.14';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -743,10 +746,32 @@
     if (btn) { ccMark(); btn.click(); }
   }, true);
 
+  /* ---------- Dates: Webflow writes CMS dates in English ---------- */
+  // Every day and month sits in its own element (or one text), so a word swap is enough: no date library needed.
+  const NL = {
+    monday: 'maandag', tuesday: 'dinsdag', wednesday: 'woensdag', thursday: 'donderdag', friday: 'vrijdag', saturday: 'zaterdag', sunday: 'zondag',
+    mon: 'ma', tue: 'di', wed: 'wo', thu: 'do', fri: 'vr', sat: 'za', sun: 'zo',
+    january: 'januari', february: 'februari', march: 'maart', april: 'april', may: 'mei', june: 'juni', july: 'juli',
+    august: 'augustus', september: 'september', october: 'oktober', november: 'november', december: 'december',
+    jan: 'jan', feb: 'feb', mar: 'mrt', apr: 'apr', jun: 'jun', jul: 'jul', aug: 'aug', sep: 'sep', sept: 'sep', oct: 'okt', nov: 'nov', dec: 'dec'
+  };
+  const WORD = new RegExp('\\b(' + Object.keys(NL).sort((a, b) => b.length - a.length).join('|') + ')\\b', 'gi');
+  const dateNl = (root) => (root || document).querySelectorAll('[data-date-nl]').forEach((el) => {
+    if (el._nl) return; el._nl = true;
+    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+      n.nodeValue = n.nodeValue.replace(WORD, (w) => { const t = NL[w.toLowerCase()]; return /^[A-Z]/.test(w) ? t[0].toUpperCase() + t.slice(1) : t; });
+    }
+  });
+  // The drawer is fetched and put in the body by drawer.js (no init runs for it): translate when it lands
+  new MutationObserver((list) => list.forEach((m) => m.addedNodes.forEach((n) => n.nodeType === 1 && dateNl(n.matches('[data-date-nl]') ? n.parentNode : n))))
+    .observe(document.body, { childList: true });
+
   /* ---------- Init ---------- */
   const init = (scope = document) => {
     const s = scope || document;
     ccMark();
+    dateNl(document);
     document.querySelectorAll('img[data-inline-svg]').forEach(inline); // also the fixed UI outside #swup
     s.querySelectorAll('[data-outline-text]').forEach(splitWords);
     s.querySelectorAll('[data-reveal="product"]').forEach((p) => {
