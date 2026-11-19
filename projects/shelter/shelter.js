@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.17 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.18 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -45,11 +45,11 @@
  *   [data-draw-form]            hidden Webflow form (Header): "Save it" sends the drawing to Shelter as a form submission,
  *     [data-draw-lines]         once per new drawing. The textarea gets the lines in logo coordinates, simplified:
  *                               "width:x,y dx,dy dx,dy;width:..." (first point absolute, then steps). Nothing personal.
- *     [data-draw-file]          the File upload input (Premium plan): gets a PNG of the drawing (1512 x 520, outline logo +
- *                               red lines, as on screen), uploaded by Webflow before the submit. Lines are the fallback.
+ *     [data-draw-file]          the File upload input (Premium plan): gets a PNG of the drawing (1512 x 520, only the red
+ *                               lines, transparent background), uploaded by Webflow before the submit. Lines are the fallback.
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.17';
+  if (window.__shelter) return; window.__shelter = '0.9.18';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -719,25 +719,12 @@
       let px = 0, py = 0;
       return (Array.isArray(st) ? STROKE : st.w) + ':' + pts.map(([x, y], i) => { const v = i ? (x - px) + ',' + (y - py) : x + ',' + y; px = x; py = y; return v; }).join(' ');
     }).join(';');
-    // PNG of the drawing, 1512 x 520 (logo coordinates): page colour, the outline logo (version 1, [data-logo-base]) with
-    // its live colours, the red lines on top in 'multiply' (red on the white, the logo's black line stays black: as on screen)
+    // PNG of the drawing, 1512 x 520 (logo coordinates): only the lines, in the drawing red (INK, as on screen), on a
+    // transparent background. No page colour, no logo.
     const toPng = async () => {
       const c = document.createElement('canvas'); c.width = W; c.height = H;
       const x = c.getContext('2d');
-      const bg = getComputedStyle(document.body).backgroundColor;
-      x.fillStyle = !bg || bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)' ? '#fff' : bg; x.fillRect(0, 0, W, H);
-      const svg = root.querySelector('[data-logo-base]');
-      if (svg && svg.tagName.toLowerCase() === 'svg') {
-        try {
-          const cl = svg.cloneNode(true), src = [svg, ...svg.querySelectorAll('*')], dst = [cl, ...cl.querySelectorAll('*')];
-          src.forEach((el, i) => { const cs = getComputedStyle(el), d = dst[i]; if (!d) return; ['fill', 'stroke', 'stroke-width', 'opacity'].forEach((p) => d.style.setProperty(p, cs.getPropertyValue(p))); });
-          cl.removeAttribute('class'); cl.setAttribute('xmlns', 'http://www.w3.org/2000/svg'); cl.setAttribute('width', W); cl.setAttribute('height', H);
-          const im = new Image();
-          await new Promise((ok, no) => { im.onload = ok; im.onerror = no; im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(cl)); });
-          x.drawImage(im, 0, 0, W, H);
-        } catch (e) {}
-      }
-      x.globalCompositeOperation = 'multiply'; x.strokeStyle = INK; x.lineCap = 'round'; x.lineJoin = 'round';
+      x.strokeStyle = INK; x.lineCap = 'round'; x.lineJoin = 'round';
       strokes.forEach((st) => { const pts = Array.isArray(st) ? st : st.p; x.lineWidth = Array.isArray(st) ? STROKE : st.w; x.beginPath(); x.moveTo(pts[0][0], pts[0][1]); if (pts.length === 1) x.lineTo(pts[0][0] + 0.01, pts[0][1]); for (let i = 1; i < pts.length - 1; i++) { const mx = (pts[i][0] + pts[i + 1][0]) / 2, my = (pts[i][1] + pts[i + 1][1]) / 2; x.quadraticCurveTo(pts[i][0], pts[i][1], mx, my); } if (pts.length > 1) x.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]); x.stroke(); });
       return new Promise((ok) => c.toBlob(ok, 'image/png'));
     };
