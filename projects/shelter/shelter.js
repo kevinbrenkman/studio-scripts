@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.22 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.23 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -50,7 +50,7 @@
  *                               the upload fails. Not on Shelter (Kevin: PNG only).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.22';
+  if (window.__shelter) return; window.__shelter = '0.9.23';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -682,7 +682,7 @@
 
     const setDrawing = (on) => {
       drawing = on;
-      requestAnimationFrame(lift);
+      [0, 60, 400].forEach((t) => setTimeout(lift, t)); // the hint animates in: measure again once it is in place
       html.classList.toggle('is-drawing', on);
       root.classList.remove('is-building');
       toggle.setAttribute('aria-pressed', String(on));
