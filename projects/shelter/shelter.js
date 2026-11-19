@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.13 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.16 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -35,6 +35,8 @@
  *   a[href="#tally-open=ID"]    opens that Tally form as Tally's popup (bottom right, waving hand) (Onkruid's forms). Works in a Rich Text too: only
  *                               the link URL. Extra options as in Tally's own hash (&tally-width=560 ...). embed.js loads
  *                               on the first click; no page jump, no hash left in the URL.
+ *   [data-tally-scrim]          scrim behind the popup (Global component, drawer_scrim + is-tally): gets .is-open while
+ *                               the popup is open; a click on it or Escape closes the popup.
  * Draw your Shelter (prototype: red marker on the outline logo, under the logo's black line)
  *   [data-draw-toggle]          the balloon: draw / "save it" (the drawing fades out, drawing again brings it back)
  *     data-draw-mobile="false"  hidden under 768px (Global embed CSS, bound to the Header prop "Draw on mobile")
@@ -45,7 +47,7 @@
  *                               "width:x,y dx,dy dx,dy;width:..." (first point absolute, then steps). Nothing personal.
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.15';
+  if (window.__shelter) return; window.__shelter = '0.9.16';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -779,8 +781,15 @@
     const o = { emoji: { text: '\u{1F44B}', animation: 'wave' } }; // Tally's own popup: bottom right, waving hand (client feedback)
     q.forEach((v, k) => { if (k === 'tally-open' || !k.startsWith('tally-')) return;
       o[k.slice(6).replace(/-(\w)/g, (m, c) => c.toUpperCase())] = /^\d+$/.test(v) ? +v : v === 'true' ? true : v === 'false' ? false : v; });
+    // Scrim: [data-tally-scrim] (Global component, drawer_scrim + is-tally). Shown while the popup is open, a click on it closes the popup.
+    o.onOpen = () => { tallyOpen = id; const s = document.querySelector('[data-tally-scrim]'); if (s) s.classList.add('is-open'); };
+    o.onClose = () => { tallyOpen = null; const s = document.querySelector('[data-tally-scrim]'); if (s) s.classList.remove('is-open'); };
     tallyJs().then(() => window.Tally && Tally.openPopup(id, o)).catch(() => { location.href = 'https://tally.so/r/' + id; });
   }, true);
+  let tallyOpen = null;
+  const tallyClose = () => { if (tallyOpen && window.Tally) Tally.closePopup(tallyOpen); };
+  document.addEventListener('click', (e) => { if (tallyOpen && e.target.closest && e.target.closest('[data-tally-scrim]')) tallyClose(); });
+  addEventListener('keydown', (e) => { if (e.key === 'Escape') tallyClose(); });
 
   /* ---------- Cookie links: no Swup, no jump to the top ---------- */
   // Finsweet's buttons are links to "#": Swup took them as an anchor visit and scrolled to the top (Paloma had the same).
