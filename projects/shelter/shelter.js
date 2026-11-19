@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.25 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.26 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -50,7 +50,7 @@
  *                               the upload fails. Not on Shelter (Kevin: PNG only).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.25';
+  if (window.__shelter) return; window.__shelter = '0.9.26';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -843,8 +843,19 @@
     q.forEach((v, k) => { if (k === 'tally-open' || !k.startsWith('tally-')) return;
       o[k.slice(6).replace(/-(\w)/g, (m, c) => c.toUpperCase())] = /^\d+$/.test(v) ? +v : v === 'true' ? true : v === 'false' ? false : v; });
     // Scrim: [data-tally-scrim] (Global component, drawer_scrim + is-tally). Shown while the popup is open, a click on it closes the popup.
-    o.onOpen = () => { tallyOpen = id; const s = document.querySelector('[data-tally-scrim]'); if (s) s.classList.add('is-open'); };
-    o.onClose = () => { tallyOpen = null; const s = document.querySelector('[data-tally-scrim]'); if (s) s.classList.remove('is-open'); };
+    // Touch: the scrim is not fixed but absolute over the whole page (as the drawer). iOS Safari turns its see-through
+    // toolbars solid for a fixed full-screen layer; with an absolute one the page keeps showing under them.
+    o.onOpen = () => {
+      tallyOpen = id; const s = document.querySelector('[data-tally-scrim]'); if (!s) return;
+      clearTimeout(s._t);
+      if (!FINE) Object.assign(s.style, { position: 'absolute', top: '0', bottom: 'auto', height: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight) + 'px' });
+      requestAnimationFrame(() => s.classList.add('is-open'));
+    };
+    o.onClose = () => {
+      tallyOpen = null; const s = document.querySelector('[data-tally-scrim]'); if (!s) return;
+      s.classList.remove('is-open');
+      clearTimeout(s._t); s._t = setTimeout(() => { s.style.position = s.style.top = s.style.bottom = s.style.height = ''; }, 400); // after the fade
+    };
     tallyJs().then(() => window.Tally && Tally.openPopup(id, o)).catch(() => { location.href = 'https://tally.so/r/' + id; });
   }, true);
   let tallyOpen = null;
