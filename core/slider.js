@@ -1,5 +1,5 @@
 /*!
- * slider.js 1.12.1 (kevinbrenkman/studio-scripts/core)
+ * slider.js 1.12.2 (kevinbrenkman/studio-scripts/core)
  * Splide sliders from plain Webflow markup (static or CMS), set up with data attributes. Docs: docs/splide.md
  * Extracted from Paloma: CaseSlider 1.2.0, SliderMotion 1.1.0, SliderDrag 1.0.0, SliderFX 1.12.0.
  *
@@ -26,7 +26,7 @@
  * Fires 'slider:ready' on the root once mounted; the Splide instance is root._sp.
  */
 (() => {
-  if (window.__studioSlider) return; window.__studioSlider = '1.12.1';
+  if (window.__studioSlider) return; window.__studioSlider = '1.12.2';
   window.App = window.App || { inits: [], destroys: [] };
 
   const SPLIDE_SRC = 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js';
@@ -149,6 +149,9 @@
       snap: a('drag') === 'free',
       flickPower: val(a('flick'), 150),
       flickMaxPages: 1,
+      // A mouse click that slips a few px is a click, not a drag (Splide's mouse default is 0: the card stayed shut).
+      // data-slider-drag-threshold="8" (px)
+      dragMinThreshold: { mouse: val(a('drag-threshold'), 8), touch: 10 },
       padding: { left: a('padding-left') || 0, right: a('padding-right') || 0 },
       breakpoints: {
         767: {
