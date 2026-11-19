@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.26 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.27 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -44,13 +44,13 @@
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
  *   [data-draw-form]            Webflow form (Header, visually hidden but on screen: Turnstile only starts for a form in
  *                               view): "Save it" sends the drawing to Shelter as a form submission, once per new drawing.
- *     [data-draw-file]          the File upload input (Premium plan): gets a PNG of the drawing (1512 x 520, only the red
- *                               lines, transparent background), uploaded by Webflow before the submit.
+ *     [data-draw-file]          the File upload input (Premium plan): gets a PNG of the drawing (only the red lines,
+ *                               transparent background; the logo area, grown to lines drawn outside it), uploaded by Webflow before the submit.
  *     [data-draw-lines]         optional textarea: the lines as text ("width:x,y dx,dy;..."), then also the fallback when
  *                               the upload fails. Not on Shelter (Kevin: PNG only).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.26';
+  if (window.__shelter) return; window.__shelter = '0.9.27';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -737,11 +737,17 @@
       let px = 0, py = 0;
       return (Array.isArray(st) ? STROKE : st.w) + ':' + pts.map(([x, y], i) => { const v = i ? (x - px) + ',' + (y - py) : x + ',' + y; px = x; py = y; return v; }).join(' ');
     }).join(';');
-    // PNG of the drawing, 1512 x 520 (logo coordinates): only the lines, in the drawing red (INK, as on screen), on a
-    // transparent background. No page colour, no logo.
+    // PNG of the drawing: only the lines, in the drawing red (INK, as on screen), on a transparent background. No page
+    // colour, no logo. In logo coordinates: at least the logo area (1512 x 520), grown to every line drawn outside it
+    // (a phone draws over the whole screen). Very tall drawings are scaled down to 4000 px at most.
     const toPng = async () => {
-      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      let x0 = 0, y0 = 0, x1 = W, y1 = H;
+      strokes.forEach((st) => { const pts = Array.isArray(st) ? st : st.p, lw = (Array.isArray(st) ? STROKE : st.w) / 2 + 2; pts.forEach(([px, py]) => { x0 = Math.min(x0, px - lw); y0 = Math.min(y0, py - lw); x1 = Math.max(x1, px + lw); y1 = Math.max(y1, py + lw); }); });
+      x0 = Math.floor(x0); y0 = Math.floor(y0);
+      const bw = Math.ceil(x1 - x0), bh = Math.ceil(y1 - y0), k = Math.min(1, 4000 / Math.max(bw, bh));
+      const c = document.createElement('canvas'); c.width = Math.round(bw * k); c.height = Math.round(bh * k);
       const x = c.getContext('2d');
+      x.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
       x.strokeStyle = INK; x.lineCap = 'round'; x.lineJoin = 'round';
       strokes.forEach((st) => { const pts = Array.isArray(st) ? st : st.p; x.lineWidth = Array.isArray(st) ? STROKE : st.w; x.beginPath(); x.moveTo(pts[0][0], pts[0][1]); if (pts.length === 1) x.lineTo(pts[0][0] + 0.01, pts[0][1]); for (let i = 1; i < pts.length - 1; i++) { const mx = (pts[i][0] + pts[i + 1][0]) / 2, my = (pts[i][1] + pts[i + 1][1]) / 2; x.quadraticCurveTo(pts[i][0], pts[i][1], mx, my); } if (pts.length > 1) x.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]); x.stroke(); });
       return new Promise((ok) => c.toBlob(ok, 'image/png'));
