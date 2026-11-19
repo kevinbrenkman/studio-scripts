@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.20 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.21 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -50,7 +50,7 @@
  *                               the upload fails. Not on Shelter (Kevin: PNG only).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.20';
+  if (window.__shelter) return; window.__shelter = '0.9.21';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -772,24 +772,23 @@
       // The PNG goes into the native File upload ([data-draw-file]) first; Webflow uploads it on 'change'. With a lines
       // field the form still goes out if the upload fails; without one, a failed upload sends nothing (tried again next save).
       const ready = fileIn ? attachPng(fileIn).catch((e) => { if (!field) throw e; }) : Promise.resolve();
+      // No Turnstile reset between drawings: Webflow keeps its token and a second drawing went through with it (0.9.18);
+      // resetting the widget (0.9.19/0.9.20) left the button disabled, so nothing was sent
       let tries = 0;
       const go = () => {
         const btn = form.querySelector('[type="submit"]');
         if (btn && btn.disabled && tries++ < 60) return void setTimeout(go, 250);
-        if (!btn || btn.disabled) { sending = false; return; }
+        if (!btn || btn.disabled) { console.warn('[shelter] drawing not sent: the spam check (Turnstile) gave no token'); sending = false; return; }
         btn.click();
         const t0 = Date.now();
-        // A Turnstile token works once: after every try ask Turnstile for a fresh one, or the next drawing is refused
-        // (Webflow only enables the button again when the new token is in)
-        const fresh = () => { try { const r = form.querySelector('input[name="cf-turnstile-response"]'), box = r && r.parentElement && r.parentElement.parentElement; if (box && window.turnstile) turnstile.reset(box); } catch (e) {} };
         const check = () => {
-          if (done && getComputedStyle(done).display !== 'none') { try { localStorage.setItem(SENT, data); } catch (e) {} sending = false; fresh(); return; }
-          if ((fail && getComputedStyle(fail).display !== 'none') || Date.now() - t0 > 20000) { sending = false; fresh(); return; }
+          if (done && getComputedStyle(done).display !== 'none') { try { localStorage.setItem(SENT, data); } catch (e) {} sending = false; return; }
+          if ((fail && getComputedStyle(fail).display !== 'none') || Date.now() - t0 > 20000) { console.warn('[shelter] drawing not sent: Webflow refused it or timed out'); sending = false; return; }
           setTimeout(check, 300);
         };
         check();
       };
-      ready.then(go, () => { sending = false; });
+      ready.then(go, () => { console.warn('[shelter] drawing not sent: the PNG upload failed'); sending = false; });
     };
     const clear = (e) => { const c = e.target.closest('[data-draw-clear]'); if (!c) return; e.preventDefault(); e.stopImmediatePropagation(); strokes = []; live = null; redraw(); store(); paintOverlay(); };
     const key = (e) => { if (e.key === 'Escape' && drawing) saveOut(); };
