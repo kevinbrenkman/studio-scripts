@@ -1,5 +1,5 @@
 /*!
- * marquee.js 1.3.0 (kevinbrenkman/studio-scripts/core)
+ * marquee.js 1.4.0 (kevinbrenkman/studio-scripts/core)
  * Endless strip that keeps moving (also on hover). Drag eases toward the finger, a throw carries on
  * and glides back to cruising speed. Ported from the Shelter prototype (Onkruid). No dependencies.
  *
@@ -14,9 +14,13 @@
  *   data-marquee-direction="left"   left | right. Default left
  *   data-marquee-drag="false"       no dragging (mouse, touch and horizontal trackpad swipe)
  *   data-marquee-mobile="false"     off under 768px: the track keeps its own Webflow layout (e.g. a grid)
+ *   data-marquee-mobile-max="6"     under 768px only the first 6 items show (empty or 0 = all)
+ *   data-marquee-mobile-random="true"  under 768px the items come in a random order (per visit), before the max
+ * 1.4.0: mobile-max and mobile-random. Checked once when the strip starts: the order only shuffles on a phone,
+ *        the cut items are hidden by CSS under 768px only, so a desktop always shows everything.
  */
 (() => {
-  if (window.__studioMarquee) return; window.__studioMarquee = '1.3.0';
+  if (window.__studioMarquee) return; window.__studioMarquee = '1.4.0';
   window.App = window.App || { inits: [], destroys: [] };
 
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -30,7 +34,8 @@
       '[data-marquee].is-marquee{overflow:hidden;touch-action:pan-y;user-select:none;-webkit-user-select:none;cursor:grab}' +
       '[data-marquee].is-marquee.is-dragging{cursor:grabbing}' +
       '[data-marquee].is-marquee [data-marquee-track],[data-marquee].is-marquee>:first-child{will-change:transform;flex-wrap:nowrap}' +
-      '[data-marquee].is-marquee img{pointer-events:none;-webkit-user-drag:none}';
+      '[data-marquee].is-marquee img{pointer-events:none;-webkit-user-drag:none}' +
+      '@media (max-width:767px){[data-marquee] [data-marquee-cut]{display:none!important}}';
     document.head.appendChild(st);
   }
 
@@ -39,6 +44,17 @@
     const track = root.querySelector('[data-marquee-track]') || root.firstElementChild;
     if (!track || !track.children.length) return;
     const a = (k) => root.getAttribute('data-marquee-' + k);
+    // Phones: shuffle (optional), then keep the first N. Webflow writes boolean props as "True"/"False".
+    if (!root._capped) {
+      root._capped = true;
+      const kids = [...track.children];
+      if (MOBILE.matches && /^true$/i.test(a('mobile-random') || '')) {
+        for (let i = kids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [kids[i], kids[j]] = [kids[j], kids[i]]; }
+        kids.forEach((k) => track.appendChild(k));
+      }
+      const max = parseInt(a('mobile-max'), 10);
+      kids.forEach((k, i) => k.toggleAttribute('data-marquee-cut', max > 0 && i >= max));
+    }
     const offMobile = a('mobile') === 'false';
     const dir = a('direction') === 'right' ? 1 : -1;
     const base = parseFloat(a('speed')) || 40;
