@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.23 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.24 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -50,7 +50,7 @@
  *                               the upload fails. Not on Shelter (Kevin: PNG only).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.23';
+  if (window.__shelter) return; window.__shelter = '0.9.24';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -668,6 +668,7 @@
     const ccBanner = document.querySelector('[fs-cc="banner"]');
     if (ccBanner) ccWatch.observe(ccBanner, { attributes: true, attributeFilter: ['style', 'class'] });
     addEventListener('resize', lift);
+    hint.addEventListener('transitionend', lift); // after the hint has animated in (the first time it can take longer)
     const isUI = (e) => e.target.closest && e.target.closest(UI);
     const down = (e) => { if (!drawing || isUI(e) || (e.button && e.button !== 0)) return; e.preventDefault(); e.stopPropagation(); live = { w: e.pointerType === 'touch' ? Math.round(FINGER * W / Math.max(1, box().width)) : STROKE, p: [toLogo(e)] }; strokes.push(live); redraw(); };
     const move = (e) => { if (!live) return; e.preventDefault(); const co = e.getCoalescedEvents ? e.getCoalescedEvents() : []; (co.length ? co : [e]).forEach((ev) => live.p.push(toLogo(ev))); redraw(); };
@@ -682,7 +683,7 @@
 
     const setDrawing = (on) => {
       drawing = on;
-      [0, 60, 400].forEach((t) => setTimeout(lift, t)); // the hint animates in: measure again once it is in place
+      [0, 60, 400, 900].forEach((t) => setTimeout(lift, t)); // the hint animates in: measure again once it is in place
       html.classList.toggle('is-drawing', on);
       root.classList.remove('is-building');
       toggle.setAttribute('aria-pressed', String(on));
@@ -818,7 +819,7 @@
     toggle.setAttribute('role', 'button'); toggle.setAttribute('aria-pressed', 'false');
     toggle._draw = () => {
       if (drawing) setDrawing(false);
-      ro.disconnect(); ro2.disconnect(); ccWatch.disconnect(); removeEventListener('resize', lift); root.removeEventListener('logo:frame', onFrame); toggle.removeEventListener('click', click, true); document.removeEventListener('click', clear, true); removeEventListener('keydown', key); removeEventListener('wheel', wheel);
+      ro.disconnect(); ro2.disconnect(); ccWatch.disconnect(); removeEventListener('resize', lift); hint.removeEventListener('transitionend', lift); root.removeEventListener('logo:frame', onFrame); toggle.removeEventListener('click', click, true); document.removeEventListener('click', clear, true); removeEventListener('keydown', key); removeEventListener('wheel', wheel);
       document.removeEventListener('pointerdown', down, true); removeEventListener('pointermove', move); removeEventListener('pointerup', end); removeEventListener('pointercancel', end);
       document.removeEventListener('click', swallow, true); document.removeEventListener('dragstart', swallow, true);
       canvas.remove(); hint.remove(); delete toggle._draw;
