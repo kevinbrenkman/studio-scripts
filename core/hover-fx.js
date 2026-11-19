@@ -1,5 +1,5 @@
 /*!
- * hover-fx.js 1.0.8 (kevinbrenkman/studio-scripts/core)
+ * hover-fx.js 1.0.9 (kevinbrenkman/studio-scripts/core)
  * Small cursor effects with GSAP. Desktop (fine pointer) only, off with reduced motion. Needs GSAP (Webflow site setting).
  *
  * Magnetic  [data-magnetic]            pulled towards the cursor, springs back on leave (Paloma MailMagnet)
@@ -14,7 +14,7 @@
  *           buttons and tilting links.
  */
 (() => {
-  if (window.__studioHoverFx) return; window.__studioHoverFx = '1.0.8';
+  if (window.__studioHoverFx) return; window.__studioHoverFx = '1.0.9';
   window.App = window.App || { inits: [], destroys: [] };
   const ok = () => window.gsap && matchMedia('(hover: hover) and (pointer: fine)').matches && !matchMedia('(prefers-reduced-motion: reduce)').matches;
   const em = () => parseFloat(getComputedStyle(document.body).fontSize) || 16;
@@ -69,10 +69,12 @@
   addEventListener('resize', () => {
     mx = null; clearTimeout(resizeT);
     resizeT = setTimeout(() => {
-      followers.forEach((el) => {
+      // A copy: follow() adds back to the Set, and a Set's forEach would visit the re-added element again (endless loop)
+      [...followers].forEach((el) => {
+        followers.delete(el);
         if (!el.isConnected) return;
         gsap.killTweensOf(el); gsap.set(el, { clearProps: 'x,y,rotation' });
-        delete el._fx; followers.delete(el); follow(el);
+        delete el._fx; follow(el);
       });
     }, 150);
   });
