@@ -715,16 +715,34 @@
       let px = 0, py = 0;
       return (Array.isArray(st) ? STROKE : st.w) + ':' + pts.map(([x, y], i) => { const v = i ? (x - px) + ',' + (y - py) : x + ',' + y; px = x; py = y; return v; }).join(' ');
     }).join(';');
+    // Webflow's spam check (Turnstile) keeps the submit button disabled for a moment: wait for it. Marked as sent only
+    // when Webflow shows its success state; the form is reset for the next drawing.
+    let sending = false;
     const send = () => {
       const form = document.querySelector('[data-draw-form] form'), field = form && form.querySelector('[data-draw-lines]');
-      if (!field || !strokes.length) return;
+      if (!field || !strokes.length || sending) return;
       const data = encode();
       let last = ''; try { last = localStorage.getItem(SENT) || ''; } catch (e) {}
       if (data === last) return; // this drawing went out already
+      sending = true;
+      const done = form.parentNode.querySelector('.w-form-done'), fail = form.parentNode.querySelector('.w-form-fail');
+      form.style.display = ''; if (done) done.style.display = 'none'; if (fail) fail.style.display = 'none';
       field.removeAttribute('maxlength'); field.value = data;
-      const btn = form.querySelector('[type="submit"]');
-      if (btn) btn.click(); else if (form.requestSubmit) form.requestSubmit(); else form.submit();
-      try { localStorage.setItem(SENT, data); } catch (e) {}
+      let tries = 0;
+      const go = () => {
+        const btn = form.querySelector('[type="submit"]');
+        if (btn && btn.disabled && tries++ < 60) return void setTimeout(go, 250);
+        if (!btn || btn.disabled) { sending = false; return; }
+        btn.click();
+        const t0 = Date.now();
+        const check = () => {
+          if (done && getComputedStyle(done).display !== 'none') { try { localStorage.setItem(SENT, data); } catch (e) {} sending = false; return; }
+          if ((fail && getComputedStyle(fail).display !== 'none') || Date.now() - t0 > 20000) { sending = false; return; }
+          setTimeout(check, 300);
+        };
+        check();
+      };
+      go();
     };
     const clear = (e) => { const c = e.target.closest('[data-draw-clear]'); if (!c) return; e.preventDefault(); e.stopImmediatePropagation(); strokes = []; live = null; redraw(); store(); paintOverlay(); };
     const key = (e) => { if (e.key === 'Escape' && drawing) saveOut(); };
