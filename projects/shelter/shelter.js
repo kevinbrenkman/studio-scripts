@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.21 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.22 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -50,7 +50,7 @@
  *                               the upload fails. Not on Shelter (Kevin: PNG only).
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.21';
+  if (window.__shelter) return; window.__shelter = '0.9.22';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -653,7 +653,21 @@
     root.addEventListener('logo:frame', onFrame);
     const toLogo = (e) => { const r = box(); return [Math.round((e.clientX - r.left) / r.width * W * 10) / 10, Math.round((e.clientY - r.top) / r.height * H * 10) / 10]; };
     // While drawing the whole document is the drawing surface; only the balloon and the hint stay clickable
-    const UI = '[data-draw-toggle],[data-draw-hint],[data-theme-picker]';
+    // The cookie banner and its preferences stay clickable too (on a phone it covers the bottom of the screen)
+    const UI = '[data-draw-toggle],[data-draw-hint],[data-theme-picker],[fs-cc="banner"],[fs-cc="preferences"]';
+    // While the cookie banner shows, the hint ("Wissen") moves up above it, so both can be used
+    const ccShown = (el) => { if (!el) return false; const cs = getComputedStyle(el), r = el.getBoundingClientRect(); return cs.display !== 'none' && cs.visibility !== 'hidden' && +cs.opacity > 0 && r.height > 0 && r.top < innerHeight; };
+    const lift = () => {
+      hint.style.translate = '';
+      const b = document.querySelector('[fs-cc="banner"]');
+      if (!drawing || !ccShown(b)) return;
+      const over = hint.getBoundingClientRect().bottom - b.getBoundingClientRect().top + 8;
+      if (over > 0) hint.style.translate = '0 ' + (-Math.round(over)) + 'px';
+    };
+    const ccWatch = new MutationObserver(() => requestAnimationFrame(lift));
+    const ccBanner = document.querySelector('[fs-cc="banner"]');
+    if (ccBanner) ccWatch.observe(ccBanner, { attributes: true, attributeFilter: ['style', 'class'] });
+    addEventListener('resize', lift);
     const isUI = (e) => e.target.closest && e.target.closest(UI);
     const down = (e) => { if (!drawing || isUI(e) || (e.button && e.button !== 0)) return; e.preventDefault(); e.stopPropagation(); live = { w: e.pointerType === 'touch' ? Math.round(FINGER * W / Math.max(1, box().width)) : STROKE, p: [toLogo(e)] }; strokes.push(live); redraw(); };
     const move = (e) => { if (!live) return; e.preventDefault(); const co = e.getCoalescedEvents ? e.getCoalescedEvents() : []; (co.length ? co : [e]).forEach((ev) => live.p.push(toLogo(ev))); redraw(); };
@@ -668,6 +682,7 @@
 
     const setDrawing = (on) => {
       drawing = on;
+      requestAnimationFrame(lift);
       html.classList.toggle('is-drawing', on);
       root.classList.remove('is-building');
       toggle.setAttribute('aria-pressed', String(on));
@@ -803,7 +818,7 @@
     toggle.setAttribute('role', 'button'); toggle.setAttribute('aria-pressed', 'false');
     toggle._draw = () => {
       if (drawing) setDrawing(false);
-      ro.disconnect(); ro2.disconnect(); root.removeEventListener('logo:frame', onFrame); toggle.removeEventListener('click', click, true); document.removeEventListener('click', clear, true); removeEventListener('keydown', key); removeEventListener('wheel', wheel);
+      ro.disconnect(); ro2.disconnect(); ccWatch.disconnect(); removeEventListener('resize', lift); root.removeEventListener('logo:frame', onFrame); toggle.removeEventListener('click', click, true); document.removeEventListener('click', clear, true); removeEventListener('keydown', key); removeEventListener('wheel', wheel);
       document.removeEventListener('pointerdown', down, true); removeEventListener('pointermove', move); removeEventListener('pointerup', end); removeEventListener('pointercancel', end);
       document.removeEventListener('click', swallow, true); document.removeEventListener('dragstart', swallow, true);
       canvas.remove(); hint.remove(); delete toggle._draw;
