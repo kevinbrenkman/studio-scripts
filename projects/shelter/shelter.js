@@ -40,9 +40,12 @@
  *     data-draw-mobile="false"  hidden under 768px (Global embed CSS, bound to the Header prop "Draw on mobile")
  *   Drawing covers the whole screen, under the page content, and holds the page at the top. Live only, built by this file: the canvas inside [data-logo], the "save it" balloon, the hint with "Wissen".
  *   Strokes are stored in logo coordinates (1512 x 520) and kept in localStorage (back after a reload or a new visit).
+ *   [data-draw-form]            hidden Webflow form (Header): "Save it" sends the drawing to Shelter as a form submission,
+ *     [data-draw-lines]         once per new drawing. The textarea gets the lines in logo coordinates, simplified:
+ *                               "width:x,y dx,dy dx,dy;width:..." (first point absolute, then steps). Nothing personal.
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.14';
+  if (window.__shelter) return; window.__shelter = '0.9.15';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -690,6 +693,38 @@
       overlay.style.transition = 'none'; overlay.style.opacity = '1'; paintOverlay();
       setDrawing(false); canvas.classList.add('is-hidden');
       void overlay.offsetWidth; overlay.style.transition = 'opacity .8s ease'; overlay.style.opacity = String(savedOp());
+      try { send(); } catch (e) {}
+    };
+    // Send to Shelter: lines simplified (Ramer-Douglas-Peucker, 1.5 logo px) and written as steps, so a drawing stays small
+    const SENT = 'shelter-drawing-sent';
+    const simplify = (pts, tol) => {
+      if (pts.length < 3) return pts;
+      const keep = new Uint8Array(pts.length); keep[0] = keep[pts.length - 1] = 1;
+      const stack = [[0, pts.length - 1]];
+      while (stack.length) {
+        const [a, b] = stack.pop(); const [ax, ay] = pts[a], [bx, by] = pts[b];
+        const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
+        let far = -1, max = tol;
+        for (let i = a + 1; i < b; i++) { const d = Math.abs(dy * pts[i][0] - dx * pts[i][1] + bx * ay - by * ax) / len; if (d > max) { max = d; far = i; } }
+        if (far > -1) { keep[far] = 1; stack.push([a, far], [far, b]); }
+      }
+      return pts.filter((p, i) => keep[i]);
+    };
+    const encode = () => strokes.map((st) => {
+      const pts = simplify((Array.isArray(st) ? st : st.p).map(([x, y]) => [Math.round(x), Math.round(y)]), 1.5);
+      let px = 0, py = 0;
+      return (Array.isArray(st) ? STROKE : st.w) + ':' + pts.map(([x, y], i) => { const v = i ? (x - px) + ',' + (y - py) : x + ',' + y; px = x; py = y; return v; }).join(' ');
+    }).join(';');
+    const send = () => {
+      const form = document.querySelector('[data-draw-form] form'), field = form && form.querySelector('[data-draw-lines]');
+      if (!field || !strokes.length) return;
+      const data = encode();
+      let last = ''; try { last = localStorage.getItem(SENT) || ''; } catch (e) {}
+      if (data === last) return; // this drawing went out already
+      field.removeAttribute('maxlength'); field.value = data;
+      const btn = form.querySelector('[type="submit"]');
+      if (btn) btn.click(); else if (form.requestSubmit) form.requestSubmit(); else form.submit();
+      try { localStorage.setItem(SENT, data); } catch (e) {}
     };
     const clear = (e) => { const c = e.target.closest('[data-draw-clear]'); if (!c) return; e.preventDefault(); e.stopImmediatePropagation(); strokes = []; live = null; redraw(); store(); paintOverlay(); };
     const key = (e) => { if (e.key === 'Escape' && drawing) saveOut(); };
