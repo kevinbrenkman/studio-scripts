@@ -1,5 +1,5 @@
 /*!
- * shelter.js 0.9.18 (kevinbrenkman/studio-scripts/projects/shelter)
+ * shelter.js 0.9.19 (kevinbrenkman/studio-scripts/projects/shelter)
  * Shelter motion, ported from Lukas's prototype. Attribute hooks only, no classes.
  *
  * Logo
@@ -49,7 +49,7 @@
  *                               lines, transparent background), uploaded by Webflow before the submit. Lines are the fallback.
  */
 (() => {
-  if (window.__shelter) return; window.__shelter = '0.9.18';
+  if (window.__shelter) return; window.__shelter = '0.9.19';
   window.App = window.App || { inits: [], destroys: [] };
   const html = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -778,9 +778,12 @@
         if (!btn || btn.disabled) { sending = false; return; }
         btn.click();
         const t0 = Date.now();
+        // A Turnstile token works once: after every try ask Turnstile for a fresh one, or the next drawing is refused
+        // (Webflow only enables the button again when the new token is in)
+        const fresh = () => { try { const r = form.querySelector('input[name="cf-turnstile-response"]'), box = r && r.parentElement && r.parentElement.parentElement; if (box && window.turnstile) turnstile.reset(box); } catch (e) {} };
         const check = () => {
-          if (done && getComputedStyle(done).display !== 'none') { try { localStorage.setItem(SENT, data); } catch (e) {} sending = false; return; }
-          if ((fail && getComputedStyle(fail).display !== 'none') || Date.now() - t0 > 20000) { sending = false; return; }
+          if (done && getComputedStyle(done).display !== 'none') { try { localStorage.setItem(SENT, data); } catch (e) {} sending = false; fresh(); return; }
+          if ((fail && getComputedStyle(fail).display !== 'none') || Date.now() - t0 > 20000) { sending = false; fresh(); return; }
           setTimeout(check, 300);
         };
         check();
