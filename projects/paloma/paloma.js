@@ -43,6 +43,7 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - 1.93.7: TeamBurst 2.4.0 desktop: once the photos have landed, moving the mouse on (60px) sends them away.
  *  - 1.93.6: PlayerReveal 1.2.0: a player on screen when the page opens comes in with the page (no own fade or rise).
  *  - 1.93.5: SocialSlider: phone block pulled to the screen edge first (iPhone started it 10px in), rebuilt when the window
  *    crosses 768px (infinite only on desktop width). Glass rim highlights fall back to the renamed theme variables.
@@ -2809,7 +2810,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   window.App = window.App || { inits: [], destroys: [] };
   const B = {
     // desktop (cursor trail feel)
-    tilt: 3, areaX: 0.22, areaY: 0.3, tries: 30, glide: 0.9, step: 0.06, outDur: 0.3, stay: 3,
+    tilt: 3, areaX: 0.22, areaY: 0.3, tries: 30, glide: 0.9, step: 0.06, outDur: 0.3, stay: 3, moveOut: 60,
     // phones (TapStack feel)
     phone: 0.7, pileTilt: 8, spread: 28, pileStep: 0.18, popDur: 0.5, pileOut: 0.6,
     edge: 12, scrollOut: 80, halo: '1.5em 2em'
@@ -2818,6 +2819,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   // tries: random spots tried per photo, the one furthest from the others wins; glide: time a photo takes from the click
   // point to its spot, growing from 0 to full size on the way; step: delay between photos; stay: seconds the photos stay
   // after the last one landed, then they go by themselves (desktop; the cursor trail is paused while they show);
+  // moveOut: px the mouse moves after they all landed that sends them away sooner;
   // phone: photo scale below 768px (TapStack SIZE); pileTilt/spread: TapStack tilt and scatter in px;
   // edge: px kept free at the screen edges; scrollOut: px of scrolling that closes them; halo: clickable margin round
   // the words (vertical horizontal)
@@ -2869,7 +2871,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
       box.appendChild(im); layer.appendChild(box); return box;
     });
     gsap.set(items, { xPercent: -50, yPercent: -50, autoAlpha: 0 });
-    let open = false, openY = 0, from = null, timer = 0;
+    let open = false, openY = 0, from = null, timer = 0, armT = 0, armed = null, last = null;
     // Cursor trail off while the photos show: the Image Trail skips anything inside [data-trail-off]
     const trailOff = (on) => (on ? document.body.setAttribute('data-trail-off', '') : document.body.removeAttribute('data-trail-off'));
     const r = gsap.utils.random;
@@ -2920,11 +2922,14 @@ document.addEventListener('touchstart', () => {}, { passive: true });
         gsap.to(el, { x: x - L.left, y: y - L.top, scale: 1, duration: B.glide, ease: 'power3.out', delay: d });
       });
       trailOff(true);
-      clearTimeout(timer);
-      timer = setTimeout(collapse, ((quiet ? 0.2 : (order.length - 1) * B.step + B.glide) + B.stay) * 1000);
+      clearTimeout(timer); clearTimeout(armT); armed = null;
+      const landed = (quiet ? 0.2 : (order.length - 1) * B.step + B.glide) * 1000;
+      timer = setTimeout(collapse, landed + B.stay * 1000);
+      // Once all have landed, moving the mouse on (B.moveOut px) sends them away again
+      armT = setTimeout(() => { armed = last ? [last[0], last[1]] : null; }, landed);
     };
     const collapse = () => {
-      if (!open) return; open = false; clearTimeout(timer);
+      if (!open) return; open = false; clearTimeout(timer); clearTimeout(armT); armed = null;
       setTimeout(() => { if (!open) trailOff(false); }, 400); // trail back once they are gone
       const phone = innerWidth < 768, S = phone ? B.phone : 1, quiet = calm();
       gsap.killTweensOf(items); // photos still waiting for their turn never come in
@@ -2946,15 +2951,20 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     const outside = (e) => { if (open && !word.contains(e.target)) collapse(); };
     const scrolled = () => { if (open && Math.abs(scrollY - openY) > B.scrollOut) collapse(); };
     const key = (e) => { if (e.key === 'Escape') collapse(); };
+    const moved = (e) => {
+      last = [e.clientX, e.clientY];
+      if (!open || !armed) { if (open && !armed) return; return; }
+      if (Math.hypot(e.clientX - armed[0], e.clientY - armed[1]) > B.moveOut) collapse();
+    };
     word.addEventListener('click', click);
-    if (FINE) word.addEventListener('pointerenter', enter);
+    if (FINE) { word.addEventListener('pointerenter', enter); addEventListener('pointermove', moved, { passive: true }); }
     document.addEventListener('click', outside);
     addEventListener('scroll', scrolled, { passive: true });
     addEventListener('keydown', key);
     src._burst = () => {
       gsap.killTweensOf(items); layer.remove(); clearTimeout(timer); trailOff(false);
       word.removeEventListener('click', click); word.removeEventListener('pointerenter', enter); document.removeEventListener('click', outside);
-      removeEventListener('scroll', scrolled); removeEventListener('keydown', key);
+      removeEventListener('scroll', scrolled); removeEventListener('keydown', key); removeEventListener('pointermove', moved); clearTimeout(armT);
       delete src._burst;
     };
     live.add(src);
