@@ -43,6 +43,7 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - 1.92.1: TeamBurst fits the photo cluster on screen as a whole (keeps its shape); job description spacing like the Figma (Jobs).
  *  - 1.92.0 (revision 2): AlphaSafari 1.0.0 (Safari keeps the Home Header still until the HEVC .mov is filled in; a transparent WebM shows a black box there).
  *    SocialHover 1.0.0: Social Card with Info bar off plays muted on hover only (tap on touch), no sound play.
  *    ObjectTilt 1.0.0: Lost objects lean towards the mouse in 3D and drift a little to it.
@@ -262,6 +263,11 @@
       '@media (max-width:767px){[data-jobs] [data-job] .case-header_tag-list{justify-content:flex-start}}' +
       '.jobs_item.is-static .jobs_row{cursor:default}.jobs_item.is-static .jobs_plus{visibility:hidden}' +
       '.jobs_row:focus-visible{outline:1px solid currentColor;outline-offset:4px}' +
+      // Job description (rich text) like the Figma: a blank line between paragraphs, a bold heading sits right on its list,
+      // small list indent
+      '[data-jobs] .w-richtext>*{margin-top:0;margin-bottom:1.4em}[data-jobs] .w-richtext>:last-child{margin-bottom:0}' +
+      '[data-jobs] .w-richtext>p:has(>strong:only-child){margin-bottom:0}[data-jobs] .w-richtext ul{padding-left:1.25em}' +
+      '[data-jobs] .w-richtext a{text-decoration:underline;text-underline-offset:.15em}' +
       '.footer_count{font-size:.6em;margin-left:.15em;line-height:0}'; // the number itself comes from CSS now (Footer embed), so the sup is always empty: no :empty hide
     document.head.appendChild(st);
   }
@@ -2728,9 +2734,14 @@ document.addEventListener('touchstart', () => {}, { passive: true });
       const phone = innerWidth < 768, k = phone ? innerWidth / 390 * 0.55 : innerWidth / 1440;
       const w = innerWidth * (phone ? B.phone : B.size), half = w / 2 + B.edge;
       gsap.set(imgs, { width: w });
+      // Landing spots around the words; the whole cluster moves as one to fit on screen (keeps the shape),
+      // only then single photos are clamped to the edges.
+      const pts = imgs.map((im, i) => { const s = SPOTS[i % SPOTS.length], extra = Math.floor(i / SPOTS.length) * 40; return [cx + (s[0] + extra) * k, cy + (s[1] + extra) * k]; });
+      const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+      const fit = (lo, hi, max) => (hi - lo > max - 2 * half ? (max / 2) - (lo + hi) / 2 : lo < half ? half - lo : hi > max - half ? max - half - hi : 0);
+      const sx = fit(Math.min(...xs), Math.max(...xs), innerWidth), sy = fit(Math.min(...ys), Math.max(...ys), innerHeight);
       imgs.forEach((im, i) => {
-        const s = SPOTS[i % SPOTS.length], extra = Math.floor(i / SPOTS.length) * 40;
-        let x = cx + (s[0] + extra) * k, y = cy + (s[1] + extra) * k;
+        let x = pts[i][0] + sx, y = pts[i][1] + sy;
         x = Math.max(half, Math.min(innerWidth - half, x)); y = Math.max(half, Math.min(innerHeight - half, y));
         gsap.killTweensOf(im);
         gsap.fromTo(im,
