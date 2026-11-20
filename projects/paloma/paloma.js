@@ -43,6 +43,7 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - 1.92.3: CaseMeta 1.0.1, tags survive the slider re-init (slider:ready); Webflow's default og:title / twitter:title (page name) replaced.
  *  - 1.92.2: CaseMeta 1.0.0 (project pages without SEO settings get title, description and OG tags from the Case Header).
  *    SocialHover keeps the rim. TeamBurst 1.1.0, photos pop in on their spot one by one and fade out scaling down (TapStack motion), no flight from the words.
  *  - 1.92.1: TeamBurst fits the photo cluster on screen as a whole (keeps its shape); job description spacing like the Figma (Jobs).
@@ -2787,17 +2788,20 @@ document.addEventListener('touchstart', () => {}, { passive: true });
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
   const PREFIX = 'Paloma | ', MAX = 155;
-  const meta = (attr, key, val) => {
+  const meta = (attr, key, val, force) => {
     if (!val) return;
-    let m = document.head.querySelector('meta[' + attr + '="' + key + '"]');
-    if (!m) { m = document.createElement('meta'); m.setAttribute(attr, key); m.setAttribute('data-case-meta', ''); document.head.appendChild(m); }
-    else if (!m.hasAttribute('data-case-meta') && (m.getAttribute('content') || '').trim()) return; // filled in by hand
+    let m = document.head.querySelector('meta[name="' + key + '"], meta[property="' + key + '"]');
+    if (!m) { m = document.createElement('meta'); m.setAttribute(attr, key); document.head.appendChild(m); }
+    else if (!force && !m.hasAttribute('data-case-meta') && (m.getAttribute('content') || '').trim()) return; // filled in by hand
+    m.setAttribute('data-case-meta', '');
     m.setAttribute('content', val);
   };
   const clip = (t) => { t = t.replace(/\s+/g, ' ').trim(); if (t.length <= MAX) return t; const c = t.slice(0, MAX - 1); return c.slice(0, c.lastIndexOf(' ')) + '…'; };
+  // Webflow fills og:title / twitter:title with the page name when left empty: replace those, keep real ones
+  const ogTitle = (key) => { const m = document.head.querySelector('meta[property="' + key + '"], meta[name="' + key + '"]'); const c = m ? (m.getAttribute('content') || '').trim() : ''; return !c || !c.startsWith(PREFIX) || /template/i.test(c); };
   const init = (scope = document) => {
+    // Inits also run with a slider as scope (slider:ready): only the page itself counts
     const head = (scope || document).querySelector('.case-header');
-    document.head.querySelectorAll('meta[data-case-meta]').forEach((m) => m.remove()); // from the previous page (Swup)
     if (!head) return;
     const name = ((head.querySelector('.case-header_title') || {}).textContent || '').trim();
     if (!name) return;
@@ -2809,11 +2813,12 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     const imgEl = (scope || document).querySelector('.page-slot img[src]:not([src=""])');
     const img = imgEl ? imgEl.currentSrc || imgEl.src : '';
     meta('name', 'description', desc);
-    meta('property', 'og:title', document.title); meta('property', 'og:description', desc); meta('property', 'og:image', img);
+    meta('property', 'og:title', document.title, ogTitle('og:title')); meta('property', 'og:description', desc); meta('property', 'og:image', img);
     meta('property', 'og:type', 'article'); meta('property', 'og:url', location.href.split('#')[0]);
     meta('name', 'twitter:card', img ? 'summary_large_image' : 'summary');
-    meta('name', 'twitter:title', document.title); meta('name', 'twitter:description', desc); meta('name', 'twitter:image', img);
+    meta('name', 'twitter:title', document.title, ogTitle('twitter:title')); meta('name', 'twitter:description', desc); meta('name', 'twitter:image', img);
   };
   App.inits.push(init);
+  App.destroys.push(() => document.head.querySelectorAll('meta[data-case-meta]').forEach((m) => m.remove())); // leaving the page (Swup)
   if (document.readyState !== 'loading') init(document);
 })();
