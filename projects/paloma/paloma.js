@@ -43,6 +43,7 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - 1.93.1: SocialSlider phone margin measured from the section heading first; SlideDebug (temporary, ?slidedebug).
  *  - 1.93.0: SocialHover 1.1.0 (touch: play / pause button in the bottom left corner of cards without Info bar);
  *    SocialSlider: on phones the first card lines up with the text above (measured in px; the Page Margin variable gave
  *    the desktop 1.25rem there).
@@ -1235,12 +1236,17 @@ if (!document.getElementById('paloma-splide-sr')) {
       // is indented (left edge + padding) and set in px, instead of the Page Margin variable, which came out at the
       // desktop 1.25rem on phones (twice the 0.625rem phone margin).
       const edge = () => {
+        // The section heading next to the slider is the most direct reference; else the first indented box around it
+        const sec = root.closest('.social-amp, section, .page-slot > *');
+        const h = sec && sec.querySelector('h1, h2, h3, .text-section_heading');
+        if (h && !root.contains(h)) { const x = h.getBoundingClientRect().left; if (x > 1) return x; }
         for (let el = root.parentElement; el && el !== document.body; el = el.parentElement) {
           const x = el.getBoundingClientRect().left + (parseFloat(getComputedStyle(el).paddingLeft) || 0);
           if (x > 1) return x;
         }
         return 0;
       };
+      root._edge = edge;
       const fitPhone = () => {
         if (!root.isConnected || innerWidth >= 768) return;
         const x = Math.round(edge() - root.getBoundingClientRect().left);
@@ -2945,4 +2951,28 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   App.inits.push(init);
   App.destroys.push(() => document.head.querySelectorAll('meta[data-case-meta]').forEach((m) => m.remove())); // leaving the page (Swup)
   if (document.readyState !== 'loading') init(document);
+})();
+
+/* ---------- SlideDebug (temporary) ---------- */
+// Only with ?slidedebug in the URL: numbers of every social slider on screen, for checking the phone margins on a real
+// iPhone. Remove once the slider spacing is confirmed.
+(() => {
+  if (!/[?&]slidedebug/.test(location.search)) return;
+  const box = document.createElement('pre');
+  box.style.cssText = 'position:fixed;left:4px;right:4px;bottom:4px;max-height:40vh;overflow:auto;z-index:99999;margin:0;padding:6px;font:10px/1.3 monospace;background:rgba(0,0,0,.85);color:#0f0;white-space:pre-wrap;pointer-events:none';
+  const R = (el) => (el ? Math.round(el.getBoundingClientRect().left) + '..' + Math.round(el.getBoundingClientRect().right) : '-');
+  setInterval(() => {
+    if (!box.isConnected) document.body.appendChild(box);
+    const lines = ['v1.93.1 iw ' + innerWidth + ' cw ' + document.documentElement.clientWidth + ' vv ' + Math.round((window.visualViewport || {}).width || 0)];
+    document.querySelectorAll('[data-social-slider]').forEach((r, i) => {
+      const b = r.getBoundingClientRect(); if (b.bottom < 0 || b.top > innerHeight) return;
+      const list = r.querySelector('.splide__track'), slides = [...r.querySelectorAll('.splide__slide:not(.splide__slide--clone)')];
+      const pads = r._sp ? JSON.stringify(r._sp.options.padding) : 'no splide';
+      lines.push('S' + i + ' root ' + R(r) + ' edge ' + (r._edge ? Math.round(r._edge()) : '-') + ' pad ' + r._pad + ' opt ' + pads);
+      lines.push('  track ' + (list ? list.className.replace(/splide__track/, 'T') + ' pl ' + getComputedStyle(list).paddingLeft + ' pr ' + getComputedStyle(list).paddingRight + ' inl ' + (list.getAttribute('style') || '') : '-'));
+      lines.push('  first ' + R(slides[0]) + ' last ' + R(slides[slides.length - 1]) + ' n ' + slides.length);
+      for (let el = r.parentElement, k = 0; el && el !== document.body && k < 6; el = el.parentElement, k++) lines.push('  ^' + (el.className || el.tagName).toString().slice(0, 30) + ' ' + R(el) + ' pl ' + getComputedStyle(el).paddingLeft);
+    });
+    box.textContent = lines.join('\n');
+  }, 500);
 })();
