@@ -43,6 +43,8 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - 1.92.2: CaseMeta 1.0.0 (project pages without SEO settings get title, description and OG tags from the Case Header).
+ *    SocialHover keeps the rim. TeamBurst 1.1.0, photos pop in on their spot one by one and fade out scaling down (TapStack motion), no flight from the words.
  *  - 1.92.1: TeamBurst fits the photo cluster on screen as a whole (keeps its shape); job description spacing like the Figma (Jobs).
  *  - 1.92.0 (revision 2): AlphaSafari 1.0.0 (Safari keeps the Home Header still until the HEVC .mov is filled in; a transparent WebM shows a black box there).
  *    SocialHover 1.0.0: Social Card with Info bar off plays muted on hover only (tap on touch), no sound play.
@@ -2570,8 +2572,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   const live = new Set();
   if (!document.getElementById('paloma-social-hover-css')) {
     const st = document.createElement('style'); st.id = 'paloma-social-hover-css';
-    // No glow rim and no sound state on quiet cards
-    st.textContent = '[data-social-card].is-quiet .social-card_rim{display:none}[data-social-card].is-quiet .social-card_media{cursor:default}';
+    st.textContent = '[data-social-card].is-quiet .social-card_media{cursor:default}';
     document.head.appendChild(st);
   }
   const vid = (c) => c.querySelector('video');
@@ -2671,8 +2672,8 @@ document.addEventListener('touchstart', () => {}, { passive: true });
 })();
 
 /* ---------- TeamBurst ---------- */
-// About: hovering "a team of twelve" makes the team photos burst out of the words and settle softly around them;
-// leaving pulls them back in. The words are underlined by default.
+// About: hovering "a team of twelve" pops the team photos in around the words, one after the other (the TapStack
+// animation from phones); leaving fades them out while they scale down a little. The words are underlined by default.
 // Designer: a hidden Div [data-team-burst] on the page holds the team photos (plain Image elements, swap or add freely).
 // The words: either a link in the text with the URL #team, or (no such link) the phrase in data-team-burst="team of
 // twelve", which is found in .about-body_text and wrapped. Touch: tap the words to open, tap anywhere to close.
@@ -2682,8 +2683,9 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   // More photos than spots: the rest reuse the spots with a small offset.
   const SPOTS = [[-486, -352], [-210, -207], [26, -158], [-719, -149], [-454, -102], [-250, 20],
     [-719, 110], [-475, 156], [-210, 164], [32, 181], [-363, 406], [-102, 406]];
-  const B = { size: 0.145, phone: 0.3, tilt: 7, inDur: 1.25, outDur: 0.55, stagger: 0.025, blur: 10, edge: 12, closeDelay: 0.15 };
-  // size: photo width as a share of the screen width (phone: below 768px); tilt: max degrees; blur: px motion blur at the start
+  const B = { size: 0.145, phone: 0.3, tilt: 7, popDur: 0.4, step: 0.07, outDur: 0.6, edge: 12, closeDelay: 0.15 };
+  // size: photo width as a share of the screen width (phone: below 768px); tilt: max degrees; popDur/step: pop-in time and
+  // the delay between photos (same as TapStack); outDur: fade-out time
   const FINE = matchMedia('(hover: hover) and (pointer: fine)').matches;
   const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const live = new Set();
@@ -2744,19 +2746,17 @@ document.addEventListener('touchstart', () => {}, { passive: true });
         let x = pts[i][0] + sx, y = pts[i][1] + sy;
         x = Math.max(half, Math.min(innerWidth - half, x)); y = Math.max(half, Math.min(innerHeight - half, y));
         gsap.killTweensOf(im);
-        gsap.fromTo(im,
-          { x: cx - L.left, y: cy - L.top, scale: 0.15, rotation: 0, autoAlpha: 0, filter: calm() ? 'none' : 'blur(' + B.blur + 'px)' },
-          { x: x - L.left, y: y - L.top, scale: 1, rotation: r(-B.tilt, B.tilt), autoAlpha: 1, filter: 'blur(0px)',
-            duration: calm() ? 0.01 : B.inDur, ease: 'expo.out', delay: calm() ? 0 : i * B.stagger + r(0, 0.04), zIndex: 1 + i });
+        // Pop in on the spot, like TapStack on phones: small and transparent, then a soft overshoot to full size
+        gsap.set(im, { x: x - L.left, y: y - L.top, rotation: r(-B.tilt, B.tilt), scale: calm() ? 1 : 0.7, autoAlpha: 0, zIndex: 1 + i, filter: 'none' });
+        gsap.to(im, { scale: 1, autoAlpha: 1, duration: calm() ? 0.2 : B.popDur, ease: 'back.out(1.4)', delay: calm() ? 0 : i * B.step });
       });
     };
     const collapse = () => {
       if (!open) return; open = false;
-      const b = word.getBoundingClientRect(), L = layer.getBoundingClientRect();
-      const cx = b.left + b.width / 2 - L.left, cy = b.top + b.height / 2 - L.top;
+      // Out like TapStack: fade while scaling down a little, last one in goes first
       imgs.forEach((im, i) => {
         gsap.killTweensOf(im);
-        gsap.to(im, { x: cx, y: cy, scale: 0.2, rotation: 0, autoAlpha: 0, duration: calm() ? 0.01 : B.outDur, ease: 'power3.in', delay: (imgs.length - i) * 0.01 });
+        gsap.to(im, { autoAlpha: 0, scale: calm() ? 1 : 0.92, duration: calm() ? 0.2 : B.outDur, ease: 'power2.in', delay: calm() ? 0 : (imgs.length - 1 - i) * B.step * 0.5 });
       });
     };
     const leave = () => { clearTimeout(closeT); closeT = setTimeout(collapse, B.closeDelay * 1000); };
@@ -2775,5 +2775,45 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   const init = (scope = document) => { const s = scope || document; s.querySelectorAll('[data-team-burst]').forEach((src) => setup(src, s)); };
   App.inits.push(init);
   App.destroys.push(() => { live.forEach((s) => s._burst && s._burst()); live.clear(); });
+  if (document.readyState !== 'loading') init(document);
+})();
+
+/* ---------- CaseMeta ---------- */
+// Project pages are static pages (not CMS), so their SEO settings are filled in by hand. When they are not, the page
+// still gets sensible metadata from its Case Header: title "Paloma | <title>", description from the intro (max 155
+// characters), and Open Graph / Twitter tags with the first image. A title or description filled in under Page
+// settings always wins. Note: Google reads these (it runs the script), link previews on LinkedIn, WhatsApp etc. do not,
+// so filling in Page settings > SEO + Open Graph stays the best option for shared links.
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const PREFIX = 'Paloma | ', MAX = 155;
+  const meta = (attr, key, val) => {
+    if (!val) return;
+    let m = document.head.querySelector('meta[' + attr + '="' + key + '"]');
+    if (!m) { m = document.createElement('meta'); m.setAttribute(attr, key); m.setAttribute('data-case-meta', ''); document.head.appendChild(m); }
+    else if (!m.hasAttribute('data-case-meta') && (m.getAttribute('content') || '').trim()) return; // filled in by hand
+    m.setAttribute('content', val);
+  };
+  const clip = (t) => { t = t.replace(/\s+/g, ' ').trim(); if (t.length <= MAX) return t; const c = t.slice(0, MAX - 1); return c.slice(0, c.lastIndexOf(' ')) + '…'; };
+  const init = (scope = document) => {
+    const head = (scope || document).querySelector('.case-header');
+    document.head.querySelectorAll('meta[data-case-meta]').forEach((m) => m.remove()); // from the previous page (Swup)
+    if (!head) return;
+    const name = ((head.querySelector('.case-header_title') || {}).textContent || '').trim();
+    if (!name) return;
+    const t = document.title.trim();
+    // Template default, empty, or just the page name: build it from the header
+    if (!t || /template/i.test(t) || !t.startsWith(PREFIX)) document.title = PREFIX + name;
+    const intro = ((head.querySelector('.case-header_intro') || {}).textContent || '').trim();
+    const desc = intro ? clip(intro) : '';
+    const imgEl = (scope || document).querySelector('.page-slot img[src]:not([src=""])');
+    const img = imgEl ? imgEl.currentSrc || imgEl.src : '';
+    meta('name', 'description', desc);
+    meta('property', 'og:title', document.title); meta('property', 'og:description', desc); meta('property', 'og:image', img);
+    meta('property', 'og:type', 'article'); meta('property', 'og:url', location.href.split('#')[0]);
+    meta('name', 'twitter:card', img ? 'summary_large_image' : 'summary');
+    meta('name', 'twitter:title', document.title); meta('name', 'twitter:description', desc); meta('name', 'twitter:image', img);
+  };
+  App.inits.push(init);
   if (document.readyState !== 'loading') init(document);
 })();
