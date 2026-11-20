@@ -43,6 +43,10 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - 1.92.0 (revision 2): AlphaSafari 1.0.0 (Safari keeps the Home Header still until the HEVC .mov is filled in; a transparent WebM shows a black box there).
+ *    SocialHover 1.0.0: Social Card with Info bar off plays muted on hover only (tap on touch), no sound play.
+ *    ObjectTilt 1.0.0: Lost objects lean towards the mouse in 3D and drift a little to it.
+ *    TeamBurst 1.0.0: About, the team photos burst out of "team of twelve" on hover (tap on touch), underlined words.
  *  - 1.91.0: scene loads from a self-hosted file (Webflow assets) via data-us-project-src (SceneScroll 1.6.0).
  *  - 1.90.0: no parallax on the Full Video Player thumbnail (it matched the first video frame no more); project tags use the normal cursor.
  *  - ReadMoreTrim 1.0.0: empty paragraphs in the Case Header Read more text are removed.
@@ -954,6 +958,7 @@
   // Touch: pause is a real pause (and muted, so no sound can carry on)
   const stop = (card) => { const v = videoOf(card); if (v) { v.muted = true; if (TOUCH) v.pause(); else if (v.paused) play(v); } setUi(card, false); release(card); uncenter(card); };
   App.socialStop = (card) => { if (card.classList.contains('is-sound')) stop(card); };
+  App.socialAttach = lazyAttach; // SocialHover (quiet cards on touch)
 
   // Play button, and a click on the video itself (same toggle). A drag in the slider is not a click: ignored when
   // the pointer moved more than DRAG px between press and release.
@@ -2528,5 +2533,236 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     t.querySelectorAll(':scope > p').forEach((p) => { if (blank(p)) p.remove(); });
   });
   App.inits.unshift(init); // before ReadMore checks whether there's any text
+  if (document.readyState !== 'loading') init(document);
+})();
+
+/* ---------- AlphaSafari ---------- */
+// Home Header logo animation: Safari can't play a transparent WebM (it shows a black box). Until the HEVC (.mov) with
+// alpha is filled in, Safari keeps the Image (the still) and gets no video. Runs before AlphaVideo (MediaKit).
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const ua = navigator.userAgent;
+  const safari = /iP(hone|ad|od)/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) ||
+    (/Safari/.test(ua) && !/Chrome|Chromium|Edg|OPR|Firefox|Android/.test(ua));
+  if (!safari) return;
+  const init = (scope = document) => (scope || document).querySelectorAll('[data-alpha-video]').forEach((el) => {
+    if (!(el.dataset.hevc || '').trim()) el.dataset.webm = '';
+  });
+  App.inits.unshift(init);
+  if (document.readyState !== 'loading') init(document);
+})();
+
+/* ---------- SocialHover ---------- */
+// Social Card with the Info bar switched off (no play button, no stats): the video only plays (muted) while you hover
+// the card, and stops on leave, so a slider of these is calm until you point at one. Touch: tap plays it, muted, one at a
+// time (SocialCard's tap starts it with sound; without a play button there is no way to stop that, so it stays muted).
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const CARD = '[data-social-card]';
+  const quiet = (c) => !c.querySelector('[data-social-play]');
+  const FINE = matchMedia('(hover: hover) and (pointer: fine)').matches;
+  const live = new Set();
+  if (!document.getElementById('paloma-social-hover-css')) {
+    const st = document.createElement('style'); st.id = 'paloma-social-hover-css';
+    // No glow rim and no sound state on quiet cards
+    st.textContent = '[data-social-card].is-quiet .social-card_rim{display:none}[data-social-card].is-quiet .social-card_media{cursor:default}';
+    document.head.appendChild(st);
+  }
+  const vid = (c) => c.querySelector('video');
+  const play = (v) => { v.muted = true; const p = v.play(); if (p && p.catch) p.catch(() => {}); };
+  // Anything that starts the video while not hovered (CaseMedia in view, SocialCard's in-view play) is paused again
+  const guard = (e) => {
+    const v = e.target; if (!v || v.tagName !== 'VIDEO') return;
+    const c = v.closest(CARD); if (!c || !c._quiet) return;
+    if (!c._hover) v.pause(); else v.muted = true;
+  };
+  const setup = (c) => {
+    if (c._quiet || !quiet(c)) return;
+    c.classList.add('is-quiet');
+    const on = () => { c._hover = true; const v = vid(c); if (v) play(v); };
+    const off = () => { c._hover = false; const v = vid(c); if (v) v.pause(); };
+    if (FINE) { c.addEventListener('pointerenter', on); c.addEventListener('pointerleave', off); }
+    const v = vid(c); if (v && !v.paused) v.pause();
+    c._quiet = () => { c.removeEventListener('pointerenter', on); c.removeEventListener('pointerleave', off); c.classList.remove('is-quiet'); delete c._quiet; delete c._hover; };
+    live.add(c);
+  };
+  // Touch: a tap on a quiet card toggles a muted play; other quiet cards stop
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest) return;
+    const c = e.target.closest(CARD); if (!c || !c._quiet) return;
+    e.stopImmediatePropagation(); e.preventDefault(); // never SocialCard's play with sound
+    if (FINE) return;
+    const was = c._hover;
+    live.forEach((o) => { if (o !== c && o._hover) { o._hover = false; const ov = vid(o); if (ov) ov.pause(); } });
+    c._hover = !was;
+    let v = vid(c);
+    if (!v && c._hover && App.socialAttach) v = App.socialAttach(c);
+    if (v) c._hover ? play(v) : v.pause();
+  }, true);
+  document.addEventListener('play', guard, true);
+  document.addEventListener('playing', guard, true);
+  const init = (scope = document) => (scope || document).querySelectorAll(CARD).forEach(setup);
+  App.inits.push(init);
+  App.destroys.push(() => { live.forEach((c) => c._quiet && c._quiet()); live.clear(); });
+  if (document.readyState !== 'loading') init(document);
+})();
+
+/* ---------- ObjectTilt ---------- */
+// Lost objects: the objects lean towards the mouse, with perspective, as if they hover above the page. The closer the
+// cursor, the more an object turns and drifts towards it. Works on top of ObjectFX (float on y/rotation, drift on
+// translate): this only uses x and the 3D rotations of .object_float. Desktop only, off with reduced motion.
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const TILT = { deg: 12, shift: 14, reach: 0.6, perspective: 700, duration: 1.1 };
+  // deg: max lean in degrees; shift: max px towards the cursor; reach: share of the screen width where an object still
+  // reacts (falls off with distance); duration: how softly it follows (s)
+  const live = new Set();
+  let wired = false, mx = null, my = null, raf = 0;
+  const ok = () => window.gsap && matchMedia('(hover: hover) and (pointer: fine)').matches && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const update = () => {
+    raf = 0; if (mx === null) return;
+    const reach = innerWidth * TILT.reach;
+    live.forEach((o) => {
+      const r = o.el.getBoundingClientRect();
+      if (r.bottom < -100 || r.top > innerHeight + 100) return;
+      const dx = mx - (r.left + r.width / 2), dy = my - (r.top + r.height / 2);
+      const k = Math.max(0, 1 - Math.hypot(dx, dy) / reach); // 1 under the cursor, 0 far away
+      const s = k * k * (3 - 2 * k); // smooth falloff
+      const nx = Math.max(-1, Math.min(1, dx / (r.width || 1))), ny = Math.max(-1, Math.min(1, dy / (r.height || 1)));
+      o.rx(-ny * TILT.deg * s); o.ry(nx * TILT.deg * s); o.x(nx * TILT.shift * s);
+    });
+  };
+  const move = (e) => { mx = e.clientX; my = e.clientY; if (!raf) raf = requestAnimationFrame(update); };
+  const scroll = () => { if (!raf) raf = requestAnimationFrame(update); };
+  const leave = () => { mx = null; live.forEach((o) => { o.rx(0); o.ry(0); o.x(0); }); };
+  const setup = (el) => {
+    if (el._tilt || !ok()) return;
+    const box = el.querySelector('.object_float') || el;
+    gsap.set(box, { transformPerspective: TILT.perspective, transformStyle: 'preserve-3d' });
+    const q = (p) => gsap.quickTo(box, p, { duration: TILT.duration, ease: 'power3.out' });
+    const o = { el, rx: q('rotationX'), ry: q('rotationY'), x: q('x') };
+    el._tilt = () => { gsap.killTweensOf(box, 'rotationX,rotationY,x'); gsap.set(box, { rotationX: 0, rotationY: 0, x: 0 }); live.delete(o); delete el._tilt; };
+    live.add(o);
+  };
+  const init = (scope = document) => {
+    const els = (scope || document).querySelectorAll('[data-object]');
+    if (!els.length || !ok()) return;
+    els.forEach(setup);
+    if (!wired) {
+      wired = true;
+      addEventListener('pointermove', move, { passive: true });
+      addEventListener('scroll', scroll, { passive: true });
+      document.documentElement.addEventListener('pointerleave', leave);
+    }
+  };
+  App.inits.push(init);
+  App.destroys.push(() => {
+    [...live].forEach((o) => o.el._tilt && o.el._tilt());
+    if (wired) { wired = false; removeEventListener('pointermove', move); removeEventListener('scroll', scroll); document.documentElement.removeEventListener('pointerleave', leave); }
+    cancelAnimationFrame(raf); raf = 0; mx = null;
+  });
+  if (document.readyState !== 'loading') init(document);
+})();
+
+/* ---------- TeamBurst ---------- */
+// About: hovering "a team of twelve" makes the team photos burst out of the words and settle softly around them;
+// leaving pulls them back in. The words are underlined by default.
+// Designer: a hidden Div [data-team-burst] on the page holds the team photos (plain Image elements, swap or add freely).
+// The words: either a link in the text with the URL #team, or (no such link) the phrase in data-team-burst="team of
+// twelve", which is found in .about-body_text and wrapped. Touch: tap the words to open, tap anywhere to close.
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  // Where the photos land, relative to the centre of the words, in px at a 1440px wide screen (from the Figma design).
+  // More photos than spots: the rest reuse the spots with a small offset.
+  const SPOTS = [[-486, -352], [-210, -207], [26, -158], [-719, -149], [-454, -102], [-250, 20],
+    [-719, 110], [-475, 156], [-210, 164], [32, 181], [-363, 406], [-102, 406]];
+  const B = { size: 0.145, phone: 0.3, tilt: 7, inDur: 1.25, outDur: 0.55, stagger: 0.025, blur: 10, edge: 12, closeDelay: 0.15 };
+  // size: photo width as a share of the screen width (phone: below 768px); tilt: max degrees; blur: px motion blur at the start
+  const FINE = matchMedia('(hover: hover) and (pointer: fine)').matches;
+  const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const live = new Set();
+  if (!document.getElementById('paloma-team-css')) {
+    const st = document.createElement('style'); st.id = 'paloma-team-css';
+    st.textContent = 'html:not(.wf-design-mode) [data-team-burst]{display:none}' +
+      '.team-burst_word{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:.14em;cursor:pointer}' +
+      '.team-burst_layer{position:absolute;top:0;left:0;width:0;height:0;overflow:visible;pointer-events:none;z-index:50}' +
+      '.team-burst_img{position:absolute;top:0;left:0;display:block;max-width:none;object-fit:cover;aspect-ratio:1;border-radius:4px;will-change:transform,opacity,filter}';
+    document.head.appendChild(st);
+  }
+  const findWord = (scope, phrase) => {
+    const link = scope.querySelector('a[href$="#team"]');
+    if (link) { link.classList.add('team-burst_word'); link.addEventListener('click', (e) => e.preventDefault()); return link; }
+    if (!phrase) return null;
+    const host = scope.querySelector('.about-body_text') || scope;
+    const w = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+    let n; const low = phrase.toLowerCase();
+    while ((n = w.nextNode())) {
+      const i = n.textContent.toLowerCase().indexOf(low);
+      if (i < 0) continue;
+      const r = document.createRange(); r.setStart(n, i); r.setEnd(n, i + phrase.length);
+      const span = document.createElement('span'); span.className = 'team-burst_word';
+      r.surroundContents(span); span._wrapped = true; return span;
+    }
+    return null;
+  };
+  const setup = (src, scope) => {
+    if (src._burst || !window.gsap) return;
+    const urls = [...src.querySelectorAll('img')].map((im) => ({ src: im.currentSrc || im.getAttribute('src'), srcset: im.getAttribute('srcset'), alt: im.alt || '' })).filter((u) => u.src);
+    const word = findWord(scope, (src.getAttribute('data-team-burst') || '').trim());
+    if (!urls.length || !word) return;
+    word.setAttribute('data-trail-off', ''); // no Image Trail / TapStack on the words
+    const layer = document.createElement('div'); layer.className = 'team-burst_layer'; layer.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(layer);
+    const imgs = urls.map((u) => {
+      const im = document.createElement('img'); im.className = 'team-burst_img'; im.alt = ''; im.decoding = 'async';
+      if (u.srcset) { im.srcset = u.srcset; im.sizes = '20vw'; } im.src = u.src; im.loading = 'eager';
+      layer.appendChild(im); return im;
+    });
+    gsap.set(imgs, { xPercent: -50, yPercent: -50, autoAlpha: 0 });
+    let open = false, closeT = 0;
+    const r = gsap.utils.random;
+    const burst = () => {
+      clearTimeout(closeT); if (open) return; open = true;
+      const b = word.getBoundingClientRect(), L = layer.getBoundingClientRect();
+      const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+      const phone = innerWidth < 768, k = phone ? innerWidth / 390 * 0.55 : innerWidth / 1440;
+      const w = innerWidth * (phone ? B.phone : B.size), half = w / 2 + B.edge;
+      gsap.set(imgs, { width: w });
+      imgs.forEach((im, i) => {
+        const s = SPOTS[i % SPOTS.length], extra = Math.floor(i / SPOTS.length) * 40;
+        let x = cx + (s[0] + extra) * k, y = cy + (s[1] + extra) * k;
+        x = Math.max(half, Math.min(innerWidth - half, x)); y = Math.max(half, Math.min(innerHeight - half, y));
+        gsap.killTweensOf(im);
+        gsap.fromTo(im,
+          { x: cx - L.left, y: cy - L.top, scale: 0.15, rotation: 0, autoAlpha: 0, filter: calm() ? 'none' : 'blur(' + B.blur + 'px)' },
+          { x: x - L.left, y: y - L.top, scale: 1, rotation: r(-B.tilt, B.tilt), autoAlpha: 1, filter: 'blur(0px)',
+            duration: calm() ? 0.01 : B.inDur, ease: 'expo.out', delay: calm() ? 0 : i * B.stagger + r(0, 0.04), zIndex: 1 + i });
+      });
+    };
+    const collapse = () => {
+      if (!open) return; open = false;
+      const b = word.getBoundingClientRect(), L = layer.getBoundingClientRect();
+      const cx = b.left + b.width / 2 - L.left, cy = b.top + b.height / 2 - L.top;
+      imgs.forEach((im, i) => {
+        gsap.killTweensOf(im);
+        gsap.to(im, { x: cx, y: cy, scale: 0.2, rotation: 0, autoAlpha: 0, duration: calm() ? 0.01 : B.outDur, ease: 'power3.in', delay: (imgs.length - i) * 0.01 });
+      });
+    };
+    const leave = () => { clearTimeout(closeT); closeT = setTimeout(collapse, B.closeDelay * 1000); };
+    const tap = (e) => { e.preventDefault(); e.stopPropagation(); open ? collapse() : burst(); };
+    const outside = (e) => { if (open && !word.contains(e.target)) collapse(); };
+    if (FINE) { word.addEventListener('pointerenter', burst); word.addEventListener('pointerleave', leave); }
+    else { word.addEventListener('click', tap); document.addEventListener('click', outside); addEventListener('scroll', collapse, { passive: true }); }
+    src._burst = () => {
+      clearTimeout(closeT); gsap.killTweensOf(imgs); layer.remove();
+      word.removeEventListener('pointerenter', burst); word.removeEventListener('pointerleave', leave); word.removeEventListener('click', tap);
+      document.removeEventListener('click', outside); removeEventListener('scroll', collapse);
+      delete src._burst;
+    };
+    live.add(src);
+  };
+  const init = (scope = document) => { const s = scope || document; s.querySelectorAll('[data-team-burst]').forEach((src) => setup(src, s)); };
+  App.inits.push(init);
+  App.destroys.push(() => { live.forEach((s) => s._burst && s._burst()); live.clear(); });
   if (document.readyState !== 'loading') init(document);
 })();
