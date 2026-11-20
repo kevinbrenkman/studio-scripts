@@ -43,6 +43,8 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - 1.93.9: MediaPoster 1.4.0 + PlayerReveal 1.3.0: a player on screen when the page opens is never hidden (it showed, hid
+ *    and faded in again); only players below the fold wait and reveal. SlideDebug removed.
  *  - 1.93.8: SocialSlider: phone measuring removed again (it made the sliders jump on iPhone); the cause was the Social
  *    Amplification grid growing to the full-width slider in Safari, fixed in the Webflow styles (minmax(0, ...) columns,
  *    min-width 0). Rebuild across 768px only on a real width change.
@@ -1125,41 +1127,37 @@
     '.bunny-player .bunny-player__placeholder,.bunny-player .bunny-player__video{top:-2px!important;left:-2px!important;width:calc(100% + 4px)!important;height:calc(100% + 4px)!important;max-width:none}' +
     // Video hidden until first play: on iPhone the (empty, black) native HLS video sat on top of the thumbnail
     '[data-bunny-player-init]:not([data-player-activated="true"]) .bunny-player__video{opacity:0}' +
-    // Player thumbnail + play button stay hidden until the thumbnail has loaded (CardLoaded adds is-loaded) and the player
-    // is on screen (PlayerReveal adds is-shown), then fade in: no buttons floating on an empty box.
-    // 1.3.0: the glass buttons fade with their OWN opacity. A filter or opacity on a parent (the old fade, or the Section
-    // reveal on the whole player) makes that parent a backdrop root, so the button showed without its blur until the fade
-    // ended. The thumbnail has no glass, so it keeps the filter fade.
+    // A player that is still below the fold when the page opens waits hidden (is-waiting, PlayerReveal) and fades in
+    // once it scrolls into view and its thumbnail has loaded (is-reveal + is-loaded): no buttons floating on an empty box.
+    // 1.4.0: hidden only on that opt-in class. A player already on screen comes in with the page and is never hidden
+    // (it used to show, hide as soon as this CSS arrived, and fade in again).
+    // 1.3.0: the glass buttons fade with their OWN opacity. A filter or opacity on a parent makes that parent a backdrop
+    // root, so the button showed without its blur until the fade ended. The thumbnail has no glass: filter fade.
     '@keyframes paloma-player-in{from{filter:opacity(0)}to{filter:opacity(1)}}' +
     '@keyframes paloma-player-btn{from{opacity:0}to{opacity:1}}' +
-    'html:not(.wf-design-mode) [data-bunny-player-init]:not(.is-loaded.is-shown)>.bunny-player__placeholder{filter:opacity(0)}' +
-    'html:not(.wf-design-mode) [data-bunny-player-init]:not(.is-loaded.is-shown) .bunny-player__big-btn{opacity:0}' +
-    'html:not(.wf-design-mode) [data-bunny-player-init]:not(.is-loaded.is-shown)>:is(.bunny-player__playpause,.bunny-player__interface){pointer-events:none}' +
-    'html:not(.wf-design-mode) [data-bunny-player-init].is-loaded.is-shown>.bunny-player__placeholder{animation:paloma-player-in .8s cubic-bezier(.25,.1,.25,1) backwards}' +
-    'html:not(.wf-design-mode) [data-bunny-player-init].is-loaded.is-shown .bunny-player__big-btn{animation:paloma-player-btn .8s cubic-bezier(.25,.1,.25,1) .2s backwards}' +
+    'html:not(.wf-design-mode) :is(.is-waiting,.is-reveal:not(.is-loaded))[data-bunny-player-init]>.bunny-player__placeholder{filter:opacity(0)}' +
+    'html:not(.wf-design-mode) :is(.is-waiting,.is-reveal:not(.is-loaded))[data-bunny-player-init] .bunny-player__big-btn{opacity:0}' +
+    'html:not(.wf-design-mode) :is(.is-waiting,.is-reveal:not(.is-loaded))[data-bunny-player-init]>:is(.bunny-player__playpause,.bunny-player__interface){pointer-events:none}' +
+    'html:not(.wf-design-mode) [data-bunny-player-init].is-reveal.is-loaded>.bunny-player__placeholder{animation:paloma-player-in .8s cubic-bezier(.25,.1,.25,1) backwards}' +
+    'html:not(.wf-design-mode) [data-bunny-player-init].is-reveal.is-loaded .bunny-player__big-btn{animation:paloma-player-btn .8s cubic-bezier(.25,.1,.25,1) .2s backwards}' +
     // A player straight in the page slot rises in itself (Section reveal skips it): translate, no opacity on the player
     'html:not(.wf-design-mode) .page-slot>[data-bunny-player-init]{transition:translate .8s cubic-bezier(.22,1,.36,1)}' +
-    'html:not(.wf-design-mode) .page-slot>[data-bunny-player-init]:not(.is-shown){translate:0 40px}' +
+    'html:not(.wf-design-mode) .page-slot>[data-bunny-player-init].is-waiting{translate:0 40px}' +
     '@media (prefers-reduced-motion:reduce){.page-slot>[data-bunny-player-init]{translate:none!important;transition:none!important}}';
   document.head.appendChild(st);
 })();
 
 /* ---------- PlayerReveal ---------- */
-// Full Video Player: is-shown once the player is on screen (85% down, like the Section reveal). A player straight in the
-// page slot waits for it and rises in (CSS in MediaPoster); any other player is shown at once.
+// Full Video Player straight in the page slot and still below the fold when the page opens: waits hidden (is-waiting)
+// and rises + fades in once on screen (85% down, like the Section reveal; CSS in MediaPoster). 1.3.0: any other player,
+// and one already on screen when the page opens, is simply there with the page: no reveal of its own.
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
   let io = null;
-  if (!document.getElementById('paloma-player-instant')) {
-    const st = document.createElement('style'); st.id = 'paloma-player-instant';
-    st.textContent = '.is-instant,.is-instant *{transition:none!important}';
-    document.head.appendChild(st);
-  }
-  // 1.1.0: a player that is on screen straight away waits until the page has faded in (Swup) and then rises in,
-  // so the rise is seen instead of happening while the page is still invisible
+  // Waits until the page itself has faded in (Swup), so the reveal is seen
   const show = (p) => {
     const box = document.querySelector('#swup');
-    const wait = () => (box && +getComputedStyle(box).opacity < 0.95 ? setTimeout(wait, 80) : setTimeout(() => p.classList.add('is-shown'), 150));
+    const wait = () => (box && +getComputedStyle(box).opacity < 0.95 ? setTimeout(wait, 80) : setTimeout(() => { p.classList.remove('is-waiting'); p.classList.add('is-reveal', 'is-shown'); }, 150));
     wait();
   };
   const init = (scope = document) => {
@@ -1167,16 +1165,10 @@
       if (e.isIntersecting) { show(e.target); io.unobserve(e.target); }
     }), { rootMargin: '0px 0px -15% 0px' });
     (scope || document).querySelectorAll('[data-bunny-player-init]').forEach((p) => {
-      if (p.classList.contains('is-shown')) return;
-      // 1.2.0: a player already on screen when the page opens comes in with the page itself: shown at once, and for the
-      // first second without any transition (no rise, no thumbnail fade, the paused dimming is there straight away)
-      if (p.getBoundingClientRect().top < innerHeight * 0.85) {
-        p.classList.add('is-instant', 'is-shown');
-        setTimeout(() => p.classList.remove('is-instant'), 1200);
-        return;
-      }
-      if (!io || !p.parentElement || !p.parentElement.classList.contains('page-slot')) p.classList.add('is-shown');
-      else io.observe(p);
+      if (p._pr) return; p._pr = true;
+      const slotted = p.parentElement && p.parentElement.classList.contains('page-slot');
+      if (!io || !slotted || p.getBoundingClientRect().top < innerHeight * 0.85) { p.classList.add('is-shown'); return; }
+      p.classList.add('is-waiting'); io.observe(p);
     });
   };
   App.inits.push(init);
@@ -3046,28 +3038,4 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   App.inits.push(init);
   App.destroys.push(() => document.head.querySelectorAll('meta[data-case-meta]').forEach((m) => m.remove())); // leaving the page (Swup)
   if (document.readyState !== 'loading') init(document);
-})();
-
-/* ---------- SlideDebug (temporary) ---------- */
-// Only with ?slidedebug in the URL: numbers of every social slider on screen, for checking the phone margins on a real
-// iPhone. Remove once the slider spacing is confirmed.
-(() => {
-  if (!/[?&]slidedebug/.test(location.search)) return;
-  const box = document.createElement('pre');
-  box.style.cssText = 'position:fixed;left:4px;right:4px;bottom:4px;max-height:40vh;overflow:auto;z-index:99999;margin:0;padding:6px;font:10px/1.3 monospace;background:rgba(0,0,0,.85);color:#0f0;white-space:pre-wrap;pointer-events:none';
-  const R = (el) => (el ? Math.round(el.getBoundingClientRect().left) + '..' + Math.round(el.getBoundingClientRect().right) : '-');
-  setInterval(() => {
-    if (!box.isConnected) document.body.appendChild(box);
-    const lines = ['' + ((([...document.scripts].find((x) => /paloma\.js/.test(x.src)) || {}).src || '').split('@')[1] || '').slice(0, 7) + ' iw ' + innerWidth + ' cw ' + document.documentElement.clientWidth + ' vv ' + Math.round((window.visualViewport || {}).width || 0)];
-    document.querySelectorAll('[data-social-slider]').forEach((r, i) => {
-      const b = r.getBoundingClientRect(); if (b.bottom < 0 || b.top > innerHeight) return;
-      const list = r.querySelector('.splide__track'), slides = [...r.querySelectorAll('.splide__slide:not(.splide__slide--clone)')];
-      const pads = r._sp ? JSON.stringify(r._sp.options.padding) : 'no splide';
-      lines.push('S' + i + ' root ' + R(r) + ' edge ' + (r._edge ? Math.round(r._edge()) : '-') + ' pad ' + r._pad + ' opt ' + pads);
-      lines.push('  track ' + (list ? list.className.replace(/splide__track/, 'T') + ' pl ' + getComputedStyle(list).paddingLeft + ' pr ' + getComputedStyle(list).paddingRight + ' inl ' + (list.getAttribute('style') || '') : '-'));
-      lines.push('  first ' + R(slides[0]) + ' last ' + R(slides[slides.length - 1]) + ' n ' + slides.length);
-      for (let el = r.parentElement, k = 0; el && el !== document.body && k < 6; el = el.parentElement, k++) lines.push('  ^' + (el.className || el.tagName).toString().slice(0, 30) + ' ' + R(el) + ' pl ' + getComputedStyle(el).paddingLeft);
-    });
-    box.textContent = lines.join('\n');
-  }, 500);
 })();
