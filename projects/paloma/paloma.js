@@ -43,6 +43,8 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - 1.92.9: PlayerReveal 1.1.0 (a player on screen at load waits for the page fade-in, then rises in); CardLoaded 1.3.0
+ *    (empty media blocks keep their fill and hide Webflow's placeholder icon).
  *  - 1.92.8: TeamBurst 2.1.2: photos load from their one file (no srcset) and only photos that loaded are shown, so Safari
  *    shows no empty frames or broken-image icons. Closing early also stops photos still waiting to drop.
  *  - 1.92.7: TeamBurst 2.1.1: phone pile drops slower (0.18s per photo) so each photo can be seen; TapDebug removed.
@@ -1132,9 +1134,16 @@
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
   let io = null;
+  // 1.1.0: a player that is on screen straight away waits until the page has faded in (Swup) and then rises in,
+  // so the rise is seen instead of happening while the page is still invisible
+  const show = (p) => {
+    const box = document.querySelector('#swup');
+    const wait = () => (box && +getComputedStyle(box).opacity < 0.95 ? setTimeout(wait, 80) : setTimeout(() => p.classList.add('is-shown'), 150));
+    wait();
+  };
   const init = (scope = document) => {
     if (!io && 'IntersectionObserver' in window) io = new IntersectionObserver((es) => es.forEach((e) => {
-      if (e.isIntersecting) { e.target.classList.add('is-shown'); io.unobserve(e.target); }
+      if (e.isIntersecting) { show(e.target); io.unobserve(e.target); }
     }), { rootMargin: '0px 0px -15% 0px' });
     (scope || document).querySelectorAll('[data-bunny-player-init]').forEach((p) => {
       if (p.classList.contains('is-shown')) return;
@@ -2163,15 +2172,22 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     // 1.2.0: any media box holding a thumbnail or video gets the page background straight away (CSS, no load event
     // to miss: the load listener never fired for lazy images that were already in, so the pink stayed)
     st.textContent = '.project-card_media.is-loaded,.case-media_item.is-loaded,.bunny-player.is-loaded,' +
-      ':is(.project-card_media,.case-media_item,.social-card_media,.media-card_media,.bunny-player):has(img[src]:not([src=""]),video)' +
-      '{background-color:var(--_do-not-edit---background)!important}';
+      ':is(.project-card_media,.case-media_item,.social-card_media,.media-card_media,.bunny-player):has(img[src]:not([src=""]):not([src*="placeholder"]),video)' +
+      '{background-color:var(--_do-not-edit---background)!important}' +
+      // 1.3.0: no image and no video yet: the box keeps its fill (theme text colour) so the empty block shows, no
+      // Webflow placeholder icon in it
+      '.is-empty-media>img{visibility:hidden}';
     document.head.appendChild(st);
   }
   const mark = (m) => {
     if (m._cl) return; m._cl = true;
     const img = m.querySelector('img'), vid = (img && img.getAttribute('src')) || m.classList.contains('bunny-player') ? null : m.querySelector('video'); // a player's video only loads on play
     const done = () => m.classList.add('is-loaded');
-    if (img && img.getAttribute('src')) {
+    const src = img ? img.getAttribute('src') || '' : '';
+    if ((!src || /placeholder/i.test(src)) && !vid && !(m.getAttribute('data-case-media') || '').trim() && !(m.getAttribute('data-poster') || '').trim()) {
+      m.classList.add('is-empty-media'); return; // empty block: keeps its fill
+    }
+    if (img && src && !/placeholder/i.test(src)) {
       if (img.complete && img.naturalWidth) return done();
       img.addEventListener('load', done, { once: true }); img.addEventListener('error', done, { once: true }); return;
     }
