@@ -43,7 +43,8 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
- *  - 1.92.4: TapDebug (temporary, only with ?tapdebug): on-screen state of the team photos and tap images for testing on iPhone.
+ *  - 1.92.4: TapStack 1.3.1 (root forced visible on tap: a scroll reveal could leave it at opacity 0 in Safari).
+ *    TapDebug (temporary, only with ?tapdebug): on-screen state of the team photos and tap images for testing on iPhone.
  *  - 1.92.3: CaseMeta 1.0.1, tags survive the slider re-init (slider:ready); Webflow's default og:title / twitter:title (page name) replaced.
  *  - 1.92.2: CaseMeta 1.0.0 (project pages without SEO settings get title, description and OG tags from the Case Header).
  *    SocialHover keeps the rim. TeamBurst 1.1.0, photos pop in on their spot one by one and fade out scaling down (TapStack motion), no flight from the words.
@@ -2292,7 +2293,8 @@ document.addEventListener('touchstart', () => {}, { passive: true });
         const top = items[turn++ % items.length]; // the image that ends on top: next in line every tap
         const rest = gsap.utils.shuffle(items.filter((el) => el !== top)).slice(0, n - 1);
         const pile = [...rest, top];
-        if (!piles++) gsap.set(root, { display: 'block' });
+        // autoAlpha / x / y: a scroll reveal on the page slot's sections can leave the (0x0, hidden) root at opacity 0
+        if (!piles++) gsap.set(root, { display: 'block', autoAlpha: 1, x: 0, y: 0 });
         // Keep the whole pile on screen: half the (tilted, scattered) image plus EDGE from every side
         gsap.set(top, { display: 'block' }); // measurable
         const t = Math.sin(TILT * Math.PI / 180);
