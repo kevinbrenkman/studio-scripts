@@ -43,6 +43,8 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - 1.94.0: PlayerReveal 1.4.0: on the first page load the top video comes in together with the header reveal (it showed
+ *    alone before the rest of the page); first-paint rule in the Case Header embed.
  *  - 1.93.9: MediaPoster 1.4.0 + PlayerReveal 1.3.0: a player on screen when the page opens is never hidden (it showed, hid
  *    and faded in again); only players below the fold wait and reveal. SlideDebug removed.
  *  - 1.93.8: SocialSlider: phone measuring removed again (it made the sliders jump on iPhone); the cause was the Social
@@ -1167,7 +1169,20 @@
     (scope || document).querySelectorAll('[data-bunny-player-init]').forEach((p) => {
       if (p._pr) return; p._pr = true;
       const slotted = p.parentElement && p.parentElement.classList.contains('page-slot');
-      if (!io || !slotted || p.getBoundingClientRect().top < innerHeight * 0.85) { p.classList.add('is-shown'); return; }
+      if (!io || !slotted) { p.classList.add('is-shown'); return; }
+      if (p.getBoundingClientRect().top < innerHeight * 0.85) {
+        // 1.4.0 first page load: Webflow keeps the page slot hidden until the interactions start (w-mod-ix3 on <html>;
+        // the Case Header embed hides this player the same way), then the Section reveal fades the header in. This player
+        // waits for that moment and comes in with it. After a Swup visit the interactions already run: just there.
+        const html = document.documentElement;
+        if (html.classList.contains('w-mod-ix3')) { p.classList.add('is-shown'); return; }
+        p.classList.add('is-waiting');
+        const go = () => { p.classList.remove('is-waiting'); p.classList.add('is-reveal', 'is-shown'); };
+        const mo = new MutationObserver(() => { if (html.classList.contains('w-mod-ix3')) { mo.disconnect(); setTimeout(go, 100); } });
+        mo.observe(html, { attributes: true, attributeFilter: ['class'] });
+        setTimeout(() => { mo.disconnect(); if (p.classList.contains('is-waiting')) go(); }, 4000); // never stays hidden
+        return;
+      }
       p.classList.add('is-waiting'); io.observe(p);
     });
   };
