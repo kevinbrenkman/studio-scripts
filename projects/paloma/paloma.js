@@ -43,6 +43,8 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - 1.92.5: TeamBurst 2.0.0: click to open (no hover), photos use the Image Trail item classes (same size, 3:4 ratio and
+ *    shadow, 70% on phones), a clickable halo round the words keeps the cursor trail away, closes on click, Esc or scrolling.
  *  - 1.92.4: TapStack 1.3.1 (root forced visible on tap: a scroll reveal could leave it at opacity 0 in Safari).
  *    TapDebug (temporary, only with ?tapdebug): on-screen state of the team photos and tap images for testing on iPhone.
  *  - 1.92.3: CaseMeta 1.0.1, tags survive the slider re-init (slider:ready); Webflow's default og:title / twitter:title (page name) replaced.
@@ -2676,29 +2678,34 @@ document.addEventListener('touchstart', () => {}, { passive: true });
 })();
 
 /* ---------- TeamBurst ---------- */
-// About: hovering "a team of twelve" pops the team photos in around the words, one after the other (the TapStack
-// animation from phones); leaving fades them out while they scale down a little. The words are underlined by default.
+// About: clicking "a team of twelve" pops the team photos in around the words, one after the other (the TapStack
+// animation from phones); click again, click anywhere else, Esc or scroll away to fade them out. The photos use the
+// Image Trail's own classes (.image-trail_item / .image-trail_img), so size, ratio and shadow are the same as the cursor
+// trail and are edited in Webflow on those classes. Phones: 70% size, like TapStack.
+// A halo round the words (HALO) is clickable and keeps the cursor trail away from them.
 // Designer: a hidden Div [data-team-burst] on the page holds the team photos (plain Image elements, swap or add freely).
 // The words: either a link in the text with the URL #team, or (no such link) the phrase in data-team-burst="team of
-// twelve", which is found in .about-body_text and wrapped. Touch: tap the words to open, tap anywhere to close.
+// twelve", which is found in .about-body_text and wrapped.
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
   // Where the photos land, relative to the centre of the words, in px at a 1440px wide screen (from the Figma design).
   // More photos than spots: the rest reuse the spots with a small offset.
   const SPOTS = [[-486, -352], [-210, -207], [26, -158], [-719, -149], [-454, -102], [-250, 20],
     [-719, 110], [-475, 156], [-210, 164], [32, 181], [-363, 406], [-102, 406]];
-  const B = { size: 0.145, phone: 0.3, tilt: 7, popDur: 0.4, step: 0.07, outDur: 0.6, edge: 12, closeDelay: 0.15 };
-  // size: photo width as a share of the screen width (phone: below 768px); tilt: max degrees; popDur/step: pop-in time and
-  // the delay between photos (same as TapStack); outDur: fade-out time
-  const FINE = matchMedia('(hover: hover) and (pointer: fine)').matches;
+  const B = { phone: 0.7, tilt: 4, popDur: 0.4, step: 0.07, outDur: 0.6, edge: 12, scrollOut: 80, halo: '1.5em 2em' };
+  // phone: photo scale below 768px (TapStack SIZE); tilt: max degrees; popDur/step: pop-in time and the delay between
+  // photos (same as TapStack); outDur: fade-out time; scrollOut: px of scrolling that closes them; halo: clickable
+  // margin round the words (vertical horizontal)
   const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const live = new Set();
   if (!document.getElementById('paloma-team-css')) {
+    const [hv, hh] = B.halo.split(' ');
     const st = document.createElement('style'); st.id = 'paloma-team-css';
     st.textContent = 'html:not(.wf-design-mode) [data-team-burst]{display:none}' +
-      '.team-burst_word{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:.14em;cursor:pointer}' +
+      '.team-burst_word{position:relative;white-space:nowrap;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:.14em;cursor:pointer}' +
+      '.team-burst_word::before{content:"";position:absolute;top:-' + hv + ';bottom:-' + hv + ';left:-' + hh + ';right:-' + hh + '}' +
       '.team-burst_layer{position:absolute;top:0;left:0;width:0;height:0;overflow:visible;pointer-events:none;z-index:50}' +
-      '.team-burst_img{position:absolute;top:0;left:0;display:block;max-width:none;object-fit:cover;aspect-ratio:1;border-radius:4px;will-change:transform,opacity,filter}';
+      '.team-burst_layer .image-trail_item{position:absolute;top:0;left:0}';
     document.head.appendChild(st);
   }
   const findWord = (scope, phrase) => {
@@ -2719,59 +2726,64 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   };
   const setup = (src, scope) => {
     if (src._burst || !window.gsap) return;
-    const urls = [...src.querySelectorAll('img')].map((im) => ({ src: im.currentSrc || im.getAttribute('src'), srcset: im.getAttribute('srcset'), alt: im.alt || '' })).filter((u) => u.src);
+    const urls = [...src.querySelectorAll('img')].map((im) => ({ src: im.getAttribute('src'), srcset: im.getAttribute('srcset') })).filter((u) => u.src);
     const word = findWord(scope, (src.getAttribute('data-team-burst') || '').trim());
     if (!urls.length || !word) return;
-    word.setAttribute('data-trail-off', ''); // no Image Trail / TapStack on the words
+    word.setAttribute('data-trail-off', ''); // no Image Trail / TapStack on the words and their halo
     const layer = document.createElement('div'); layer.className = 'team-burst_layer'; layer.setAttribute('aria-hidden', 'true');
     document.body.appendChild(layer);
-    const imgs = urls.map((u) => {
-      const im = document.createElement('img'); im.className = 'team-burst_img'; im.alt = ''; im.decoding = 'async';
-      if (u.srcset) { im.srcset = u.srcset; im.sizes = '20vw'; } im.src = u.src; im.loading = 'eager';
-      layer.appendChild(im); return im;
+    const items = urls.map((u) => {
+      const box = document.createElement('div'); box.className = 'image-trail_item';
+      const im = document.createElement('img'); im.className = 'image-trail_img'; im.alt = '';
+      if (u.srcset) { im.srcset = u.srcset; im.sizes = '20rem'; } im.src = u.src;
+      box.appendChild(im); layer.appendChild(box); return box;
     });
-    gsap.set(imgs, { xPercent: -50, yPercent: -50, autoAlpha: 0 });
-    let open = false, closeT = 0;
+    gsap.set(items, { xPercent: -50, yPercent: -50, autoAlpha: 0 });
+    let open = false, openY = 0;
     const r = gsap.utils.random;
     const burst = () => {
-      clearTimeout(closeT); if (open) return; open = true;
+      if (open) return; open = true; openY = scrollY;
       const b = word.getBoundingClientRect(), L = layer.getBoundingClientRect();
       const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
-      const phone = innerWidth < 768, k = phone ? innerWidth / 390 * 0.55 : innerWidth / 1440;
-      const w = innerWidth * (phone ? B.phone : B.size), half = w / 2 + B.edge;
-      gsap.set(imgs, { width: w });
+      const phone = innerWidth < 768, S = phone ? B.phone : 1, k = phone ? innerWidth / 390 * 0.55 : innerWidth / 1440;
+      // Half the (tilted) photo plus the edge margin, so every photo stays fully on screen
+      const t = Math.sin(B.tilt * Math.PI / 180), iw = items[0].offsetWidth * S, ih = items[0].offsetHeight * S;
+      const hx = (iw + ih * t) / 2 + B.edge, hy = (ih + iw * t) / 2 + B.edge;
       // Landing spots around the words; the whole cluster moves as one to fit on screen (keeps the shape),
       // only then single photos are clamped to the edges.
-      const pts = imgs.map((im, i) => { const s = SPOTS[i % SPOTS.length], extra = Math.floor(i / SPOTS.length) * 40; return [cx + (s[0] + extra) * k, cy + (s[1] + extra) * k]; });
+      const pts = items.map((_, i) => { const s = SPOTS[i % SPOTS.length], extra = Math.floor(i / SPOTS.length) * 40; return [cx + (s[0] + extra) * k, cy + (s[1] + extra) * k]; });
       const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-      const fit = (lo, hi, max) => (hi - lo > max - 2 * half ? (max / 2) - (lo + hi) / 2 : lo < half ? half - lo : hi > max - half ? max - half - hi : 0);
-      const sx = fit(Math.min(...xs), Math.max(...xs), innerWidth), sy = fit(Math.min(...ys), Math.max(...ys), innerHeight);
-      imgs.forEach((im, i) => {
-        let x = pts[i][0] + sx, y = pts[i][1] + sy;
-        x = Math.max(half, Math.min(innerWidth - half, x)); y = Math.max(half, Math.min(innerHeight - half, y));
-        gsap.killTweensOf(im);
+      const fit = (lo, hi, max, h) => (hi - lo > max - 2 * h ? (max / 2) - (lo + hi) / 2 : lo < h ? h - lo : hi > max - h ? max - h - hi : 0);
+      const sx = fit(Math.min(...xs), Math.max(...xs), innerWidth, hx), sy = fit(Math.min(...ys), Math.max(...ys), innerHeight, hy);
+      items.forEach((el, i) => {
+        const x = Math.max(hx, Math.min(innerWidth - hx, pts[i][0] + sx)), y = Math.max(hy, Math.min(innerHeight - hy, pts[i][1] + sy));
+        gsap.killTweensOf(el);
         // Pop in on the spot, like TapStack on phones: small and transparent, then a soft overshoot to full size
-        gsap.set(im, { x: x - L.left, y: y - L.top, rotation: r(-B.tilt, B.tilt), scale: calm() ? 1 : 0.7, autoAlpha: 0, zIndex: 1 + i, filter: 'none' });
-        gsap.to(im, { scale: 1, autoAlpha: 1, duration: calm() ? 0.2 : B.popDur, ease: 'back.out(1.4)', delay: calm() ? 0 : i * B.step });
+        gsap.set(el, { x: x - L.left, y: y - L.top, rotation: r(-B.tilt, B.tilt), scale: calm() ? S : S * 0.7, autoAlpha: 0, zIndex: 1 + i });
+        gsap.to(el, { scale: S, autoAlpha: 1, duration: calm() ? 0.2 : B.popDur, ease: 'back.out(1.4)', delay: calm() ? 0 : i * B.step });
       });
     };
     const collapse = () => {
       if (!open) return; open = false;
+      const S = innerWidth < 768 ? B.phone : 1;
       // Out like TapStack: fade while scaling down a little, last one in goes first
-      imgs.forEach((im, i) => {
-        gsap.killTweensOf(im);
-        gsap.to(im, { autoAlpha: 0, scale: calm() ? 1 : 0.92, duration: calm() ? 0.2 : B.outDur, ease: 'power2.in', delay: calm() ? 0 : (imgs.length - 1 - i) * B.step * 0.5 });
+      items.forEach((el, i) => {
+        gsap.killTweensOf(el);
+        gsap.to(el, { autoAlpha: 0, scale: calm() ? S : S * 0.92, duration: calm() ? 0.2 : B.outDur, ease: 'power2.in', delay: calm() ? 0 : (items.length - 1 - i) * B.step * 0.5 });
       });
     };
-    const leave = () => { clearTimeout(closeT); closeT = setTimeout(collapse, B.closeDelay * 1000); };
-    const tap = (e) => { e.preventDefault(); e.stopPropagation(); open ? collapse() : burst(); };
+    const click = (e) => { e.preventDefault(); e.stopPropagation(); open ? collapse() : burst(); };
     const outside = (e) => { if (open && !word.contains(e.target)) collapse(); };
-    if (FINE) { word.addEventListener('pointerenter', burst); word.addEventListener('pointerleave', leave); }
-    else { word.addEventListener('click', tap); document.addEventListener('click', outside); addEventListener('scroll', collapse, { passive: true }); }
+    const scrolled = () => { if (open && Math.abs(scrollY - openY) > B.scrollOut) collapse(); };
+    const key = (e) => { if (e.key === 'Escape') collapse(); };
+    word.addEventListener('click', click);
+    document.addEventListener('click', outside);
+    addEventListener('scroll', scrolled, { passive: true });
+    addEventListener('keydown', key);
     src._burst = () => {
-      clearTimeout(closeT); gsap.killTweensOf(imgs); layer.remove();
-      word.removeEventListener('pointerenter', burst); word.removeEventListener('pointerleave', leave); word.removeEventListener('click', tap);
-      document.removeEventListener('click', outside); removeEventListener('scroll', collapse);
+      gsap.killTweensOf(items); layer.remove();
+      word.removeEventListener('click', click); document.removeEventListener('click', outside);
+      removeEventListener('scroll', scrolled); removeEventListener('keydown', key);
       delete src._burst;
     };
     live.add(src);
