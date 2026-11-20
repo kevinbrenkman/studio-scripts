@@ -43,6 +43,8 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - 1.92.8: TeamBurst 2.1.2: photos load from their one file (no srcset) and only photos that loaded are shown, so Safari
+ *    shows no empty frames or broken-image icons. Closing early also stops photos still waiting to drop.
  *  - 1.92.7: TeamBurst 2.1.1: phone pile drops slower (0.18s per photo) so each photo can be seen; TapDebug removed.
  *  - 1.92.6: TeamBurst 2.1.0: phones get one compact TapStack pile on the words; desktop spots are random (spread out, words
  *    left free) and the photos pop up and glide out like the cursor trail, new order every time.
@@ -2736,7 +2738,8 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   };
   const setup = (src, scope) => {
     if (src._burst || !window.gsap) return;
-    const urls = [...src.querySelectorAll('img')].map((im) => ({ src: im.getAttribute('src'), srcset: im.getAttribute('srcset') })).filter((u) => u.src);
+    // src only, no srcset: one known file per photo (Safari showed broken images from the responsive variants)
+    const urls = [...src.querySelectorAll('img')].map((im) => ({ src: im.getAttribute('src') })).filter((u) => u.src && !/placeholder/i.test(u.src));
     const word = findWord(scope, (src.getAttribute('data-team-burst') || '').trim());
     if (!urls.length || !word) return;
     word.setAttribute('data-trail-off', ''); // no Image Trail / TapStack on the words and their halo
@@ -2744,8 +2747,12 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     document.body.appendChild(layer);
     const items = urls.map((u) => {
       const box = document.createElement('div'); box.className = 'image-trail_item';
-      const im = document.createElement('img'); im.className = 'image-trail_img'; im.alt = '';
-      if (u.srcset) { im.srcset = u.srcset; im.sizes = '20rem'; } im.src = u.src;
+      const im = document.createElement('img'); im.className = 'image-trail_img'; im.alt = ''; im.loading = 'eager';
+      // Only photos that really loaded and decoded are shown: no empty frames or broken-image icons
+      const ok = () => { box._ok = true; }, bad = () => { box._ok = false; };
+      im.addEventListener('load', () => (im.decode ? im.decode().then(ok, ok) : ok()), { once: true });
+      im.addEventListener('error', bad, { once: true });
+      im.src = u.src;
       box.appendChild(im); layer.appendChild(box); return box;
     });
     gsap.set(items, { xPercent: -50, yPercent: -50, autoAlpha: 0 });
@@ -2762,7 +2769,8 @@ document.addEventListener('touchstart', () => {}, { passive: true });
       const clampX = (x) => (hx * 2 > W ? W / 2 : Math.max(hx, Math.min(W - hx, x)));
       const clampY = (y) => (hy * 2 > H ? H / 2 : Math.max(hy, Math.min(H - hy, y)));
       const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
-      const order = gsap.utils.shuffle([...items]); // a different photo on top every time
+      const order = gsap.utils.shuffle(items.filter((el) => el._ok)); // loaded photos only, a different one on top every time
+      if (!order.length) { open = false; return; }
       if (phone) {
         // One pile on the words, like a TapStack tap
         const px = clampX(cx), py = clampY(cy);
@@ -2800,6 +2808,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     const collapse = () => {
       if (!open) return; open = false;
       const phone = innerWidth < 768, S = phone ? B.phone : 1, quiet = calm();
+      gsap.killTweensOf(items); // photos still waiting for their turn never come in
       const shown = items.filter((el) => +gsap.getProperty(el, 'opacity') > 0)
         .sort((p, q) => (+gsap.getProperty(q, 'zIndex')) - (+gsap.getProperty(p, 'zIndex'))); // last one in goes first
       shown.forEach((el, i) => {
