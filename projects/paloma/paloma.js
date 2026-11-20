@@ -43,6 +43,8 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - 1.93.4: TeamBurst 2.3.0 desktop opens on hover (from the cursor point) instead of click. LogoScrub 1.1.0: only over the
+ *    logo, turned the other way round.
  *  - 1.93.3: TeamBurst 2.2.0 desktop: photos closer together, come out of the click point growing from 0, go by themselves
  *    after 3s, cursor trail paused while they show.
  *  - 1.93.2: LogoScrub 1.0.0 (desktop: the home header logo video turns with the mouse instead of looping).
@@ -2897,17 +2899,22 @@ document.addEventListener('touchstart', () => {}, { passive: true });
         else gsap.to(el, { scale: 0, autoAlpha: 0, duration: B.outDur, ease: 'power1.in', delay: i * B.step * 0.5 });
       });
     };
-    const click = (e) => { e.preventDefault(); e.stopPropagation(); from = [e.clientX, e.clientY]; if (!e.clientX && !e.clientY) from = null; open ? collapse() : burst(); };
+    const FINE = matchMedia('(hover: hover) and (pointer: fine)').matches;
+    // Desktop: hovering the words (or their halo) bursts the photos out of the cursor point; they go by themselves.
+    // Phones: tap to open, tap again or anywhere else to close.
+    const click = (e) => { e.preventDefault(); e.stopPropagation(); if (FINE) return; from = null; open ? collapse() : burst(); };
+    const enter = (e) => { if (open) return; from = [e.clientX, e.clientY]; burst(); };
     const outside = (e) => { if (open && !word.contains(e.target)) collapse(); };
     const scrolled = () => { if (open && Math.abs(scrollY - openY) > B.scrollOut) collapse(); };
     const key = (e) => { if (e.key === 'Escape') collapse(); };
     word.addEventListener('click', click);
+    if (FINE) word.addEventListener('pointerenter', enter);
     document.addEventListener('click', outside);
     addEventListener('scroll', scrolled, { passive: true });
     addEventListener('keydown', key);
     src._burst = () => {
       gsap.killTweensOf(items); layer.remove(); clearTimeout(timer); trailOff(false);
-      word.removeEventListener('click', click); document.removeEventListener('click', outside);
+      word.removeEventListener('click', click); word.removeEventListener('pointerenter', enter); document.removeEventListener('click', outside);
       removeEventListener('scroll', scrolled); removeEventListener('keydown', key);
       delete src._burst;
     };
@@ -2920,14 +2927,17 @@ document.addEventListener('touchstart', () => {}, { passive: true });
 })();
 
 /* ---------- LogoScrub ---------- */
-// Home header logo video (MediaKit AlphaVideo): on desktop it no longer plays by itself. The mouse turns it: moving the
-// mouse from the left to the right edge of the screen runs through the video once (S.turns), the icon follows with a
-// little ease (S.ease) and stands still when the mouse does. Touch screens keep the normal loop.
+// Home header logo video (MediaKit AlphaVideo): on desktop it no longer plays by itself. The mouse turns it while it is
+// over the logo: from the logo's left to its right edge runs through the video once (S.turns, backwards: S.reverse),
+// the icon follows with a little ease (S.ease) and stands still when the mouse does or leaves the logo.
+// Touch screens keep the normal loop.
 // Applies to [data-alpha-video] inside .home-header, or any [data-alpha-video][data-scrub].
 // Smooth scrubbing needs every frame to be a keyframe in the video file (ffmpeg -g 1), and more frames = smoother turn.
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
-  const S = { turns: 1, ease: 0.15 };
+  const S = { turns: 1, ease: 0.12, area: [0.1, 0.2, 0.86, 0.83], reverse: true };
+  // area: the part of the video box the logo covers (left, top, right, bottom as a share of the box): only the mouse
+  // there turns it, from its left to its right edge; reverse: moving right turns the video backwards
   const FINE = matchMedia('(hover: hover) and (pointer: fine)').matches;
   const SEL = '.home-header [data-alpha-video], [data-alpha-video][data-scrub]';
   const live = new Set();
@@ -2944,7 +2954,14 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     const found = el.querySelector('video');
     const mo = new MutationObserver(() => { const n = el.querySelector('video'); if (n && n !== v) take(n); });
     if (found) take(found); else mo.observe(el, { childList: true });
-    const move = (e) => { if (!ready || !v.duration) return; const p = Math.min(1, Math.max(0, e.clientX / innerWidth)); target = ((p * S.turns) % 1) * (v.duration - 0.001); };
+    const move = (e) => {
+      if (!ready || !v.duration) return;
+      const b = el.getBoundingClientRect(), [a0, b0, a1, b1] = S.area;
+      const x0 = b.left + b.width * a0, x1 = b.left + b.width * a1, y0 = b.top + b.height * b0, y1 = b.top + b.height * b1;
+      if (e.clientX < x0 || e.clientX > x1 || e.clientY < y0 || e.clientY > y1) return; // off the logo: it stays where it is
+      let p = (e.clientX - x0) / (x1 - x0); if (S.reverse) p = 1 - p;
+      target = ((p * S.turns) % 1) * (v.duration - 0.001);
+    };
     const tick = () => {
       if (!ready || !v.duration || v.seeking) return;
       const d = target - cur; if (Math.abs(d) < 0.004) return;
