@@ -43,6 +43,9 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - 1.93.0: SocialHover 1.1.0 (touch: play / pause button in the bottom left corner of cards without Info bar);
+ *    SocialSlider: on phones the first card lines up with the text above (measured in px; the Page Margin variable gave
+ *    the desktop 1.25rem there).
  *  - 1.92.9: PlayerReveal 1.1.0 (a player on screen at load waits for the page fade-in, then rises in); CardLoaded 1.3.0
  *    (empty media blocks keep their fill and hide Webflow's placeholder icon).
  *  - 1.92.8: TeamBurst 2.1.2: photos load from their one file (no srcset) and only photos that loaded are shown, so Safari
@@ -1228,11 +1231,30 @@ if (!document.getElementById('paloma-splide-sr')) {
         App.inits.forEach((fn) => { if (fn !== init) try { fn(root); } catch (_) {} });
         window.lenis && lenis.resize();
       });
+      // Phone: the first card lines up with the text above. Measured from the nearest box around the slider whose content
+      // is indented (left edge + padding) and set in px, instead of the Page Margin variable, which came out at the
+      // desktop 1.25rem on phones (twice the 0.625rem phone margin).
+      const edge = () => {
+        for (let el = root.parentElement; el && el !== document.body; el = el.parentElement) {
+          const x = el.getBoundingClientRect().left + (parseFloat(getComputedStyle(el).paddingLeft) || 0);
+          if (x > 1) return x;
+        }
+        return 0;
+      };
+      const fitPhone = () => {
+        if (!root.isConnected || innerWidth >= 768) return;
+        const x = Math.round(edge() - root.getBoundingClientRect().left);
+        if (x > 0 && x !== root._pad) { root._pad = x; sp.options = { padding: { left: x, right: loop ? 0 : x } }; }
+      };
+      sp.on('mounted', fitPhone);
       sp.mount();
       root._sp = sp; live.add(root);
+      fitPhone();
+      let rt = 0; const onResize = () => { clearTimeout(rt); rt = setTimeout(fitPhone, 200); };
+      addEventListener('resize', onResize);
       // Card widths can change after mount (fonts, images, the column calc): measure again, so the last card keeps
       // its page margin on the right instead of ending against the screen edge
-      const remeasure = () => { if (root.isConnected) try { sp.refresh(); } catch (_) {} };
+      const remeasure = () => { if (root.isConnected) try { fitPhone(); sp.refresh(); } catch (_) {} };
       if (document.readyState !== 'complete') window.addEventListener('load', remeasure, { once: true });
       if (document.fonts && document.fonts.ready) document.fonts.ready.then(remeasure);
       setTimeout(remeasure, 1500);
@@ -1277,6 +1299,7 @@ if (!document.getElementById('paloma-splide-sr')) {
         flash(root.querySelector(to < from ? '[data-social-next]' : '[data-social-prev]'));
       });
       root._ssStop = () => {
+        removeEventListener('resize', onResize);
         root.removeEventListener('click', go); root.removeEventListener('pointerdown', down);
         ['pointerup', 'pointercancel'].forEach((t) => document.removeEventListener(t, up));
       };
@@ -2599,7 +2622,14 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   const live = new Set();
   if (!document.getElementById('paloma-social-hover-css')) {
     const st = document.createElement('style'); st.id = 'paloma-social-hover-css';
-    st.textContent = '[data-social-card].is-quiet .social-card_media{cursor:default}';
+    st.textContent = '[data-social-card].is-quiet .social-card_media{cursor:default}' +
+      // 1.1.0 touch: a play button in the bottom left corner of the video (the card has no Info bar, so no button of its
+      // own). Same class as the Info bar button, so it looks the same and follows its Webflow style.
+      '.social-card_play.is-corner{position:absolute!important;left:.75rem;bottom:.75rem;z-index:3;pointer-events:none}' +
+      '.social-card_play.is-corner .social-card_icon.is-pause{display:none!important}' +
+      '.social-card_play.is-corner .social-card_icon.is-play{display:block!important}' +
+      '.is-quiet-playing .social-card_play.is-corner .social-card_icon.is-play{display:none!important}' +
+      '.is-quiet-playing .social-card_play.is-corner .social-card_icon.is-pause{display:block!important}';
     document.head.appendChild(st);
   }
   const vid = (c) => c.querySelector('video');
@@ -2609,15 +2639,31 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     const v = e.target; if (!v || v.tagName !== 'VIDEO') return;
     const c = v.closest(CARD); if (!c || !c._quiet) return;
     if (!c._hover) v.pause(); else v.muted = true;
+    c.classList.toggle('is-quiet-playing', !!c._hover);
   };
+  // Corner button shows pause while the video plays, play once it stops
+  document.addEventListener('pause', (e) => {
+    const v = e.target; if (!v || v.tagName !== 'VIDEO') return;
+    const c = v.closest(CARD); if (c && c._quiet) c.classList.remove('is-quiet-playing');
+  }, true);
   const setup = (c) => {
     if (c._quiet || !quiet(c)) return;
     c.classList.add('is-quiet');
     const on = () => { c._hover = true; const v = vid(c); if (v) play(v); };
     const off = () => { c._hover = false; const v = vid(c); if (v) v.pause(); };
     if (FINE) { c.addEventListener('pointerenter', on); c.addEventListener('pointerleave', off); }
+    let btn = null;
+    if (!FINE) {
+      const media = c.querySelector('.social-card_media');
+      if (media && !media.querySelector('.is-corner')) {
+        btn = document.createElement('span'); btn.className = 'social-card_play is-corner'; btn.setAttribute('aria-hidden', 'true');
+        btn.innerHTML = '<svg class="social-card_icon is-play" width="13" height="15" viewBox="0 0 13.125 15.1554" fill="none"><path fill="currentColor" d="M13.125 7.5777L0 15.1554V0L13.125 7.5777Z"/></svg>' +
+          '<svg class="social-card_icon is-pause" width="12" height="14" viewBox="0 0 12 14" fill="none"><rect x="0" y="0" width="4" height="14" rx="1" fill="currentColor"/><rect x="8" y="0" width="4" height="14" rx="1" fill="currentColor"/></svg>';
+        media.appendChild(btn);
+      }
+    }
     const v = vid(c); if (v && !v.paused) v.pause();
-    c._quiet = () => { c.removeEventListener('pointerenter', on); c.removeEventListener('pointerleave', off); c.classList.remove('is-quiet'); delete c._quiet; delete c._hover; };
+    c._quiet = () => { c.removeEventListener('pointerenter', on); c.removeEventListener('pointerleave', off); c.classList.remove('is-quiet', 'is-quiet-playing'); if (btn) btn.remove(); delete c._quiet; delete c._hover; };
     live.add(c);
   };
   // Touch: a tap on a quiet card toggles a muted play; other quiet cards stop
