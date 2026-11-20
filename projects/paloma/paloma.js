@@ -43,6 +43,8 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - 1.92.6: TeamBurst 2.1.0: phones get one compact TapStack pile on the words; desktop spots are random (spread out, words
+ *    left free) and the photos pop up and glide out like the cursor trail, new order every time.
  *  - 1.92.5: TeamBurst 2.0.0: click to open (no hover), photos use the Image Trail item classes (same size, 3:4 ratio and
  *    shadow, 70% on phones), a clickable halo round the words keeps the cursor trail away, closes on click, Esc or scrolling.
  *  - 1.92.4: TapStack 1.3.1 (root forced visible on tap: a scroll reveal could leave it at opacity 0 in Safari).
@@ -2678,24 +2680,31 @@ document.addEventListener('touchstart', () => {}, { passive: true });
 })();
 
 /* ---------- TeamBurst ---------- */
-// About: clicking "a team of twelve" pops the team photos in around the words, one after the other (the TapStack
-// animation from phones); click again, click anywhere else, Esc or scroll away to fade them out. The photos use the
-// Image Trail's own classes (.image-trail_item / .image-trail_img), so size, ratio and shadow are the same as the cursor
-// trail and are edited in Webflow on those classes. Phones: 70% size, like TapStack.
-// A halo round the words (HALO) is clickable and keeps the cursor trail away from them.
+// About: clicking "a team of twelve" brings out the team photos; click again, click anywhere else, Esc or scroll away
+// to close. The photos use the Image Trail's own classes (.image-trail_item / .image-trail_img), so size, ratio and
+// shadow are the same as the cursor trail and are edited in Webflow on those classes.
+// Desktop: like the cursor trail. Each photo pops up from nothing and glides out from the words to a random spot
+// (spread so they overlap little and leave the words free), in a new random order every time; out like the trail.
+// Phones: like TapStack. One compact pile on the words (kept on screen), photos dropped one by one at 70% size.
+// A halo round the words (halo) is clickable and keeps the cursor trail away from them.
 // Designer: a hidden Div [data-team-burst] on the page holds the team photos (plain Image elements, swap or add freely).
 // The words: either a link in the text with the URL #team, or (no such link) the phrase in data-team-burst="team of
 // twelve", which is found in .about-body_text and wrapped.
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
-  // Where the photos land, relative to the centre of the words, in px at a 1440px wide screen (from the Figma design).
-  // More photos than spots: the rest reuse the spots with a small offset.
-  const SPOTS = [[-486, -352], [-210, -207], [26, -158], [-719, -149], [-454, -102], [-250, 20],
-    [-719, 110], [-475, 156], [-210, 164], [32, 181], [-363, 406], [-102, 406]];
-  const B = { phone: 0.7, tilt: 4, popDur: 0.4, step: 0.07, outDur: 0.6, edge: 12, scrollOut: 80, halo: '1.5em 2em' };
-  // phone: photo scale below 768px (TapStack SIZE); tilt: max degrees; popDur/step: pop-in time and the delay between
-  // photos (same as TapStack); outDur: fade-out time; scrollOut: px of scrolling that closes them; halo: clickable
-  // margin round the words (vertical horizontal)
+  const B = {
+    // desktop (cursor trail feel)
+    tilt: 3, areaX: 0.36, areaY: 0.42, tries: 30, pull: 0.35, glide: 0.9, pop: 0.12, step: 0.06, outDur: 0.3,
+    // phones (TapStack feel)
+    phone: 0.7, pileTilt: 8, spread: 28, pileStep: 0.07, popDur: 0.4, pileOut: 0.6,
+    edge: 12, scrollOut: 80, halo: '1.5em 2em'
+  };
+  // tilt: max degrees (trail: 3); areaX/areaY: how far photos land from the words, share of the screen width/height;
+  // tries: random spots tried per photo, the one furthest from the others wins; pull: share of the way from the words
+  // a photo starts its glide; glide/pop: glide and pop-up time (trail: 1 / 0.06); step: delay between photos;
+  // phone: photo scale below 768px (TapStack SIZE); pileTilt/spread: TapStack tilt and scatter in px;
+  // edge: px kept free at the screen edges; scrollOut: px of scrolling that closes them; halo: clickable margin round
+  // the words (vertical horizontal)
   const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const live = new Set();
   if (!document.getElementById('paloma-team-css')) {
@@ -2744,32 +2753,60 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     const burst = () => {
       if (open) return; open = true; openY = scrollY;
       const b = word.getBoundingClientRect(), L = layer.getBoundingClientRect();
-      const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
-      const phone = innerWidth < 768, S = phone ? B.phone : 1, k = phone ? innerWidth / 390 * 0.55 : innerWidth / 1440;
+      const W = innerWidth, H = innerHeight, phone = W < 768, S = phone ? B.phone : 1, quiet = calm();
+      const tilt = phone ? B.pileTilt : B.tilt, t = Math.sin(tilt * Math.PI / 180);
+      const iw = items[0].offsetWidth * S, ih = items[0].offsetHeight * S;
       // Half the (tilted) photo plus the edge margin, so every photo stays fully on screen
-      const t = Math.sin(B.tilt * Math.PI / 180), iw = items[0].offsetWidth * S, ih = items[0].offsetHeight * S;
       const hx = (iw + ih * t) / 2 + B.edge, hy = (ih + iw * t) / 2 + B.edge;
-      // Landing spots around the words; the whole cluster moves as one to fit on screen (keeps the shape),
-      // only then single photos are clamped to the edges.
-      const pts = items.map((_, i) => { const s = SPOTS[i % SPOTS.length], extra = Math.floor(i / SPOTS.length) * 40; return [cx + (s[0] + extra) * k, cy + (s[1] + extra) * k]; });
-      const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-      const fit = (lo, hi, max, h) => (hi - lo > max - 2 * h ? (max / 2) - (lo + hi) / 2 : lo < h ? h - lo : hi > max - h ? max - h - hi : 0);
-      const sx = fit(Math.min(...xs), Math.max(...xs), innerWidth, hx), sy = fit(Math.min(...ys), Math.max(...ys), innerHeight, hy);
-      items.forEach((el, i) => {
-        const x = Math.max(hx, Math.min(innerWidth - hx, pts[i][0] + sx)), y = Math.max(hy, Math.min(innerHeight - hy, pts[i][1] + sy));
+      const clampX = (x) => (hx * 2 > W ? W / 2 : Math.max(hx, Math.min(W - hx, x)));
+      const clampY = (y) => (hy * 2 > H ? H / 2 : Math.max(hy, Math.min(H - hy, y)));
+      const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+      const order = gsap.utils.shuffle([...items]); // a different photo on top every time
+      if (phone) {
+        // One pile on the words, like a TapStack tap
+        const px = clampX(cx), py = clampY(cy);
+        order.forEach((el, i) => {
+          gsap.killTweensOf(el);
+          gsap.set(el, { x: px + r(-B.spread, B.spread) - L.left, y: py + r(-B.spread, B.spread) - L.top, rotation: r(-tilt, tilt), scale: quiet ? S : S * 0.7, autoAlpha: 0, zIndex: 1 + i });
+          gsap.to(el, { scale: S, autoAlpha: 1, duration: quiet ? 0.2 : B.popDur, ease: 'back.out(1.4)', delay: quiet ? 0 : i * B.pileStep });
+        });
+        return;
+      }
+      // Desktop: random spots round the words. Each photo tries a few spots and keeps the one furthest from the photos
+      // already placed; spots that would cover the words count as taken.
+      const x0 = clampX(cx - W * B.areaX), x1 = clampX(cx + W * B.areaX), y0 = clampY(cy - H * B.areaY), y1 = clampY(cy + H * B.areaY);
+      const wordFree = (x, y) => Math.abs(x - cx) > b.width / 2 + iw * 0.45 || Math.abs(y - cy) > b.height / 2 + ih * 0.45;
+      const placed = [];
+      order.forEach((el, i) => {
+        let best = null, bestD = -1;
+        for (let k = 0; k < B.tries; k++) {
+          const x = r(x0, x1), y = r(y0, y1);
+          let d = placed.reduce((m, p) => Math.min(m, Math.hypot((x - p[0]) / iw, (y - p[1]) / ih)), 9);
+          if (!wordFree(x, y)) d -= 1;
+          if (d > bestD) { bestD = d; best = [x, y]; }
+        }
+        placed.push(best);
+        const [x, y] = best;
+        // Like the cursor trail: pops up from nothing and glides out from the words to its spot
         gsap.killTweensOf(el);
-        // Pop in on the spot, like TapStack on phones: small and transparent, then a soft overshoot to full size
-        gsap.set(el, { x: x - L.left, y: y - L.top, rotation: r(-B.tilt, B.tilt), scale: calm() ? S : S * 0.7, autoAlpha: 0, zIndex: 1 + i });
-        gsap.to(el, { scale: S, autoAlpha: 1, duration: calm() ? 0.2 : B.popDur, ease: 'back.out(1.4)', delay: calm() ? 0 : i * B.step });
+        gsap.set(el, { x: (quiet ? x : cx + (x - cx) * B.pull) - L.left, y: (quiet ? y : cy + (y - cy) * B.pull) - L.top, rotation: r(-tilt, tilt), scale: quiet ? 1 : 0, autoAlpha: quiet ? 0 : 1, zIndex: 1 + i });
+        if (quiet) { gsap.to(el, { autoAlpha: 1, duration: 0.2 }); return; }
+        const d = i * B.step;
+        gsap.to(el, { x: x - L.left, y: y - L.top, duration: B.glide, ease: 'power1.out', delay: d });
+        gsap.to(el, { scale: 1, duration: B.pop, ease: 'power1.out', delay: d });
       });
     };
     const collapse = () => {
       if (!open) return; open = false;
-      const S = innerWidth < 768 ? B.phone : 1;
-      // Out like TapStack: fade while scaling down a little, last one in goes first
-      items.forEach((el, i) => {
+      const phone = innerWidth < 768, S = phone ? B.phone : 1, quiet = calm();
+      const shown = items.filter((el) => +gsap.getProperty(el, 'opacity') > 0)
+        .sort((p, q) => (+gsap.getProperty(q, 'zIndex')) - (+gsap.getProperty(p, 'zIndex'))); // last one in goes first
+      shown.forEach((el, i) => {
         gsap.killTweensOf(el);
-        gsap.to(el, { autoAlpha: 0, scale: calm() ? S : S * 0.92, duration: calm() ? 0.2 : B.outDur, ease: 'power2.in', delay: calm() ? 0 : (items.length - 1 - i) * B.step * 0.5 });
+        if (quiet) return gsap.to(el, { autoAlpha: 0, duration: 0.2 });
+        // Phones: out like TapStack (fade, a little smaller). Desktop: out like the trail (shrink away)
+        if (phone) gsap.to(el, { autoAlpha: 0, scale: S * 0.92, duration: B.pileOut, ease: 'power2.in', delay: i * B.pileStep * 0.5 });
+        else gsap.to(el, { scale: 0, autoAlpha: 0, duration: B.outDur, ease: 'power1.in', delay: i * B.step * 0.5 });
       });
     };
     const click = (e) => { e.preventDefault(); e.stopPropagation(); open ? collapse() : burst(); };
