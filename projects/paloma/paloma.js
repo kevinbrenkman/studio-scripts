@@ -43,6 +43,9 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - 1.93.6: PlayerReveal 1.2.0: a player on screen when the page opens comes in with the page (no own fade or rise).
+ *  - 1.93.5: SocialSlider: phone block pulled to the screen edge first (iPhone started it 10px in), rebuilt when the window
+ *    crosses 768px (infinite only on desktop width). Glass rim highlights fall back to the renamed theme variables.
  *  - 1.93.4: TeamBurst 2.3.0 desktop opens on hover (from the cursor point) instead of click. LogoScrub 1.1.0: only over the
  *    logo, turned the other way round.
  *  - 1.93.3: TeamBurst 2.2.0 desktop: photos closer together, come out of the click point growing from 0, go by themselves
@@ -1143,6 +1146,11 @@
 (() => {
   window.App = window.App || { inits: [], destroys: [] };
   let io = null;
+  if (!document.getElementById('paloma-player-instant')) {
+    const st = document.createElement('style'); st.id = 'paloma-player-instant';
+    st.textContent = '.is-instant,.is-instant *{transition:none!important}';
+    document.head.appendChild(st);
+  }
   // 1.1.0: a player that is on screen straight away waits until the page has faded in (Swup) and then rises in,
   // so the rise is seen instead of happening while the page is still invisible
   const show = (p) => {
@@ -1156,6 +1164,13 @@
     }), { rootMargin: '0px 0px -15% 0px' });
     (scope || document).querySelectorAll('[data-bunny-player-init]').forEach((p) => {
       if (p.classList.contains('is-shown')) return;
+      // 1.2.0: a player already on screen when the page opens comes in with the page itself: shown at once, and for the
+      // first second without any transition (no rise, no thumbnail fade, the paused dimming is there straight away)
+      if (p.getBoundingClientRect().top < innerHeight * 0.85) {
+        p.classList.add('is-instant', 'is-shown');
+        setTimeout(() => p.classList.remove('is-instant'), 1200);
+        return;
+      }
       if (!io || !p.parentElement || !p.parentElement.classList.contains('page-slot')) p.classList.add('is-shown');
       else io.observe(p);
     });
@@ -1169,7 +1184,11 @@
 // visually, it stays readable for screen readers. Applies to every Splide slider on the site.
 if (!document.getElementById('paloma-splide-sr')) {
   const st = document.createElement('style'); st.id = 'paloma-splide-sr';
-  st.textContent = '.splide__sr{position:absolute!important;width:1px!important;height:1px!important;margin:-1px!important;padding:0!important;border:0!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;clip-path:inset(50%)!important;white-space:nowrap!important}';
+  // Glass button highlights: the Theme variables became --_do-not-edit---* (collection renamed); the site head still uses
+  // the old names. Same rules with a fallback, so the rims show again (a local --_theme---rim-* override still wins).
+  st.textContent = '.nav_button-stroke-gradient.is-one{background-image:radial-gradient(circle,var(--_theme---rim-1,var(--_do-not-edit---rim-1)),transparent 55%)}' +
+    '.nav_button-stroke-gradient.is-two{background-image:radial-gradient(circle,var(--_theme---rim-2,var(--_do-not-edit---rim-2)),transparent 55%)}' +
+    '.splide__sr{position:absolute!important;width:1px!important;height:1px!important;margin:-1px!important;padding:0!important;border:0!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;clip-path:inset(50%)!important;white-space:nowrap!important}';
   document.head.appendChild(st);
 }
 (() => {
@@ -1254,6 +1273,10 @@ if (!document.getElementById('paloma-splide-sr')) {
       root._edge = edge;
       const fitPhone = () => {
         if (!root.isConnected || innerWidth >= 768) return;
+        // Safari can make the slider's column wider than the page, so the full-width block does not start at the screen
+        // edge (it started 10px in on iPhone): pull it there first
+        const left = root.getBoundingClientRect().left;
+        if (Math.abs(left) > 0.5) root.style.marginLeft = ((parseFloat(getComputedStyle(root).marginLeft) || 0) - left) + 'px';
         const x = Math.round(edge() - root.getBoundingClientRect().left);
         if (x > 0 && x !== root._pad) { root._pad = x; sp.options = { padding: { left: x, right: loop ? 0 : x } }; }
       };
@@ -1261,7 +1284,23 @@ if (!document.getElementById('paloma-splide-sr')) {
       sp.mount();
       root._sp = sp; live.add(root);
       fitPhone();
-      let rt = 0; const onResize = () => { clearTimeout(rt); rt = setTimeout(fitPhone, 200); };
+      // Resizing the window across 768px switches between infinite (desktop) and a normal slider (phone layout):
+      // Splide can't change that live, so the slider is rebuilt
+      const remount = () => {
+        if (root._ssStop) root._ssStop();
+        try { sp.destroy(true); } catch (_) {}
+        live.delete(root); delete root._sp; delete root._pad; root._ss = 0; root.style.marginLeft = '';
+        setup(root);
+      };
+      let rt = 0; const onResize = () => {
+        clearTimeout(rt);
+        rt = setTimeout(() => {
+          if (!root.isConnected) return;
+          if ((auto > 0 || matchMedia('(min-width: 768px)').matches) !== loop) return remount();
+          if (innerWidth >= 768) { if (root.style.marginLeft) { root.style.marginLeft = ''; } return; }
+          fitPhone();
+        }, 200);
+      };
       addEventListener('resize', onResize);
       // Card widths can change after mount (fonts, images, the column calc): measure again, so the last card keeps
       // its page margin on the right instead of ending against the screen edge
