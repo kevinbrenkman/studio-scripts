@@ -43,6 +43,7 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - 1.92.7: TeamBurst 2.1.1: phone pile drops slower (0.18s per photo) so each photo can be seen; TapDebug removed.
  *  - 1.92.6: TeamBurst 2.1.0: phones get one compact TapStack pile on the words; desktop spots are random (spread out, words
  *    left free) and the photos pop up and glide out like the cursor trail, new order every time.
  *  - 1.92.5: TeamBurst 2.0.0: click to open (no hover), photos use the Image Trail item classes (same size, 3:4 ratio and
@@ -2696,7 +2697,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     // desktop (cursor trail feel)
     tilt: 3, areaX: 0.36, areaY: 0.42, tries: 30, pull: 0.35, glide: 0.9, pop: 0.12, step: 0.06, outDur: 0.3,
     // phones (TapStack feel)
-    phone: 0.7, pileTilt: 8, spread: 28, pileStep: 0.07, popDur: 0.4, pileOut: 0.6,
+    phone: 0.7, pileTilt: 8, spread: 28, pileStep: 0.18, popDur: 0.5, pileOut: 0.6,
     edge: 12, scrollOut: 80, halo: '1.5em 2em'
   };
   // tilt: max degrees (trail: 3); areaX/areaY: how far photos land from the words, share of the screen width/height;
@@ -2805,7 +2806,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
         gsap.killTweensOf(el);
         if (quiet) return gsap.to(el, { autoAlpha: 0, duration: 0.2 });
         // Phones: out like TapStack (fade, a little smaller). Desktop: out like the trail (shrink away)
-        if (phone) gsap.to(el, { autoAlpha: 0, scale: S * 0.92, duration: B.pileOut, ease: 'power2.in', delay: i * B.pileStep * 0.5 });
+        if (phone) gsap.to(el, { autoAlpha: 0, scale: S * 0.92, duration: B.pileOut, ease: 'power2.in', delay: i * 0.035 });
         else gsap.to(el, { scale: 0, autoAlpha: 0, duration: B.outDur, ease: 'power1.in', delay: i * B.step * 0.5 });
       });
     };
@@ -2873,34 +2874,4 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   App.inits.push(init);
   App.destroys.push(() => document.head.querySelectorAll('meta[data-case-meta]').forEach((m) => m.remove())); // leaving the page (Swup)
   if (document.readyState !== 'loading') init(document);
-})();
-
-/* ---------- TapDebug (temporary) ---------- */
-// Only with ?tapdebug in the URL: a panel on screen with the state of the team photos and the tap images, for checking
-// on a real iPhone without a cable. Remove once the Safari issue is solved.
-(() => {
-  if (!/[?&]tapdebug/.test(location.search)) return;
-  const errs = [];
-  addEventListener('error', (e) => errs.push((e.message || (e.target && (e.target.currentSrc || e.target.src)) || 'error').toString().slice(0, 120)), true);
-  addEventListener('unhandledrejection', (e) => errs.push('promise: ' + String(e.reason).slice(0, 100)));
-  const box = document.createElement('pre');
-  box.style.cssText = 'position:fixed;left:4px;right:4px;bottom:4px;max-height:45vh;overflow:auto;z-index:99999;margin:0;padding:6px;font:10px/1.3 monospace;background:rgba(0,0,0,.85);color:#0f0;white-space:pre-wrap;pointer-events:auto';
-  const r = (el) => { const b = el.getBoundingClientRect(); return Math.round(b.left) + ',' + Math.round(b.top) + ' ' + Math.round(b.width) + 'x' + Math.round(b.height); };
-  const st = (el) => { const c = getComputedStyle(el); return 'disp ' + c.display + ' vis ' + c.visibility + ' op ' + (+c.opacity).toFixed(2); };
-  const im = (i) => (i ? 'img ok ' + i.complete + ' nw ' + i.naturalWidth + ' lazy ' + i.loading + ' ' + (i.currentSrc || i.src || '').split('/').pop().slice(-28) : 'no img');
-  const tick = () => {
-    if (!box.isConnected) document.body.appendChild(box);
-    const L = document.querySelector('.team-burst_layer'), team = L ? [...L.querySelectorAll('img')] : [];
-    const trail = [...document.querySelectorAll('[data-trail-item]')];
-    const lines = ['ua ' + navigator.userAgent.replace(/.*(iPhone OS [\d_]+|Version\/[\d.]+).*/, '$1') + ' | fine ' + matchMedia('(hover: hover) and (pointer: fine)').matches,
-      'word ' + !!document.querySelector('.team-burst_word') + ' | layer ' + !!L + ' ' + (L ? r(L) + ' ' + st(L) : '') + ' | team imgs ' + team.length];
-    team.slice(0, 3).forEach((t, k) => lines.push('T' + k + ' ' + r(t) + ' ' + st(t) + ' | ' + im(t)));
-    const root = document.querySelector('[data-trail]');
-    lines.push('trail root ' + (root ? r(root) + ' ' + st(root) : 'none') + ' | items ' + trail.length);
-    trail.filter((t) => getComputedStyle(t).display !== 'none').slice(0, 3).concat(trail.slice(0, 1)).slice(0, 3)
-      .forEach((t, k) => lines.push('I' + k + ' <' + t.tagName.toLowerCase() + '> ' + r(t) + ' ' + st(t) + ' | ' + im(t.tagName === 'IMG' ? t : t.querySelector('img'))));
-    lines.push('errors: ' + (errs.slice(-5).join(' || ') || 'none'));
-    box.textContent = lines.join('\n');
-  };
-  setInterval(tick, 500);
 })();
