@@ -2926,7 +2926,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
       const landed = (quiet ? 0.2 : (order.length - 1) * B.step + B.glide) * 1000;
       timer = setTimeout(collapse, landed + B.stay * 1000);
       // Once all have landed, moving the mouse on (B.moveOut px) sends them away again
-      armT = setTimeout(() => { armed = last ? [last[0], last[1]] : null; }, landed);
+      armT = setTimeout(() => { const at = last || from; armed = at ? [at[0], at[1]] : null; }, landed);
     };
     const collapse = () => {
       if (!open) return; open = false; clearTimeout(timer); clearTimeout(armT); armed = null;
@@ -2953,7 +2953,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
     const key = (e) => { if (e.key === 'Escape') collapse(); };
     const moved = (e) => {
       last = [e.clientX, e.clientY];
-      if (!open || !armed) { if (open && !armed) return; return; }
+      if (!open || !armed) return;
       if (Math.hypot(e.clientX - armed[0], e.clientY - armed[1]) > B.moveOut) collapse();
     };
     word.addEventListener('click', click);
