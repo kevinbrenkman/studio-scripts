@@ -43,6 +43,7 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - 1.93.2: LogoScrub 1.0.0 (desktop: the home header logo video turns with the mouse instead of looping).
  *  - 1.93.1: SocialSlider phone margin measured from the section heading first; SlideDebug (temporary, ?slidedebug).
  *  - 1.93.0: SocialHover 1.1.0 (touch: play / pause button in the bottom left corner of cards without Info bar);
  *    SocialSlider: on phones the first card lines up with the text above (measured in px; the Page Margin variable gave
@@ -2906,6 +2907,48 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   const init = (scope = document) => { const s = scope || document; s.querySelectorAll('[data-team-burst]').forEach((src) => setup(src, s)); };
   App.inits.push(init);
   App.destroys.push(() => { live.forEach((s) => s._burst && s._burst()); live.clear(); });
+  if (document.readyState !== 'loading') init(document);
+})();
+
+/* ---------- LogoScrub ---------- */
+// Home header logo video (MediaKit AlphaVideo): on desktop it no longer plays by itself. The mouse turns it: moving the
+// mouse from the left to the right edge of the screen runs through the video once (S.turns), the icon follows with a
+// little ease (S.ease) and stands still when the mouse does. Touch screens keep the normal loop.
+// Applies to [data-alpha-video] inside .home-header, or any [data-alpha-video][data-scrub].
+// Smooth scrubbing needs every frame to be a keyframe in the video file (ffmpeg -g 1), and more frames = smoother turn.
+(() => {
+  window.App = window.App || { inits: [], destroys: [] };
+  const S = { turns: 1, ease: 0.15 };
+  const FINE = matchMedia('(hover: hover) and (pointer: fine)').matches;
+  const SEL = '.home-header [data-alpha-video], [data-alpha-video][data-scrub]';
+  const live = new Set();
+  const setup = (el) => {
+    if (el._scrub || !FINE || !window.gsap) return;
+    let v = null, cur = 0, target = 0, ready = false;
+    const take = (video) => {
+      v = video; v.loop = false; v.autoplay = false; v.removeAttribute('autoplay'); v.removeAttribute('loop');
+      v.addEventListener('play', hold); v.pause();
+      const go = () => { ready = true; v.currentTime = 0; el.classList.add('is-playing'); };
+      v.readyState >= 1 ? go() : v.addEventListener('loadedmetadata', go, { once: true });
+    };
+    const hold = () => v && v.pause(); // MediaKit plays it when it scrolls into view: keep it still
+    const found = el.querySelector('video');
+    const mo = new MutationObserver(() => { const n = el.querySelector('video'); if (n && n !== v) take(n); });
+    if (found) take(found); else mo.observe(el, { childList: true });
+    const move = (e) => { if (!ready || !v.duration) return; const p = Math.min(1, Math.max(0, e.clientX / innerWidth)); target = ((p * S.turns) % 1) * (v.duration - 0.001); };
+    const tick = () => {
+      if (!ready || !v.duration || v.seeking) return;
+      const d = target - cur; if (Math.abs(d) < 0.004) return;
+      cur += d * S.ease; v.currentTime = cur;
+    };
+    addEventListener('pointermove', move, { passive: true });
+    gsap.ticker.add(tick);
+    el._scrub = () => { mo.disconnect(); removeEventListener('pointermove', move); gsap.ticker.remove(tick); if (v) v.removeEventListener('play', hold); delete el._scrub; };
+    live.add(el);
+  };
+  const init = (scope = document) => (scope || document).querySelectorAll(SEL).forEach(setup);
+  App.inits.push(init);
+  App.destroys.push(() => { live.forEach((el) => el._scrub && el._scrub()); live.clear(); });
   if (document.readyState !== 'loading') init(document);
 })();
 
