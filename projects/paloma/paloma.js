@@ -43,6 +43,9 @@
  *  - SocialCard 1.8.0 (touch: thumbnail only, the video loads on tap, one at a time, pause really pauses; a Designer .case-header_tag-list is filled as is (CaseTags)). 1.7.0 (pausing restarts only the videos on screen; playing card centred through Splide; first tap: sound on at once unless the start is already buffered, play button pulses while loading; on tablet and phone the playing card glides to the middle of the screen; a click on the video toggles the sound too, drags ignored; pause mutes and keeps looping; other videos in the slider ease to a stop while one plays): Social Card component. CaseMedia plays the muted loop; Play restarts it with sound and mutes
  *    the other cards, press again to pause. Out of view or on a page change it mutes again.
  *  - TouchNoHover 1.0.0: on touch the arrow link hover interaction never fires. HlsBoost 1.3.0: iPhone/iPad play HLS natively.
+ *  - 1.93.8: SocialSlider: phone measuring removed again (it made the sliders jump on iPhone); the cause was the Social
+ *    Amplification grid growing to the full-width slider in Safari, fixed in the Webflow styles (minmax(0, ...) columns,
+ *    min-width 0). Rebuild across 768px only on a real width change.
  *  - 1.93.7: TeamBurst 2.4.0 desktop: once the photos have landed, moving the mouse on (60px) sends them away.
  *  - 1.93.6: PlayerReveal 1.2.0: a player on screen when the page opens comes in with the page (no own fade or rise).
  *  - 1.93.5: SocialSlider: phone block pulled to the screen edge first (iPhone started it 10px in), rebuilt when the window
@@ -1257,55 +1260,29 @@ if (!document.getElementById('paloma-splide-sr')) {
         App.inits.forEach((fn) => { if (fn !== init) try { fn(root); } catch (_) {} });
         window.lenis && lenis.resize();
       });
-      // Phone: the first card lines up with the text above. Measured from the nearest box around the slider whose content
-      // is indented (left edge + padding) and set in px, instead of the Page Margin variable, which came out at the
-      // desktop 1.25rem on phones (twice the 0.625rem phone margin).
-      const edge = () => {
-        // The section heading next to the slider is the most direct reference; else the first indented box around it
-        const sec = root.closest('.social-amp, section, .page-slot > *');
-        const h = sec && sec.querySelector('h1, h2, h3, .text-section_heading');
-        if (h && !root.contains(h)) { const x = h.getBoundingClientRect().left; if (x > 1) return x; }
-        for (let el = root.parentElement; el && el !== document.body; el = el.parentElement) {
-          const x = el.getBoundingClientRect().left + (parseFloat(getComputedStyle(el).paddingLeft) || 0);
-          if (x > 1) return x;
-        }
-        return 0;
-      };
-      root._edge = edge;
-      const fitPhone = () => {
-        if (!root.isConnected || innerWidth >= 768) return;
-        // Safari can make the slider's column wider than the page, so the full-width block does not start at the screen
-        // edge (it started 10px in on iPhone): pull it there first
-        const left = root.getBoundingClientRect().left;
-        if (Math.abs(left) > 0.5) root.style.marginLeft = ((parseFloat(getComputedStyle(root).marginLeft) || 0) - left) + 'px';
-        const x = Math.round(edge() - root.getBoundingClientRect().left);
-        if (x > 0 && x !== root._pad) { root._pad = x; sp.options = { padding: { left: x, right: loop ? 0 : x } }; }
-      };
-      sp.on('mounted', fitPhone);
       sp.mount();
       root._sp = sp; live.add(root);
-      fitPhone();
       // Resizing the window across 768px switches between infinite (desktop) and a normal slider (phone layout):
       // Splide can't change that live, so the slider is rebuilt
       const remount = () => {
         if (root._ssStop) root._ssStop();
         try { sp.destroy(true); } catch (_) {}
-        live.delete(root); delete root._sp; delete root._pad; root._ss = 0; root.style.marginLeft = '';
+        live.delete(root); delete root._sp; root._ss = 0;
         setup(root);
       };
-      let rt = 0; const onResize = () => {
+      // Only a real width change counts: iOS fires resize when its toolbars show or hide while scrolling
+      let rt = 0, lastW = innerWidth; const onResize = () => {
         clearTimeout(rt);
         rt = setTimeout(() => {
-          if (!root.isConnected) return;
-          if ((auto > 0 || matchMedia('(min-width: 768px)').matches) !== loop) return remount();
-          if (innerWidth >= 768) { if (root.style.marginLeft) { root.style.marginLeft = ''; } return; }
-          fitPhone();
+          if (!root.isConnected || innerWidth === lastW) return;
+          lastW = innerWidth;
+          if ((auto > 0 || matchMedia('(min-width: 768px)').matches) !== loop) remount();
         }, 200);
       };
       addEventListener('resize', onResize);
       // Card widths can change after mount (fonts, images, the column calc): measure again, so the last card keeps
       // its page margin on the right instead of ending against the screen edge
-      const remeasure = () => { if (root.isConnected) try { fitPhone(); sp.refresh(); } catch (_) {} };
+      const remeasure = () => { if (root.isConnected) try { sp.refresh(); } catch (_) {} };
       if (document.readyState !== 'complete') window.addEventListener('load', remeasure, { once: true });
       if (document.fonts && document.fonts.ready) document.fonts.ready.then(remeasure);
       setTimeout(remeasure, 1500);
@@ -3081,7 +3058,7 @@ document.addEventListener('touchstart', () => {}, { passive: true });
   const R = (el) => (el ? Math.round(el.getBoundingClientRect().left) + '..' + Math.round(el.getBoundingClientRect().right) : '-');
   setInterval(() => {
     if (!box.isConnected) document.body.appendChild(box);
-    const lines = ['v1.93.1 iw ' + innerWidth + ' cw ' + document.documentElement.clientWidth + ' vv ' + Math.round((window.visualViewport || {}).width || 0)];
+    const lines = ['' + ((([...document.scripts].find((x) => /paloma\.js/.test(x.src)) || {}).src || '').split('@')[1] || '').slice(0, 7) + ' iw ' + innerWidth + ' cw ' + document.documentElement.clientWidth + ' vv ' + Math.round((window.visualViewport || {}).width || 0)];
     document.querySelectorAll('[data-social-slider]').forEach((r, i) => {
       const b = r.getBoundingClientRect(); if (b.bottom < 0 || b.top > innerHeight) return;
       const list = r.querySelector('.splide__track'), slides = [...r.querySelectorAll('.splide__slide:not(.splide__slide--clone)')];
